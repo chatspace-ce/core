@@ -293,6 +293,13 @@ function refreshAdminModerationCount() {
   setAdminCount(adminCounts.summaryModeration, total);
 }
 
+function setAdminFormStatus(form, message, type = '') {
+  const status = form?.querySelector?.('.admin-row-status, .admin-form-status');
+  if (!status) return;
+  status.textContent = message || '';
+  status.className = `${status.classList.contains('admin-form-status') ? 'admin-form-status' : 'admin-row-status'} ${type}`.trim();
+}
+
 function showAdminSection(id) {
   document.querySelectorAll('.admin-section').forEach(section => {
     section.classList.toggle('active', section.id === `admin-section-${id}`);
@@ -351,14 +358,25 @@ async function loadAdminUsers() {
         <option value="admin">Admin</option>
       </select>
       <input name="password" type="password" placeholder="New password">
-      <button class="btn" type="submit">Save</button>
-      <button class="btn btn-danger" type="button">Delete</button>`;
+      <button class="btn btn-primary" type="submit">Save</button>
+      <button class="btn btn-danger" type="button">Delete</button>
+      <div class="admin-row-status" aria-live="polite"></div>`;
     row.querySelector('select').value = user.role || 'user';
     row.addEventListener('submit', async e => {
       e.preventDefault();
-      await adminRequest({ action: 'update', id: user.id, role: row.role.value, password: row.password.value });
-      row.password.value = '';
-      await loadAdminUsers();
+      const saveBtn = row.querySelector('button[type="submit"]');
+      saveBtn.disabled = true;
+      setAdminFormStatus(row, 'Saving...', 'working');
+      try {
+        await adminRequest({ action: 'update', id: user.id, role: row.elements.role.value, password: row.elements.password.value });
+        row.elements.password.value = '';
+        setAdminFormStatus(row, 'Saved.', 'ok');
+        await loadAdminLogs();
+      } catch (err) {
+        setAdminFormStatus(row, err.message || 'Save failed.', 'error');
+      } finally {
+        saveBtn.disabled = false;
+      }
     });
     row.querySelector('.btn-danger').addEventListener('click', async () => {
       if (!confirm(`Delete ${user.display_name}?`)) return;
@@ -483,31 +501,51 @@ document.getElementById('admin-close')?.addEventListener('click', () => {
 document.getElementById('admin-create')?.addEventListener('submit', async e => {
   e.preventDefault();
   const form = e.currentTarget;
-  await adminRequest({
-    action: 'create',
-    display_name: form.display_name.value,
-    email: form.email.value,
-    password: form.password.value,
-    role: form.role.value,
-  });
-  form.reset();
-  await loadAdminUsers();
-  await loadAdminLogs();
+  const submit = form.querySelector('button[type="submit"]');
+  submit.disabled = true;
+  setAdminFormStatus(form, 'Creating...', 'working');
+  try {
+    await adminRequest({
+      action: 'create',
+      display_name: form.elements.display_name.value,
+      email: form.elements.email.value,
+      password: form.elements.password.value,
+      role: form.elements.role.value,
+    });
+    form.reset();
+    setAdminFormStatus(form, 'User created.', 'ok');
+    await loadAdminUsers();
+    await loadAdminLogs();
+  } catch (err) {
+    setAdminFormStatus(form, err.message || 'Create failed.', 'error');
+  } finally {
+    submit.disabled = false;
+  }
 });
 
 adminSettings?.addEventListener('submit', async e => {
   e.preventDefault();
   const form = e.currentTarget;
-  await adminSystemRequest({
-    action: 'save_settings',
-    chat_posts_per_second: form.chat_posts_per_second.value,
-    avatar_movements_per_second: form.avatar_movements_per_second.value,
-    avatar_max_size_mb: form.avatar_max_size_mb.value,
-    room_image_max_size_mb: form.room_image_max_size_mb.value,
-    room_video_max_size_mb: form.room_video_max_size_mb.value,
-    participant_idle_timeout_minutes: form.participant_idle_timeout_minutes.value,
-  });
-  await loadAdminLogs();
+  const submit = form.querySelector('button[type="submit"]');
+  submit.disabled = true;
+  setAdminFormStatus(form, 'Saving settings...', 'working');
+  try {
+    await adminSystemRequest({
+      action: 'save_settings',
+      chat_posts_per_second: form.elements.chat_posts_per_second.value,
+      avatar_movements_per_second: form.elements.avatar_movements_per_second.value,
+      avatar_max_size_mb: form.elements.avatar_max_size_mb.value,
+      room_image_max_size_mb: form.elements.room_image_max_size_mb.value,
+      room_video_max_size_mb: form.elements.room_video_max_size_mb.value,
+      participant_idle_timeout_minutes: form.elements.participant_idle_timeout_minutes.value,
+    });
+    setAdminFormStatus(form, 'Settings saved.', 'ok');
+    await loadAdminLogs();
+  } catch (err) {
+    setAdminFormStatus(form, err.message || 'Settings failed to save.', 'error');
+  } finally {
+    submit.disabled = false;
+  }
 });
 
 adminDbRestore?.database?.addEventListener('change', () => {

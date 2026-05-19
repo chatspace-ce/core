@@ -29,7 +29,7 @@ if ($action === 'create') {
     $password = (string)($body['password'] ?? '');
     $role = (string)($body['role'] ?? 'user');
     if ($email === '' || $name === '' || $password === '') json_out(['error' => 'Email, name, and password required'], 400);
-    if (!in_array($role, $roles, true)) $role = 'user';
+    if (!in_array($role, $roles, true)) json_out(['error' => 'Invalid role'], 400);
     $stmt = $pdo->prepare('INSERT INTO users (email, password_hash, display_name, role, avatar_path) VALUES (?,?,?,?,?)');
     $stmt->execute([$email, password_hash($password, PASSWORD_DEFAULT), $name, $role, 'preset:Default']);
     log_tool($pdo, (int)$me['id'], 'admin_create_user', (int)$pdo->lastInsertId(), null, $name . ' (' . $role . ')');
@@ -43,7 +43,7 @@ if ($userId === (int)$me['id'] && $action === 'delete') json_out(['error' => 'Yo
 if ($action === 'update') {
     $role = (string)($body['role'] ?? 'user');
     $password = (string)($body['password'] ?? '');
-    if (!in_array($role, $roles, true)) $role = 'user';
+    if (!in_array($role, $roles, true)) json_out(['error' => 'Invalid role'], 400);
     $pdo->prepare('UPDATE users SET role = ? WHERE id = ?')->execute([$role, $userId]);
     if ($password !== '') {
         $pdo->prepare('UPDATE users SET password_hash = ? WHERE id = ?')->execute([password_hash($password, PASSWORD_DEFAULT), $userId]);

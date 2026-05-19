@@ -69,6 +69,14 @@ button, input, select { font: inherit; }
 .form-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
 label { display: grid; gap: 7px; color: var(--muted); font-size: 13px; }
 input, select { width: 100%; color: var(--text); background: rgba(255,255,255,.06); border: 1px solid var(--line); border-radius: 7px; padding: 11px 12px; outline: none; }
+select option {
+  background: #171923;
+  color: var(--text);
+}
+select option:checked {
+  background: rgba(124,106,247,.55);
+  color: #fff;
+}
 textarea { font: inherit; }
 input:focus,
 select:focus,
@@ -1508,8 +1516,16 @@ textarea:focus { border-color: rgba(124,106,247,.8); box-shadow: 0 0 0 3px rgba(
 }
 .admin-nav-symbol {
   width: 18px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   text-align: center;
   color: rgba(255,255,255,.78);
+  font-size: 20px;
+  font-weight: 900;
+  line-height: 1;
+  transform: translateY(-.5px);
 }
 .admin-nav-count {
   margin-left: auto;
@@ -1627,6 +1643,32 @@ textarea:focus { border-color: rgba(124,106,247,.8); box-shadow: 0 0 0 3px rgba(
   border: 1px solid rgba(255,255,255,.075);
   border-radius: 8px;
   background: rgba(0,0,0,.2);
+}
+.admin-row-status,
+.admin-form-status {
+  min-height: 16px;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 800;
+}
+.admin-row-status {
+  grid-column: 2 / -1;
+  margin-top: -3px;
+}
+.admin-form-status {
+  grid-column: 1 / -1;
+}
+.admin-row-status.ok,
+.admin-form-status.ok {
+  color: #68f59b;
+}
+.admin-row-status.error,
+.admin-form-status.error {
+  color: #ff8fa1;
+}
+.admin-row-status.working,
+.admin-form-status.working {
+  color: #b8adff;
 }
 .admin-users { display: grid; gap: 8px; }
 .admin-actions,

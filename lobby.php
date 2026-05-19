@@ -212,7 +212,7 @@ $rooms = $roomsStmt->fetchAll();
   <div class="modal-box admin-box">
     <div class="modal-head">
       <strong>Admin Dashboard</strong>
-      <button class="btn" id="admin-close" type="button">Close</button>
+      <button class="window-close" id="admin-close" type="button" aria-label="Close">×</button>
     </div>
     <div class="admin-dashboard">
       <nav class="admin-nav" aria-label="Admin sections">
@@ -284,7 +284,8 @@ $rooms = $roomsStmt->fetchAll();
                 <option value="developer">Developer</option>
                 <option value="admin">Admin</option>
               </select>
-              <button class="btn btn-aqua" type="submit">Add User</button>
+              <button class="btn btn-primary" type="submit">Add User</button>
+              <div class="admin-form-status" aria-live="polite"></div>
             </form>
           </div>
           <div class="admin-panel">
@@ -303,7 +304,8 @@ $rooms = $roomsStmt->fetchAll();
               <label>Room image max size MB <input name="room_image_max_size_mb" type="number" min="1" max="100" step="1"></label>
               <label>Room video max size MB <input name="room_video_max_size_mb" type="number" min="5" max="1000" step="5"></label>
               <label>Idle removal minutes <input name="participant_idle_timeout_minutes" type="number" min="0.5" max="120" step="0.5"></label>
-              <button class="btn btn-aqua" type="submit">Save Settings</button>
+              <button class="btn btn-primary" type="submit">Save Settings</button>
+              <div class="admin-form-status" aria-live="polite"></div>
             </form>
           </div>
         </section>
