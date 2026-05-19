@@ -265,6 +265,53 @@ function participantRoleClass(p) {
   return `role-${participantRoleKey(p)}`;
 }
 
+function setPermissionUI() {
+  const editRoomBtn = document.getElementById('edit-room-btn');
+  if (editRoomBtn) editRoomBtn.hidden = !cfg?.canEditRoom;
+}
+
+function allChannelMaps() {
+  const maps = [channelMessages.room, channelMessages.community];
+  channelMessages.links.forEach(map => maps.push(map));
+  channelMessages.dms.forEach(map => maps.push(map));
+  return maps;
+}
+
+function applyUserRoleUpdate(update) {
+  const userId = Number(update.user_id);
+  const participantId = Number(update.participant_id);
+  if (!userId && !participantId) return;
+  const nextRole = update.role || 'user';
+  let changedParticipants = false;
+  participants.forEach(person => {
+    const matches = Number(person.user_id) === userId || Number(person.id) === participantId;
+    if (!matches) return;
+    person.role = nextRole;
+    if ('is_owner' in update) person.is_owner = Boolean(update.is_owner);
+    renderParticipant(person);
+    changedParticipants = true;
+  });
+  allChannelMaps().forEach(map => {
+    map.forEach(msg => {
+      const msgUserId = Number(msg.user_id || participants.get(msg.participant_id)?.user_id || 0);
+      if (msgUserId !== userId && Number(msg.participant_id) !== participantId) return;
+      msg.role = nextRole;
+      if ('is_owner' in update) msg.is_owner = Boolean(update.is_owner);
+    });
+  });
+  if (userId === Number(cfg.myUserId) || participantId === Number(cfg.myParticipantId)) {
+    cfg.myRole = nextRole;
+    if ('can_edit_room' in update) cfg.canEditRoom = Boolean(update.can_edit_room);
+    if ('can_use_host_tools' in update) cfg.canUseHostTools = Boolean(update.can_use_host_tools);
+    if ('can_moderate_messages' in update) cfg.canModerateMessages = Boolean(update.can_moderate_messages);
+    if ('can_community_eject' in update) cfg.canCommunityEject = Boolean(update.can_community_eject);
+    setPermissionUI();
+    closeContextMenu();
+  }
+  if (changedParticipants) renderPeople();
+  renderActiveChat();
+}
+
 function participantByUserId(userId) {
   const id = Number(userId);
   if (!id) return null;
@@ -1337,6 +1384,7 @@ async function poll() {
           renderParticipant(person);
         }
       }
+      if (ev.type === 'user_role_update') applyUserRoleUpdate(p);
       if (ev.type === 'typing') showTyping(p.participant_id, p.active);
       if (ev.type === 'presence_leave') {
         const person = participants.get(p.participant_id);
@@ -1737,7 +1785,7 @@ function openAvatarContextMenu(x, y, participant) {
   document.getElementById('ctx-dm').style.display = !isOwn && !isBlocked ? 'block' : 'none';
   document.getElementById('ctx-tools-wrap').style.display = showHostTools ? 'block' : 'none';
   document.getElementById('ctx-tools-divider').style.display = showHostTools ? 'block' : 'none';
-  document.getElementById('ctx-community-eject').style.display = showHostTools && ['developer', 'admin'].includes(cfg.myRole) ? 'block' : 'none';
+  document.getElementById('ctx-community-eject').style.display = showHostTools && Boolean(cfg.canCommunityEject) ? 'block' : 'none';
   document.getElementById('ctx-tools-wrap').classList.remove('open');
   document.getElementById('ctx-block').style.display = !isOwn && !isBlocked ? 'block' : 'none';
   document.getElementById('ctx-unblock').style.display = !isOwn && isBlocked ? 'block' : 'none';
@@ -2789,6 +2837,7 @@ async function bootRoom() {
   });
   renderLinkTabs();
   renderActiveChat();
+  setPermissionUI();
   updateComposerState();
   poll();
   pollAppVersion();

@@ -102,9 +102,7 @@ $lastEventId = (int)$pdo->query('SELECT COALESCE(MAX(id), 0) FROM events WHERE s
       <div class="side-title">Room</div>
       <strong><?= e($room['name']) ?></strong>
       <div class="minor">Created by <?= e($room['owner_name']) ?></div>
-      <?php if ((int)$room['owner_id'] === (int)$user['id'] || in_array($user['role'] ?? 'user', ['admin', 'developer'], true)): ?>
-      <button class="btn btn-primary" id="edit-room-btn" type="button" style="width:100%;margin-top:12px;">Edit Room</button>
-      <?php endif; ?>
+      <button class="btn btn-primary" id="edit-room-btn" type="button" style="width:100%;margin-top:12px;"<?= ((int)$room['owner_id'] === (int)$user['id'] || in_array($user['role'] ?? 'user', ['admin', 'developer'], true)) ? '' : ' hidden' ?>>Edit Room</button>
     </section>
     <section class="side-section">
       <div class="side-title">Chatting <span id="participant-count-label">(0)</span></div>

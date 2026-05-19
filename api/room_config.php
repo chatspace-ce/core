@@ -259,6 +259,7 @@ json_out([
     'canEditRoom' => (int)$room['owner_id'] === (int)$user['id'] || in_array($user['role'] ?? 'user', ['admin', 'developer'], true),
     'canUseHostTools' => $canModerateMessages,
     'canModerateMessages' => $canModerateMessages,
+    'canCommunityEject' => can_community_eject($user),
     'myRole' => $user['role'] ?? 'user',
     'blockedUserIds' => $blockedUserIds,
     'sessionId' => $session['public_id'],

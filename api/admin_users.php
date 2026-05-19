@@ -49,6 +49,29 @@ if ($action === 'update') {
         $pdo->prepare('UPDATE users SET password_hash = ? WHERE id = ?')->execute([password_hash($password, PASSWORD_DEFAULT), $userId]);
     }
     log_tool($pdo, (int)$me['id'], 'admin_update_user', $userId, null, 'Role: ' . $role . ($password !== '' ? '; password reset' : ''));
+
+    $stmt = $pdo->prepare(
+        'SELECT p.id AS participant_id, p.session_id, p.user_id, r.owner_id
+           FROM participants p
+           JOIN room_sessions rs ON rs.id = p.session_id
+           JOIN rooms r ON r.id = rs.room_id
+          WHERE p.user_id = ?'
+    );
+    $stmt->execute([$userId]);
+    foreach ($stmt->fetchAll() as $row) {
+        $isOwner = (int)$row['owner_id'] === $userId;
+        $canUseHostTools = $isOwner || in_array($role, ['guide', 'developer', 'admin'], true);
+        emit_event($pdo, (int)$row['session_id'], 'user_role_update', [
+            'participant_id' => (int)$row['participant_id'],
+            'user_id' => $userId,
+            'role' => $role,
+            'is_owner' => $isOwner,
+            'can_edit_room' => $isOwner || in_array($role, ['developer', 'admin'], true),
+            'can_use_host_tools' => $canUseHostTools,
+            'can_moderate_messages' => $canUseHostTools,
+            'can_community_eject' => in_array($role, ['developer', 'admin'], true),
+        ]);
+    }
     json_out(['ok' => true]);
 }
 
