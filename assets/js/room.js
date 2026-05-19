@@ -596,12 +596,55 @@ function updateStageLinkIcons() {
   });
 }
 
-function dmFlightPointForUser(userId, fallbackCorner) {
-  const person = participantByUserId(userId);
-  if (!person?.avatarEl) return fallbackCorner;
+function stagePointFromElement(el) {
+  if (!el || !roomStage || !el.isConnected) return null;
+  const stageRect = roomStage.getBoundingClientRect();
+  const rect = el.getBoundingClientRect();
   return {
-    x: person.avatarEl.offsetLeft + person.avatarEl.offsetWidth / 2,
-    y: person.avatarEl.offsetTop + person.avatarEl.offsetHeight / 2,
+    x: rect.left - stageRect.left + rect.width / 2,
+    y: rect.top - stageRect.top + rect.height / 2,
+  };
+}
+
+function dmFlightPointForUser(userId) {
+  const person = participantByUserId(userId);
+  const elementPoint = stagePointFromElement(person?.avatarEl)
+    || stagePointFromElement([...roomStage.querySelectorAll('.avatar')].find(el => Number(el.dataset.participantId) === Number(person?.id)));
+  if (elementPoint) return elementPoint;
+  if (person && Number.isFinite(Number(person.position_x)) && Number.isFinite(Number(person.position_y))) {
+    const avatarWidth = person.webcam_path ? 190 : 150;
+    const avatarHeight = 150;
+    return {
+      x: Math.max(0, Math.min(roomStage.clientWidth, Number(person.position_x) * roomStage.clientWidth + avatarWidth / 2)),
+      y: Math.max(0, Math.min(roomStage.clientHeight, Number(person.position_y) * roomStage.clientHeight + avatarHeight / 2)),
+    };
+  }
+  return null;
+}
+
+function dmFlightPointForCurrentUser() {
+  return dmFlightPointForUser(cfg.myUserId);
+}
+
+function dmFlightResolvedPoints(fromUserId, toUserId) {
+  const corner = dmFlightCornerPoint();
+  const fromPoint = dmFlightPointForUser(fromUserId);
+  const toPoint = dmFlightPointForUser(toUserId);
+  if (fromUserId === cfg.myUserId) {
+    return {
+      start: fromPoint || dmFlightPointForCurrentUser() || corner,
+      end: toPoint || corner,
+    };
+  }
+  if (toUserId === cfg.myUserId) {
+    return {
+      start: fromPoint || corner,
+      end: toPoint || dmFlightPointForCurrentUser() || corner,
+    };
+  }
+  return {
+    start: fromPoint || corner,
+    end: toPoint || corner,
   };
 }
 
@@ -627,9 +670,7 @@ function showDmFlight(payload) {
   if (isUserBlocked(fromUserId) || isUserBlocked(toUserId)) return;
   if (messageId) animatedDmMessageIds.add(Number(messageId));
 
-  const corner = dmFlightCornerPoint();
-  const start = dmFlightPointForUser(fromUserId, corner);
-  const end = dmFlightPointForUser(toUserId, corner);
+  const { start, end } = dmFlightResolvedPoints(fromUserId, toUserId);
   if (Math.abs(start.x - end.x) < 2 && Math.abs(start.y - end.y) < 2) return;
 
   const dx = end.x - start.x;
