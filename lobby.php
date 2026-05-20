@@ -259,8 +259,8 @@ $rooms = $roomsStmt->fetchAll();
             </button>
             <button class="admin-summary-card" type="button" data-admin-jump="settings">
               <span>Limits</span>
-              <strong>6</strong>
-              <small>Rate and upload controls</small>
+              <strong>GIF</strong>
+              <small>Rate, upload, and GIF controls</small>
             </button>
             <button class="admin-summary-card" type="button" data-admin-jump="database">
               <span>Database</span>
@@ -304,6 +304,14 @@ $rooms = $roomsStmt->fetchAll();
               <label>Room image max size MB <input name="room_image_max_size_mb" type="number" min="1" max="100" step="1"></label>
               <label>Room video max size MB <input name="room_video_max_size_mb" type="number" min="5" max="1000" step="5"></label>
               <label>Idle removal minutes <input name="participant_idle_timeout_minutes" type="number" min="0.5" max="120" step="0.5"></label>
+              <label>GIPHY API key <input name="gif_giphy_api_key" type="password" autocomplete="off" placeholder="Optional"></label>
+              <label>Tenor API key <input name="gif_tenor_api_key" type="password" autocomplete="off" placeholder="Optional"></label>
+              <label>Default GIF provider
+                <select name="gif_default_provider">
+                  <option value="giphy">GIPHY</option>
+                  <option value="tenor">Tenor</option>
+                </select>
+              </label>
               <button class="btn btn-primary" type="submit">Save Settings</button>
               <div class="admin-form-status" aria-live="polite"></div>
             </form>

@@ -54,7 +54,10 @@ function community_message_payload(array $m, string $channel, array $reactionsMa
         'role' => $m['author_role'] ?? 'user',
         'is_owner' => !empty($m['author_is_owner']),
         'content' => $m['content'],
-        'message_type' => 'text',
+        'message_type' => $m['message_type'] ?? 'text',
+        'file_size' => $m['file_size'] !== null ? (int)$m['file_size'] : null,
+        'mime_type' => $m['mime_type'] ?? null,
+        'original_name' => $m['original_name'] ?? null,
         'edited_at' => $m['edited_at'] ?? null,
         'sent_at' => $m['sent_at'],
         'reactions' => $reactionsMap[(int)$m['id']] ?? [],
@@ -158,7 +161,8 @@ $messages = array_map(function(array $m) use ($canModerateMessages, $reactionsMa
 }, $rawMessages);
 
 $stmt = $pdo->query(
-    "SELECT cm.id, cm.participant_id, cm.user_id, cm.display_name, cm.avatar_path, cm.avatar_url, cm.content, cm.edited_at, cm.sent_at,
+    "SELECT cm.id, cm.participant_id, cm.user_id, cm.display_name, cm.avatar_path, cm.avatar_url, cm.content,
+            cm.message_type, cm.file_size, cm.mime_type, cm.original_name, cm.edited_at, cm.sent_at,
             u.role AS author_role,
             0 AS author_is_owner
      FROM community_messages cm
@@ -180,7 +184,8 @@ if (!$linkedTo) {
 if ($linkedTo) {
     $linkKey = link_key_for((int)$participant['id'], $linkedTo);
     $stmt = $pdo->prepare(
-        "SELECT cm.id, cm.participant_id, cm.user_id, cm.display_name, cm.avatar_path, cm.avatar_url, cm.content, cm.edited_at, cm.sent_at, cm.link_key,
+        "SELECT cm.id, cm.participant_id, cm.user_id, cm.display_name, cm.avatar_path, cm.avatar_url, cm.content,
+                cm.message_type, cm.file_size, cm.mime_type, cm.original_name, cm.edited_at, cm.sent_at, cm.link_key,
                 u.role AS author_role,
                 CASE WHEN cm.user_id = ? THEN 1 ELSE 0 END AS author_is_owner
          FROM community_messages cm
@@ -209,7 +214,8 @@ foreach ($stmt->fetchAll() as $row) {
 $dmLeft = 'dm:' . (int)$user['id'] . ':%';
 $dmRight = 'dm:%:' . (int)$user['id'];
 $stmt = $pdo->prepare(
-    "SELECT cm.id, cm.participant_id, cm.user_id, cm.display_name, cm.avatar_path, cm.avatar_url, cm.content, cm.edited_at, cm.sent_at, cm.link_key,
+    "SELECT cm.id, cm.participant_id, cm.user_id, cm.display_name, cm.avatar_path, cm.avatar_url, cm.content,
+            cm.message_type, cm.file_size, cm.mime_type, cm.original_name, cm.edited_at, cm.sent_at, cm.link_key,
             u.role AS author_role,
             0 AS author_is_owner
      FROM community_messages cm
@@ -260,6 +266,14 @@ json_out([
     'canUseHostTools' => $canModerateMessages,
     'canModerateMessages' => $canModerateMessages,
     'canCommunityEject' => can_community_eject($user),
+    'gifPicker' => [
+        'enabled' => app_setting($pdo, 'gif_giphy_api_key') !== '' || app_setting($pdo, 'gif_tenor_api_key') !== '',
+        'defaultProvider' => in_array(app_setting($pdo, 'gif_default_provider', 'giphy'), ['giphy', 'tenor'], true) ? app_setting($pdo, 'gif_default_provider', 'giphy') : 'giphy',
+        'providers' => [
+            'giphy' => app_setting($pdo, 'gif_giphy_api_key') !== '',
+            'tenor' => app_setting($pdo, 'gif_tenor_api_key') !== '',
+        ],
+    ],
     'myRole' => $user['role'] ?? 'user',
     'blockedUserIds' => $blockedUserIds,
     'sessionId' => $session['public_id'],

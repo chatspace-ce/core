@@ -538,6 +538,9 @@ adminSettings?.addEventListener('submit', async e => {
       room_image_max_size_mb: form.elements.room_image_max_size_mb.value,
       room_video_max_size_mb: form.elements.room_video_max_size_mb.value,
       participant_idle_timeout_minutes: form.elements.participant_idle_timeout_minutes.value,
+      gif_giphy_api_key: form.elements.gif_giphy_api_key.value,
+      gif_tenor_api_key: form.elements.gif_tenor_api_key.value,
+      gif_default_provider: form.elements.gif_default_provider.value,
     });
     setAdminFormStatus(form, 'Settings saved.', 'ok');
     await loadAdminLogs();

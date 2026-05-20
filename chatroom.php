@@ -76,7 +76,7 @@ $lastEventId = (int)$pdo->query('SELECT COALESCE(MAX(id), 0) FROM events WHERE s
     <section class="chat-pane">
       <div class="messages" id="messages"></div>
       <form class="composer" id="composer">
-        <button class="composer-icon-btn" id="attach-btn" type="button" aria-label="Add attachment">+</button>
+        <button class="composer-icon-btn" id="attach-btn" type="button" aria-label="Add attachment"><img src="<?= e(app_url('/assets/images/input-add.png')) ?>" alt=""></button>
         <div class="attach-menu" id="attach-menu" hidden>
           <button type="button" id="attach-file-btn">Attach File</button>
           <button type="button" id="attach-voice-btn">Attach Voice Note</button>
@@ -85,8 +85,9 @@ $lastEventId = (int)$pdo->query('SELECT COALESCE(MAX(id), 0) FROM events WHERE s
         <textarea id="chat-input" maxlength="1000" rows="1" autocomplete="off" placeholder="Message <?= e($room['name']) ?>"></textarea>
         <div class="composer-actions">
           <span class="char-counter" id="char-counter">0/1000</span>
-          <button class="composer-icon-btn emoji-btn" id="emoji-btn" type="button" aria-label="Emoji picker">😊</button>
-          <button class="send-btn" type="submit" aria-label="Send message"><img src="<?= e(app_url('/assets/images/chat-input-send.png')) ?>" alt=""></button>
+          <button class="composer-icon-btn gif-btn" id="gif-btn" type="button" aria-label="GIF picker" hidden><img src="<?= e(app_url('/assets/images/input-gif.png')) ?>" alt=""></button>
+          <button class="composer-icon-btn emoji-btn" id="emoji-btn" type="button" aria-label="Emoji picker"><img src="<?= e(app_url('/assets/images/input-emoji.png')) ?>" alt=""></button>
+          <button class="send-btn" type="submit" aria-label="Send message"><img src="<?= e(app_url('/assets/images/input-send.png')) ?>" alt=""></button>
         </div>
       </form>
       <div class="chat-tabs" id="chat-tabs">
@@ -339,6 +340,14 @@ $lastEventId = (int)$pdo->query('SELECT COALESCE(MAX(id), 0) FROM events WHERE s
   <button type="button">😉</button><button type="button">😈</button><button type="button">🖤</button><button type="button">✨</button>
   <button type="button">🔥</button><button type="button">💜</button><button type="button">👍</button><button type="button">❤️</button>
   <button type="button">🤣</button><button type="button">😭</button><button type="button">🥰</button><button type="button">👀</button>
+</div>
+<div id="gif-picker" hidden>
+  <div class="gif-search-row">
+    <input id="gif-search-input" type="search" placeholder="Search GIFs" autocomplete="off">
+  </div>
+  <div class="gif-results" id="gif-results">
+    <div class="minor">Search for a GIF.</div>
+  </div>
 </div>
 <input type="file" id="avatar-file-input" accept="image/jpeg,image/png,image/gif,image/webp" style="display:none">
 <div class="modal" id="game-modal">

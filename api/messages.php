@@ -49,6 +49,7 @@ if ($action === 'edit') {
         $message = $stmt->fetch();
         if (!$message || !community_message_accessible($message, $channel, $sessionId, $participant)) json_out(['error' => 'Message not found'], 404);
         if ((int)$message['participant_id'] !== (int)$participant['id'] || !empty($message['is_deleted'])) json_out(['error' => 'Cannot edit this message'], 403);
+        if (($message['message_type'] ?? 'text') !== 'text') json_out(['error' => 'Cannot edit this message'], 403);
 
         $editedAt = gmdate('Y-m-d H:i:s');
         $original = $message['original_content'] ?? null;
@@ -163,7 +164,22 @@ if ($action === 'delete') {
     json_out(['ok' => true, 'message_id' => $messageId, 'deleted_at' => $deletedAt]);
 }
 
-$content = trim((string)($body['content'] ?? ''));
+$messageType = $action === 'gif' ? 'gif' : 'text';
+$mimeType = $messageType === 'gif' ? 'image/gif' : null;
+$originalName = null;
+if ($messageType === 'gif') {
+    $content = trim((string)($body['gif_url'] ?? ''));
+    $originalName = trim((string)($body['title'] ?? 'GIF'));
+    if ($originalName === '') $originalName = 'GIF';
+    $parts = parse_url($content);
+    if (($parts['scheme'] ?? '') !== 'https' || empty($parts['host'])) json_out(['error' => 'GIF URL required'], 400);
+    $host = strtolower((string)$parts['host']);
+    if (!str_contains($host, 'giphy.com') && !str_contains($host, 'tenor.com') && !str_contains($host, 'tenor.googleapis.com')) {
+        json_out(['error' => 'Unsupported GIF provider'], 400);
+    }
+} else {
+    $content = trim((string)($body['content'] ?? ''));
+}
 if ($content === '') json_out(['error' => 'Message required'], 400);
 $contentLength = function_exists('mb_strlen') ? mb_strlen($content, 'UTF-8') : strlen($content);
 if ($contentLength > 1000) json_out(['error' => 'Message too long'], 400);
@@ -180,10 +196,10 @@ if (((int)$roomRecent->fetchColumn() + (int)$communityRecent->fetchColumn()) >= 
 if ($channel === 'community') {
     $avatarUrl = $participant['webcam_path'] ?: resolve_avatar($participant['avatar_path']);
     $stmt = $pdo->prepare(
-        "INSERT INTO community_messages (scope, participant_id, user_id, display_name, avatar_path, avatar_url, content)
-         VALUES ('community',?,?,?,?,?,?)"
+        "INSERT INTO community_messages (scope, participant_id, user_id, display_name, avatar_path, avatar_url, content, message_type, mime_type, original_name)
+         VALUES ('community',?,?,?,?,?,?,?,?,?)"
     );
-    $stmt->execute([(int)$participant['id'], (int)$participant['user_id'], $participant['display_name'], $participant['avatar_path'], $avatarUrl, $content]);
+    $stmt->execute([(int)$participant['id'], (int)$participant['user_id'], $participant['display_name'], $participant['avatar_path'], $avatarUrl, $content, $messageType, $mimeType, $originalName]);
     $id = (int)$pdo->lastInsertId();
     $msg = [
         'id' => $id,
@@ -195,6 +211,9 @@ if ($channel === 'community') {
         'role' => $authorContext['role'],
         'is_owner' => $authorContext['is_owner'],
         'content' => $content,
+        'message_type' => $messageType,
+        'mime_type' => $mimeType,
+        'original_name' => $originalName,
         'sent_at' => gmdate('Y-m-d H:i:s'),
     ];
     emit_community_event($pdo, 'community', null, null, 'community_message', $msg);
@@ -215,10 +234,10 @@ if ($channel === 'link') {
     $linkKey = link_key_for((int)$participant['id'], $targetId);
     $avatarUrl = $participant['webcam_path'] ?: resolve_avatar($participant['avatar_path']);
     $stmt = $pdo->prepare(
-        "INSERT INTO community_messages (scope, session_id, link_key, participant_id, user_id, display_name, avatar_path, avatar_url, content)
-         VALUES ('link',?,?,?,?,?,?,?,?)"
+        "INSERT INTO community_messages (scope, session_id, link_key, participant_id, user_id, display_name, avatar_path, avatar_url, content, message_type, mime_type, original_name)
+         VALUES ('link',?,?,?,?,?,?,?,?,?,?,?)"
     );
-    $stmt->execute([$sessionId, $linkKey, (int)$participant['id'], (int)$participant['user_id'], $participant['display_name'], $participant['avatar_path'], $avatarUrl, $content]);
+    $stmt->execute([$sessionId, $linkKey, (int)$participant['id'], (int)$participant['user_id'], $participant['display_name'], $participant['avatar_path'], $avatarUrl, $content, $messageType, $mimeType, $originalName]);
     $id = (int)$pdo->lastInsertId();
     $msg = [
         'id' => $id,
@@ -231,6 +250,9 @@ if ($channel === 'link') {
         'role' => $authorContext['role'],
         'is_owner' => $authorContext['is_owner'],
         'content' => $content,
+        'message_type' => $messageType,
+        'mime_type' => $mimeType,
+        'original_name' => $originalName,
         'sent_at' => gmdate('Y-m-d H:i:s'),
     ];
     emit_community_event($pdo, 'link', $sessionId, $linkKey, 'link_message', $msg);
@@ -255,10 +277,10 @@ if ($channel === 'dm') {
     $dmKey = dm_key_for((int)$participant['user_id'], $targetUserId);
     $avatarUrl = $participant['webcam_path'] ?: resolve_avatar($participant['avatar_path']);
     $stmt = $pdo->prepare(
-        "INSERT INTO community_messages (scope, link_key, participant_id, user_id, display_name, avatar_path, avatar_url, content)
-         VALUES ('dm',?,?,?,?,?,?,?)"
+        "INSERT INTO community_messages (scope, link_key, participant_id, user_id, display_name, avatar_path, avatar_url, content, message_type, mime_type, original_name)
+         VALUES ('dm',?,?,?,?,?,?,?,?,?,?)"
     );
-    $stmt->execute([$dmKey, (int)$participant['id'], (int)$participant['user_id'], $participant['display_name'], $participant['avatar_path'], $avatarUrl, $content]);
+    $stmt->execute([$dmKey, (int)$participant['id'], (int)$participant['user_id'], $participant['display_name'], $participant['avatar_path'], $avatarUrl, $content, $messageType, $mimeType, $originalName]);
     $id = (int)$pdo->lastInsertId();
     $msg = [
         'id' => $id,
@@ -273,14 +295,17 @@ if ($channel === 'dm') {
         'role' => $authorContext['role'],
         'is_owner' => false,
         'content' => $content,
+        'message_type' => $messageType,
+        'mime_type' => $mimeType,
+        'original_name' => $originalName,
         'sent_at' => gmdate('Y-m-d H:i:s'),
     ];
     emit_community_event($pdo, 'dm', null, $dmKey, 'dm_message', $msg);
     json_out($msg);
 }
 
-$stmt = $pdo->prepare('INSERT INTO messages (session_id, participant_id, content) VALUES (?,?,?)');
-$stmt->execute([$sessionId, (int)$participant['id'], $content]);
+$stmt = $pdo->prepare('INSERT INTO messages (session_id, participant_id, content, message_type, mime_type, original_name) VALUES (?,?,?,?,?,?)');
+$stmt->execute([$sessionId, (int)$participant['id'], $content, $messageType, $mimeType, $originalName]);
 $id = (int)$pdo->lastInsertId();
 $msg = [
     'id' => $id,
@@ -291,7 +316,9 @@ $msg = [
     'role' => $authorContext['role'],
     'is_owner' => $authorContext['is_owner'],
     'content' => $content,
-    'message_type' => 'text',
+    'message_type' => $messageType,
+    'mime_type' => $mimeType,
+    'original_name' => $originalName,
     'sent_at' => gmdate('Y-m-d H:i:s'),
 ];
 emit_event($pdo, $sessionId, 'message', $msg);

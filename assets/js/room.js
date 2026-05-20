@@ -30,6 +30,9 @@ const msgActionMenu = document.getElementById('msg-action-menu');
 const tabCtxMenu = document.getElementById('tab-ctx-menu');
 const roomMenu = document.getElementById('room-menu');
 const emojiPicker = document.getElementById('emoji-picker');
+const gifPicker = document.getElementById('gif-picker');
+const gifSearchInput = document.getElementById('gif-search-input');
+const gifResults = document.getElementById('gif-results');
 const attachMenu = document.getElementById('attach-menu');
 const chatFileInput = document.getElementById('chat-file-input');
 const voiceNoteModal = document.getElementById('voice-note-modal');
@@ -90,6 +93,7 @@ let pendingLinkIconTargetId = null;
 const animatedDmMessageIds = new Set();
 let activeAvatarEffects = 0;
 let roomExitInProgress = false;
+let gifSearchTimer = null;
 
 function apiPost(url, body) {
   return fetch(appUrl(url), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
@@ -1251,6 +1255,7 @@ function formatBytes(bytes) {
 function messageSpeechText(msg) {
   if (msg.message_type === 'voice_note') return 'sent a voice note';
   if (msg.message_type === 'file') return msg.original_name ? `sent ${msg.original_name}` : 'sent a file';
+  if (msg.message_type === 'gif') return 'sent a GIF';
   return msg.content;
 }
 
@@ -1258,6 +1263,9 @@ function messageBodyHtml(msg) {
   const url = esc(mediaUrl(msg.content));
   const name = esc(msg.original_name || 'Attachment');
   const mime = String(msg.mime_type || '');
+  if (msg.message_type === 'gif') {
+    return `<a class="chat-attachment-image chat-gif" href="${url}" target="_blank" rel="noopener"><img src="${url}" alt="${name}"></a>`;
+  }
   if (msg.message_type === 'voice_note') {
     return `<div class="voice-note-player"><audio controls src="${url}"></audio></div>`;
   }
@@ -1424,9 +1432,9 @@ function updateComposerState() {
   input.style.height = `${Math.min(input.scrollHeight, 132)}px`;
   const count = input.value.length;
   const ratio = Math.min(1, count / 1000);
-  const hue = Math.round(132 - (132 * ratio));
   counter.textContent = `${count}/1000`;
-  counter.style.color = `hsl(${hue} 78% 58%)`;
+  const heat = Math.max(0, (ratio - 0.72) / 0.28);
+  counter.style.color = heat <= 0 ? '#ffffff' : `hsl(${Math.round(8 - (8 * Math.min(1, heat)))} 86% ${Math.round(72 - (22 * Math.min(1, heat)))}%)`;
 }
 
 document.getElementById('composer').addEventListener('submit', e => {
@@ -2030,6 +2038,10 @@ function closeEmojiPicker() {
   emojiPicker.classList.remove('visible');
 }
 
+function closeGifPicker() {
+  if (gifPicker) gifPicker.hidden = true;
+}
+
 function closeAttachMenu() {
   attachMenu.hidden = true;
 }
@@ -2040,6 +2052,7 @@ function openEmojiPicker() {
   closeTabContextMenu();
   closeRoomMenu();
   closeAttachMenu();
+  closeGifPicker();
   const btn = document.getElementById('emoji-btn');
   const r = btn.getBoundingClientRect();
   emojiPicker.classList.add('visible');
@@ -2048,11 +2061,29 @@ function openEmojiPicker() {
   emojiPicker.style.top = `${Math.max(8, r.top - er.height - 8)}px`;
 }
 
+function openGifPicker() {
+  if (!cfg?.gifPicker?.enabled || !gifPicker) return;
+  closeContextMenu();
+  closeTextContextMenu();
+  closeTabContextMenu();
+  closeRoomMenu();
+  closeAttachMenu();
+  closeEmojiPicker();
+  const btn = document.getElementById('gif-btn');
+  const r = btn.getBoundingClientRect();
+  gifPicker.hidden = false;
+  const gr = gifPicker.getBoundingClientRect();
+  gifPicker.style.left = `${Math.max(8, Math.min(r.left - gr.width + r.width, window.innerWidth - gr.width - 8))}px`;
+  gifPicker.style.top = `${Math.max(8, r.top - gr.height - 8)}px`;
+  gifSearchInput?.focus();
+}
+
 function openRoomMenu() {
   closeContextMenu();
   closeTextContextMenu();
   closeTabContextMenu();
   closeAttachMenu();
+  closeGifPicker();
   const btn = document.getElementById('room-menu-btn');
   const r = btn.getBoundingClientRect();
   roomMenu.classList.add('visible');
@@ -2080,6 +2111,12 @@ document.getElementById('emoji-btn').addEventListener('click', e => {
   else openEmojiPicker();
 });
 
+document.getElementById('gif-btn')?.addEventListener('click', e => {
+  e.stopPropagation();
+  if (gifPicker.hidden) openGifPicker();
+  else closeGifPicker();
+});
+
 document.getElementById('attach-btn').addEventListener('click', e => {
   e.stopPropagation();
   closeContextMenu();
@@ -2087,6 +2124,7 @@ document.getElementById('attach-btn').addEventListener('click', e => {
   closeTabContextMenu();
   closeRoomMenu();
   closeEmojiPicker();
+  closeGifPicker();
   attachMenu.hidden = !attachMenu.hidden;
 });
 
@@ -2114,14 +2152,81 @@ emojiPicker.querySelectorAll('button').forEach(btn => {
   });
 });
 
+async function searchGifs(query) {
+  if (!gifResults || !cfg?.gifPicker?.enabled) return;
+  const q = query.trim();
+  if (!q) {
+    gifResults.innerHTML = '<div class="minor">Search for a GIF.</div>';
+    return;
+  }
+  gifResults.innerHTML = '<div class="gif-loading">Searching...</div>';
+  try {
+    const qs = new URLSearchParams({
+      session_id: cfg.sessionId,
+      join_token: cfg.myJoinToken,
+      q,
+      provider: cfg.gifPicker.defaultProvider || 'giphy',
+    });
+    const data = await fetch(appUrl(`/api/gif_search.php?${qs}`)).then(r => r.json());
+    if (data.error) throw new Error(data.error);
+    const results = data.results || [];
+    if (!results.length) {
+      gifResults.innerHTML = '<div class="minor">No GIFs found.</div>';
+      return;
+    }
+    gifResults.innerHTML = '';
+    results.forEach(result => {
+      const btn = document.createElement('button');
+      btn.className = 'gif-result';
+      btn.type = 'button';
+      btn.innerHTML = `<img src="${esc(result.preview || result.url)}" alt="${esc(result.title || 'GIF')}">`;
+      btn.addEventListener('click', () => sendGif(result));
+      gifResults.appendChild(btn);
+    });
+  } catch (err) {
+    gifResults.innerHTML = `<div class="minor">${esc(err.message || 'GIF search failed.')}</div>`;
+  }
+}
+
+gifSearchInput?.addEventListener('input', e => {
+  clearTimeout(gifSearchTimer);
+  gifSearchTimer = setTimeout(() => searchGifs(e.target.value), 250);
+});
+
+async function sendGif(result) {
+  closeGifPicker();
+  const payload = { session_id: cfg.sessionId, join_token: cfg.myJoinToken, action: 'gif', gif_url: result.url, title: result.title || 'GIF', channel: activeChat };
+  const partnerId = activeLinkPartnerId();
+  const dmUserId = activeDmUserId();
+  if (partnerId) {
+    payload.channel = 'link';
+    payload.target_participant_id = partnerId;
+  } else if (dmUserId) {
+    payload.channel = 'dm';
+    payload.target_user_id = dmUserId;
+  }
+  try {
+    const msg = await apiPost('/api/messages.php', payload);
+    if (msg.channel === 'community') addMessageToChannel(msg, 'community', false);
+    else if (msg.channel === 'link') addMessageToChannel(msg, `link:${partnerId}`, false);
+    else if (msg.channel === 'dm') {
+      addMessageToChannel(msg, `dm:${dmUserId}`, false);
+      showDmFlight(msg);
+    } else renderMessage(msg, true);
+  } catch (err) {
+    alert(err.message || err);
+  }
+}
+
 document.addEventListener('click', e => {
   if (!ctxMenu.contains(e.target)) closeContextMenu();
   if (!textCtxMenu.contains(e.target)) closeTextContextMenu();
   if (msgActionMenu && !msgActionMenu.contains(e.target) && !e.target.closest('.msg-options')) closeMessageActionMenu();
   if (tabCtxMenu && !tabCtxMenu.contains(e.target)) closeTabContextMenu();
-  if (!roomMenu.contains(e.target) && e.target.id !== 'room-menu-btn') closeRoomMenu();
-  if (!emojiPicker.contains(e.target) && e.target.id !== 'emoji-btn') closeEmojiPicker();
-  if (!attachMenu.contains(e.target) && e.target.id !== 'attach-btn') closeAttachMenu();
+  if (!roomMenu.contains(e.target) && !e.target.closest('#room-menu-btn')) closeRoomMenu();
+  if (!emojiPicker.contains(e.target) && !e.target.closest('#emoji-btn')) closeEmojiPicker();
+  if (gifPicker && !gifPicker.contains(e.target) && !e.target.closest('#gif-btn')) closeGifPicker();
+  if (!attachMenu.contains(e.target) && !e.target.closest('#attach-btn')) closeAttachMenu();
 });
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape') {
@@ -2131,6 +2236,7 @@ document.addEventListener('keydown', e => {
     closeTabContextMenu();
     closeRoomMenu();
     closeEmojiPicker();
+    closeGifPicker();
     closeAttachMenu();
     closeLinkIconModal();
     document.getElementById('host-warn-modal')?.classList.remove('open');
@@ -2978,16 +3084,14 @@ async function bootRoom() {
   if (cfg.error) throw new Error(cfg.error);
   lastEventId = cfg.lastEventId || 0;
   lastCommunityEventId = cfg.lastCommunityEventId || 0;
+  const gifBtn = document.getElementById('gif-btn');
+  if (gifBtn) gifBtn.hidden = !cfg.gifPicker?.enabled;
   restoreSessionLock();
   (cfg.blockedUserIds || []).forEach(id => blockedUserIds.add(Number(id)));
   Object.entries(cfg.linkIcons || {}).forEach(([key, icon]) => linkIcons.set(key, icon || 'plus'));
-  const selfParticipant = cfg.participants.find(p => Number(p.id) === Number(cfg.myParticipantId));
-  cfg.participants
-    .filter(p => Number(p.id) !== Number(cfg.myParticipantId))
-    .forEach(renderParticipant);
-  if (selfParticipant) {
-    await renderParticipantWhenReady(selfParticipant, { animateJoin: true });
-  }
+  await Promise.all((cfg.participants || []).map(p => renderParticipantWhenReady(p, { animateJoin: true }).catch(() => {
+    renderParticipant(p, { animateJoin: true });
+  })));
   (cfg.dmUsers || []).forEach(rememberDmUser);
   (cfg.messages || []).forEach(msg => addMessageToChannel(msg, 'room', false));
   (cfg.communityMessages || []).forEach(msg => addMessageToChannel(msg, 'community', false));

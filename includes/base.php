@@ -400,6 +400,10 @@ function migrate(PDO $pdo): void {
             avatar_url TEXT DEFAULT NULL,
             content TEXT NOT NULL,
             original_content TEXT DEFAULT NULL,
+            message_type TEXT NOT NULL DEFAULT 'text',
+            file_size INTEGER DEFAULT NULL,
+            mime_type TEXT DEFAULT NULL,
+            original_name TEXT DEFAULT NULL,
             edited_at TEXT DEFAULT NULL,
             deleted_at TEXT DEFAULT NULL,
             deleted_by_user_id INTEGER DEFAULT NULL,
@@ -528,6 +532,18 @@ function migrate(PDO $pdo): void {
     if (!in_array('original_content', $communityMessageColNames, true)) {
         $pdo->exec('ALTER TABLE community_messages ADD COLUMN original_content TEXT DEFAULT NULL');
     }
+    if (!in_array('message_type', $communityMessageColNames, true)) {
+        $pdo->exec("ALTER TABLE community_messages ADD COLUMN message_type TEXT NOT NULL DEFAULT 'text'");
+    }
+    if (!in_array('file_size', $communityMessageColNames, true)) {
+        $pdo->exec('ALTER TABLE community_messages ADD COLUMN file_size INTEGER DEFAULT NULL');
+    }
+    if (!in_array('mime_type', $communityMessageColNames, true)) {
+        $pdo->exec('ALTER TABLE community_messages ADD COLUMN mime_type TEXT DEFAULT NULL');
+    }
+    if (!in_array('original_name', $communityMessageColNames, true)) {
+        $pdo->exec('ALTER TABLE community_messages ADD COLUMN original_name TEXT DEFAULT NULL');
+    }
     if (!in_array('edited_at', $communityMessageColNames, true)) {
         $pdo->exec('ALTER TABLE community_messages ADD COLUMN edited_at TEXT DEFAULT NULL');
     }
@@ -560,6 +576,9 @@ function seed_app_settings(PDO $pdo): void {
         'room_image_max_size_mb' => '10',
         'room_video_max_size_mb' => '200',
         'participant_idle_timeout_minutes' => '2',
+        'gif_giphy_api_key' => '',
+        'gif_tenor_api_key' => '',
+        'gif_default_provider' => 'giphy',
     ];
     $stmt = $pdo->prepare(db_uses_mysql_syntax($pdo)
         ? 'INSERT IGNORE INTO app_settings (setting_key, value) VALUES (?,?)'

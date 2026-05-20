@@ -127,6 +127,13 @@ if ($action === 'save_settings') {
         $value = max($min, min($max, $value));
         set_app_setting($pdo, $key, (string)$value);
     }
+    $giphyKey = trim((string)($body['gif_giphy_api_key'] ?? ''));
+    $tenorKey = trim((string)($body['gif_tenor_api_key'] ?? ''));
+    $provider = (string)($body['gif_default_provider'] ?? 'giphy');
+    if (!in_array($provider, ['giphy', 'tenor'], true)) $provider = 'giphy';
+    set_app_setting($pdo, 'gif_giphy_api_key', $giphyKey);
+    set_app_setting($pdo, 'gif_tenor_api_key', $tenorKey);
+    set_app_setting($pdo, 'gif_default_provider', $provider);
     log_tool($pdo, (int)$me['id'], 'admin_settings_update', null, null, 'Updated community settings');
     json_out(['ok' => true, 'settings' => admin_settings($pdo)]);
 }
