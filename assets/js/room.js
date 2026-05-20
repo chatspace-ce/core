@@ -681,23 +681,25 @@ function positionAvatar(p) {
     const bubbleH = p.speechEl.offsetHeight || 52;
     const placeRight = x + aw + bubbleW + 16 < roomW;
     const placeBelow = y + ah + bubbleH + 18 < roomH;
+    const clampX = value => Math.max(8, Math.min(value, roomW - bubbleW - 8));
+    const clampY = value => Math.max(8, Math.min(value, roomH - bubbleH - 8));
     p.speechEl.classList.remove('br', 'bl', 'tr', 'tl');
     if (placeBelow) {
-      p.speechEl.style.top = `${y + ah + 10}px`;
+      p.speechEl.style.top = `${clampY(y + ah + 10)}px`;
       if (placeRight) {
-        p.speechEl.style.left = `${x + aw - 28}px`;
+        p.speechEl.style.left = `${clampX(x + aw - 28)}px`;
         p.speechEl.classList.add('br');
       } else {
-        p.speechEl.style.left = `${Math.max(8, x - bubbleW + 28)}px`;
+        p.speechEl.style.left = `${clampX(x - bubbleW + 28)}px`;
         p.speechEl.classList.add('bl');
       }
     } else {
-      p.speechEl.style.top = `${Math.max(8, y - bubbleH - 10)}px`;
+      p.speechEl.style.top = `${clampY(y - bubbleH - 10)}px`;
       if (placeRight) {
-        p.speechEl.style.left = `${x + aw - 28}px`;
+        p.speechEl.style.left = `${clampX(x + aw - 28)}px`;
         p.speechEl.classList.add('tr');
       } else {
-        p.speechEl.style.left = `${Math.max(8, x - bubbleW + 28)}px`;
+        p.speechEl.style.left = `${clampX(x - bubbleW + 28)}px`;
         p.speechEl.classList.add('tl');
       }
     }
@@ -1745,6 +1747,7 @@ function showAvatarSpeech(participantId, msg) {
     const url = esc(mediaUrl(msg.content));
     const name = esc(msg.original_name || 'GIF');
     p.speechEl.innerHTML = `<img src="${url}" alt="${name}">`;
+    p.speechEl.querySelector('img')?.addEventListener('load', () => positionAvatar(p), { once: true });
   } else {
     p.speechEl.textContent = text.length > 180 ? `${text.slice(0, 177)}...` : text;
   }

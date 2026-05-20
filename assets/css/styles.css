@@ -761,16 +761,25 @@ textarea:focus { border-color: rgba(124,106,247,.8); box-shadow: 0 0 0 3px rgba(
 .chat-attachment-image img {
   display: block;
   width: 100%;
+  height: auto;
   max-height: 260px;
   object-fit: contain;
   border-radius: 0;
+}
+.message .chat-attachment-image img {
+  width: 100%;
+  height: auto;
+  max-width: none;
 }
 .chat-attachment-image.chat-gif {
   width: min(520px, 100%);
   max-width: min(520px, 100%);
 }
 .chat-attachment-image.chat-gif img {
+  width: 100%;
+  height: auto;
   max-height: 420px;
+  object-fit: contain;
 }
 .chat-file {
   display: inline-flex;
@@ -1412,8 +1421,8 @@ textarea:focus { border-color: rgba(124,106,247,.8); box-shadow: 0 0 0 3px rgba(
   border: 1px solid rgba(255,255,255,0.15);
 }
 .chat-bubble.chat-bubble-gif {
-  width: min(420px, 36vw);
-  max-width: min(420px, 36vw);
+  width: min(260px, 22vw);
+  max-width: min(260px, 22vw);
   padding: 6px;
   background: rgba(10,11,16,.76);
   border-color: rgba(255,255,255,.18);
@@ -1421,7 +1430,7 @@ textarea:focus { border-color: rgba(124,106,247,.8); box-shadow: 0 0 0 3px rgba(
 .chat-bubble.chat-bubble-gif img {
   display: block;
   width: 100%;
-  max-height: min(360px, 38vh);
+  max-height: min(210px, 24vh);
   object-fit: contain;
   border-radius: 7px;
 }
