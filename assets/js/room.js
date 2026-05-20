@@ -89,6 +89,7 @@ let memorySeenVersion = '';
 let pendingLinkIconTargetId = null;
 const animatedDmMessageIds = new Set();
 let activeAvatarEffects = 0;
+let roomExitInProgress = false;
 
 function apiPost(url, body) {
   return fetch(appUrl(url), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
@@ -621,7 +622,7 @@ function removeStagePresence(person) {
 function removeParticipant(participantId, options = {}) {
   const id = Number(participantId);
   const person = participants.get(id);
-  if (!person) return;
+  if (!person) return Promise.resolve();
   clearTimeout(typingTimers.get(id));
   typingTimers.delete(id);
   clearTimeout(speechTimers.get(id));
@@ -643,9 +644,10 @@ function removeParticipant(participantId, options = {}) {
     renderLinkTabs();
   };
   if (person.avatarEl && options.animate !== false) {
-    runAvatarPixelEffect(person, 'out').then(finish);
+    return runAvatarPixelEffect(person, 'out').then(finish);
   } else {
     finish();
+    return Promise.resolve();
   }
 }
 
@@ -1885,13 +1887,29 @@ function leaveRoomNow() {
   }).catch(() => {});
 }
 
+async function leaveRoomWithLocalExit(href) {
+  if (roomExitInProgress) return;
+  roomExitInProgress = true;
+  closeRoomMenu();
+  closeContextMenu();
+  closeTextContextMenu();
+  closeEmojiPicker();
+  stopTypingNow();
+  const me = participants.get(cfg?.myParticipantId);
+  if (me) await removeParticipant(me.id, { keepRecord: true });
+  await leaveRoomNow();
+  window.location.href = href;
+}
+
 document.getElementById('rooms-link')?.addEventListener('click', async e => {
   e.preventDefault();
   const href = e.currentTarget.href;
-  await leaveRoomNow();
-  window.location.href = href;
+  await leaveRoomWithLocalExit(href);
 });
-document.getElementById('logout-link')?.addEventListener('click', markLeavingRoom);
+document.getElementById('logout-link')?.addEventListener('click', async e => {
+  e.preventDefault();
+  await leaveRoomWithLocalExit(e.currentTarget.href);
+});
 
 async function refreshPresence() {
   try {
@@ -2963,7 +2981,13 @@ async function bootRoom() {
   restoreSessionLock();
   (cfg.blockedUserIds || []).forEach(id => blockedUserIds.add(Number(id)));
   Object.entries(cfg.linkIcons || {}).forEach(([key, icon]) => linkIcons.set(key, icon || 'plus'));
-  cfg.participants.forEach(renderParticipant);
+  const selfParticipant = cfg.participants.find(p => Number(p.id) === Number(cfg.myParticipantId));
+  cfg.participants
+    .filter(p => Number(p.id) !== Number(cfg.myParticipantId))
+    .forEach(renderParticipant);
+  if (selfParticipant) {
+    await renderParticipantWhenReady(selfParticipant, { animateJoin: true });
+  }
   (cfg.dmUsers || []).forEach(rememberDmUser);
   (cfg.messages || []).forEach(msg => addMessageToChannel(msg, 'room', false));
   (cfg.communityMessages || []).forEach(msg => addMessageToChannel(msg, 'community', false));
