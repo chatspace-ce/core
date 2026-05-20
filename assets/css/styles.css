@@ -765,6 +765,13 @@ textarea:focus { border-color: rgba(124,106,247,.8); box-shadow: 0 0 0 3px rgba(
   object-fit: contain;
   border-radius: 0;
 }
+.chat-attachment-image.chat-gif {
+  width: min(520px, 100%);
+  max-width: min(520px, 100%);
+}
+.chat-attachment-image.chat-gif img {
+  max-height: 420px;
+}
 .chat-file {
   display: inline-flex;
   align-items: center;
@@ -1403,6 +1410,20 @@ textarea:focus { border-color: rgba(124,106,247,.8); box-shadow: 0 0 0 3px rgba(
   transition: opacity .2s;
   z-index: 20;
   border: 1px solid rgba(255,255,255,0.15);
+}
+.chat-bubble.chat-bubble-gif {
+  width: min(420px, 36vw);
+  max-width: min(420px, 36vw);
+  padding: 6px;
+  background: rgba(10,11,16,.76);
+  border-color: rgba(255,255,255,.18);
+}
+.chat-bubble.chat-bubble-gif img {
+  display: block;
+  width: 100%;
+  max-height: min(360px, 38vh);
+  object-fit: contain;
+  border-radius: 7px;
 }
 .chat-bubble.show { opacity: 1; }
 .chat-bubble::before {

@@ -94,6 +94,7 @@ const animatedDmMessageIds = new Set();
 let activeAvatarEffects = 0;
 let roomExitInProgress = false;
 let gifSearchTimer = null;
+const gifDurationCache = new Map();
 
 function apiPost(url, body) {
   return fetch(appUrl(url), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
@@ -1209,7 +1210,7 @@ function addMessageToChannel(msg, chatKey, live = false) {
   }
   if (live && chatKey === 'room' && msg.participant_id) {
     showTyping(msg.participant_id, false);
-    showAvatarSpeech(msg.participant_id, messageSpeechText(msg));
+    showAvatarSpeech(msg.participant_id, msg);
   }
   if (live && chatKey.startsWith('dm:')) showDmFlight(msg);
 }
@@ -1277,6 +1278,33 @@ function messageBodyHtml(msg) {
     return `<a class="chat-file" href="${url}" target="_blank" rel="noopener" download><span class="chat-file-icon">${esc(ext || 'FILE')}</span><span><span class="chat-file-name">${name}</span><span class="chat-file-meta">${esc(msg.mime_type || 'Document')} · ${formatBytes(msg.file_size)}</span></span></a>`;
   }
   return esc(msg.content);
+}
+
+function gifDelayCentiseconds(bytes, offset) {
+  return bytes[offset] | (bytes[offset + 1] << 8);
+}
+
+async function gifLoopDurationMs(url) {
+  const safeUrl = mediaUrl(url);
+  if (gifDurationCache.has(safeUrl)) return gifDurationCache.get(safeUrl);
+  let duration = 3200;
+  try {
+    const buffer = await fetch(safeUrl, { cache: 'force-cache' }).then(r => r.arrayBuffer());
+    const bytes = new Uint8Array(buffer);
+    let total = 0;
+    for (let i = 0; i < bytes.length - 9; i += 1) {
+      if (bytes[i] === 0x21 && bytes[i + 1] === 0xf9 && bytes[i + 2] === 0x04) {
+        const delay = gifDelayCentiseconds(bytes, i + 4);
+        total += Math.max(delay, 2) * 10;
+        i += 7;
+      }
+    }
+    if (total > 0) duration = Math.max(900, Math.min(total, 7000));
+  } catch (err) {
+    duration = 3200;
+  }
+  gifDurationCache.set(safeUrl, duration);
+  return duration;
 }
 
 function parseServerDate(value) {
@@ -1690,32 +1718,53 @@ function showTyping(participantId, active) {
   typingTimers.set(participantId, setTimeout(() => showTyping(participantId, false), 3500));
 }
 
-function showAvatarSpeech(participantId, text) {
+function clearAvatarSpeech(participantId, person) {
+  const p = person || participants.get(participantId);
+  if (!p?.speechEl) return;
+  p.speechEl.classList.remove('show');
+  setTimeout(() => {
+    if (p.speechEl) p.speechEl.remove();
+    p.speechEl = null;
+  }, 220);
+}
+
+function showAvatarSpeech(participantId, msg) {
   const p = participants.get(participantId);
   if (!p) return;
   if (isUserBlocked(p.user_id)) return;
+  const isGif = msg?.message_type === 'gif';
+  const text = isGif ? '' : messageSpeechText(msg || {});
   if (!p.speechEl) {
     const el = document.createElement('div');
     el.className = 'chat-bubble';
     roomStage.appendChild(el);
     p.speechEl = el;
   }
-  p.speechEl.textContent = text.length > 180 ? `${text.slice(0, 177)}...` : text;
+  p.speechEl.classList.toggle('chat-bubble-gif', isGif);
+  if (isGif) {
+    const url = esc(mediaUrl(msg.content));
+    const name = esc(msg.original_name || 'GIF');
+    p.speechEl.innerHTML = `<img src="${url}" alt="${name}">`;
+  } else {
+    p.speechEl.textContent = text.length > 180 ? `${text.slice(0, 177)}...` : text;
+  }
   positionAvatar(p);
   requestAnimationFrame(() => {
     positionAvatar(p);
     p.speechEl?.classList.add('show');
   });
   clearTimeout(speechTimers.get(participantId));
-  speechTimers.set(participantId, setTimeout(() => {
-    if (p.speechEl) {
-      p.speechEl.classList.remove('show');
-      setTimeout(() => {
-        if (p.speechEl) p.speechEl.remove();
-        p.speechEl = null;
-      }, 220);
-    }
-  }, 5200));
+  if (isGif) {
+    speechTimers.set(participantId, setTimeout(() => clearAvatarSpeech(participantId, p), 3200));
+    gifLoopDurationMs(msg.content).then(duration => {
+      if (p.speechEl?.classList.contains('chat-bubble-gif')) {
+        clearTimeout(speechTimers.get(participantId));
+        speechTimers.set(participantId, setTimeout(() => clearAvatarSpeech(participantId, p), duration));
+      }
+    });
+  } else {
+    speechTimers.set(participantId, setTimeout(() => clearAvatarSpeech(participantId, p), 5200));
+  }
 }
 
 function sendTyping(active) {
