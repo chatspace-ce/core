@@ -1231,6 +1231,86 @@ textarea:focus { border-color: rgba(124,106,247,.8); box-shadow: 0 0 0 3px rgba(
   z-index: 2;
 }
 .avatar:active { cursor: grabbing; }
+.avatar.avatar-materialize {
+  animation: avatarMaterializeReveal .88s cubic-bezier(.18,.82,.28,1) both;
+  pointer-events: none;
+}
+.avatar.avatar-dusting {
+  animation: avatarDustReveal .78s cubic-bezier(.4,0,.22,1) forwards;
+  pointer-events: none;
+}
+.avatar-pixel-layer {
+  position: absolute;
+  z-index: 6;
+  pointer-events: none;
+  overflow: visible;
+}
+.avatar-pixel-layer span {
+  position: absolute;
+  display: block;
+  border-radius: 1px;
+  box-shadow: 0 0 8px rgba(255,255,255,.16);
+  will-change: transform, opacity;
+}
+.avatar-pixel-layer.build-in span {
+  opacity: 0;
+  transform: translate3d(calc(var(--dx) * -1), var(--dy), 0) scale(.55);
+  animation: avatarPixelBuild .64s cubic-bezier(.19,.86,.24,1) var(--delay) forwards;
+}
+.avatar-pixel-layer.dust-out span {
+  opacity: .95;
+  transform: translate3d(0, 0, 0) scale(1);
+  animation: avatarPixelDust .66s cubic-bezier(.34,0,.2,1) var(--delay) forwards;
+}
+@keyframes avatarMaterializeReveal {
+  0% {
+    opacity: 0;
+    clip-path: inset(100% 0 0 0);
+    filter: brightness(1.35) saturate(1.2);
+  }
+  55% { opacity: 1; }
+  100% {
+    opacity: 1;
+    clip-path: inset(0 0 0 0);
+    filter: brightness(1) saturate(1);
+  }
+}
+@keyframes avatarDustReveal {
+  0% {
+    opacity: 1;
+    clip-path: inset(0 0 0 0);
+    filter: brightness(1.1) saturate(1.12);
+  }
+  100% {
+    opacity: 0;
+    clip-path: inset(100% 0 0 0);
+    filter: brightness(.6) saturate(.6);
+  }
+}
+@keyframes avatarPixelBuild {
+  0% {
+    opacity: 0;
+    transform: translate3d(calc(var(--dx) * -1), var(--dy), 0) scale(.55);
+  }
+  70% {
+    opacity: .95;
+    transform: translate3d(0, 0, 0) scale(1.08);
+  }
+  100% {
+    opacity: 0;
+    transform: translate3d(0, 0, 0) scale(.86);
+  }
+}
+@keyframes avatarPixelDust {
+  0% {
+    opacity: .98;
+    transform: translate3d(0, 0, 0) rotate(0deg) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translate3d(var(--dx), var(--dy), 0) rotate(20deg) scale(.35);
+  }
+}
 .avatar-name {
   position: absolute;
   z-index: 5;
@@ -1248,6 +1328,7 @@ textarea:focus { border-color: rgba(124,106,247,.8); box-shadow: 0 0 0 3px rgba(
 .avatar:hover + .avatar-name {
   opacity: 1;
 }
+.avatar-name.avatar-name-hidden { opacity: 0 !important; }
 .avatar.webcam { border-radius: 4px; width: 190px; height: 150px; }
 .avatar.avatar-pulse {
   animation: avatarPulse 1.45s ease-out;

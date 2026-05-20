@@ -7,6 +7,8 @@ includes/config.php
 .secrets/
 db/*.bak
 db/*.local.sqlite
+db/*.sqlite-shm
+db/*.sqlite-wal
 
 assets/uploads/avatars/*
 assets/uploads/backgrounds/*

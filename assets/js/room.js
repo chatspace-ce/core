@@ -88,6 +88,7 @@ const SESSION_LOCK_PREFIX = 'chatspace_session_locked_';
 let memorySeenVersion = '';
 let pendingLinkIconTargetId = null;
 const animatedDmMessageIds = new Set();
+let activeAvatarEffects = 0;
 
 function apiPost(url, body) {
   return fetch(appUrl(url), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
@@ -463,7 +464,113 @@ function isLinkedWithMe(p) {
   return me.linked_to === p.id || p.linked_to === cfg.myParticipantId;
 }
 
-function renderParticipant(p) {
+function preloadImage(src) {
+  return new Promise(resolve => {
+    if (!src) {
+      resolve(false);
+      return;
+    }
+    const img = new Image();
+    img.onload = () => resolve(true);
+    img.onerror = () => resolve(false);
+    img.src = src;
+    if (img.complete) resolve(true);
+  });
+}
+
+function avatarEffectParticleData(img, cols, rows) {
+  const fallback = ['#7c6af7', '#27d3c3', '#f04f8b', '#f5c46b'];
+  if (!img?.complete || !img.naturalWidth || !img.naturalHeight) return null;
+  try {
+    const canvas = document.createElement('canvas');
+    canvas.width = cols;
+    canvas.height = rows;
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    ctx.drawImage(img, 0, 0, cols, rows);
+    const pixels = ctx.getImageData(0, 0, cols, rows).data;
+    return index => {
+      const offset = index * 4;
+      const alpha = pixels[offset + 3];
+      if (alpha < 24) return fallback[index % fallback.length];
+      return `rgba(${pixels[offset]}, ${pixels[offset + 1]}, ${pixels[offset + 2]}, ${Math.max(0.45, alpha / 255)})`;
+    };
+  } catch {
+    return index => fallback[index % fallback.length];
+  }
+}
+
+function runAvatarPixelEffect(person, mode = 'in') {
+  if (!person?.avatarEl || !roomStage) return Promise.resolve();
+  const img = person.avatarEl;
+  const rect = {
+    left: img.offsetLeft,
+    top: img.offsetTop,
+    width: img.offsetWidth || 150,
+    height: img.offsetHeight || 150,
+  };
+  const cols = activeAvatarEffects > 8 ? 6 : 8;
+  const rows = activeAvatarEffects > 8 ? 6 : 8;
+  const pixelSize = Math.max(5, Math.ceil(rect.width / cols));
+  const colorAt = avatarEffectParticleData(img, cols, rows) || (index => ['#7c6af7', '#27d3c3', '#f04f8b', '#f5c46b'][index % 4]);
+  const overlay = document.createElement('div');
+  overlay.className = `avatar-pixel-layer ${mode === 'out' ? 'dust-out' : 'build-in'}`;
+  overlay.style.left = `${rect.left}px`;
+  overlay.style.top = `${rect.top}px`;
+  overlay.style.width = `${rect.width}px`;
+  overlay.style.height = `${rect.height}px`;
+  roomStage.appendChild(overlay);
+
+  activeAvatarEffects++;
+  const duration = mode === 'out' ? 780 : 880;
+  const maxDelay = mode === 'out' ? 300 : 360;
+  let index = 0;
+  for (let row = 0; row < rows; row++) {
+    for (let col = 0; col < cols; col++) {
+      const particle = document.createElement('span');
+      const x = (col / cols) * rect.width;
+      const y = (row / rows) * rect.height;
+      const fromBottom = rows - row - 1;
+      const delay = mode === 'out'
+        ? row * (maxDelay / Math.max(1, rows - 1))
+        : fromBottom * (maxDelay / Math.max(1, rows - 1));
+      const sideways = (mode === 'out' ? 1 : -1) * (36 + Math.random() * 76) * (Math.random() > 0.42 ? 1 : -0.65);
+      const driftY = mode === 'out'
+        ? -18 + Math.random() * 54
+        : 40 + Math.random() * 60;
+      particle.style.left = `${x}px`;
+      particle.style.top = `${y}px`;
+      particle.style.width = `${pixelSize}px`;
+      particle.style.height = `${pixelSize}px`;
+      particle.style.background = colorAt(index);
+      particle.style.setProperty('--delay', `${delay}ms`);
+      particle.style.setProperty('--dx', `${sideways.toFixed(1)}px`);
+      particle.style.setProperty('--dy', `${driftY.toFixed(1)}px`);
+      overlay.appendChild(particle);
+      index++;
+    }
+  }
+  img.classList.remove('avatar-materialize', 'avatar-dusting');
+  void img.offsetWidth;
+  img.classList.add(mode === 'out' ? 'avatar-dusting' : 'avatar-materialize');
+  if (person.labelEl) person.labelEl.classList.toggle('avatar-name-hidden', mode === 'out');
+  return new Promise(resolve => {
+    window.setTimeout(() => {
+      overlay.remove();
+      img.classList.remove('avatar-materialize', 'avatar-dusting');
+      if (person.labelEl) person.labelEl.classList.remove('avatar-name-hidden');
+      activeAvatarEffects = Math.max(0, activeAvatarEffects - 1);
+      resolve();
+    }, duration + maxDelay + 90);
+  });
+}
+
+async function renderParticipantWhenReady(p, options = {}) {
+  const prepared = Object.assign({}, p);
+  await preloadImage(avatarUrl(prepared));
+  renderParticipant(prepared, options);
+}
+
+function renderParticipant(p, options = {}) {
   const existing = participants.get(p.id) || {};
   const merged = Object.assign(existing, p);
   participants.set(p.id, merged);
@@ -495,29 +602,51 @@ function renderParticipant(p) {
   img.classList.toggle('webcam', Boolean(merged.webcam_path));
   label.textContent = displayNameFor(merged);
   positionAvatar(merged);
+  if (options.animateJoin) runAvatarPixelEffect(merged, 'in');
   renderPeople();
   renderLinkTabs();
 }
 
-function removeParticipant(participantId) {
-  const id = Number(participantId);
-  const person = participants.get(id);
-  if (!person) return;
+function removeStagePresence(person) {
   person.avatarEl?.remove();
   person.labelEl?.remove();
   person.typingEl?.remove();
   person.speechEl?.remove();
+  person.avatarEl = null;
+  person.labelEl = null;
+  person.typingEl = null;
+  person.speechEl = null;
+}
+
+function removeParticipant(participantId, options = {}) {
+  const id = Number(participantId);
+  const person = participants.get(id);
+  if (!person) return;
   clearTimeout(typingTimers.get(id));
   typingTimers.delete(id);
   clearTimeout(speechTimers.get(id));
   speechTimers.delete(id);
-  participants.delete(id);
-  participants.forEach(p => {
-    if (p.linked_to === id) p.linked_to = null;
-  });
-  refreshLinkClasses();
-  renderPeople();
-  renderLinkTabs();
+  const finish = () => {
+    removeStagePresence(person);
+    if (options.keepRecord) {
+      person.online = false;
+      person.webcam_path = null;
+      person.linked_to = null;
+    } else {
+      participants.delete(id);
+    }
+    participants.forEach(p => {
+      if (p.linked_to === id) p.linked_to = null;
+    });
+    refreshLinkClasses();
+    renderPeople();
+    renderLinkTabs();
+  };
+  if (person.avatarEl && options.animate !== false) {
+    runAvatarPixelEffect(person, 'out').then(finish);
+  } else {
+    finish();
+  }
 }
 
 function positionAvatar(p) {
@@ -1355,8 +1484,17 @@ async function poll() {
       }
       if (ev.type === 'participant_join') {
         const alreadyKnown = participants.has(p.id);
-        renderParticipant(Object.assign({ online: true }, p));
+        const hadStageAvatar = Boolean(participants.get(p.id)?.avatarEl);
+        renderParticipantWhenReady(Object.assign({ online: true }, p), { animateJoin: !hadStageAvatar }).catch(() => {
+          renderParticipant(Object.assign({ online: true }, p), { animateJoin: !hadStageAvatar });
+        });
         if (!alreadyKnown && p.id !== cfg.myParticipantId) addSystemMessage(`${p.display_name} joined the room.`);
+      }
+      if (ev.type === 'participant_leave') {
+        const leavingId = p.participant_id || p.id;
+        const person = participants.get(Number(leavingId));
+        if (person && person.id !== cfg.myParticipantId) addSystemMessage(`${person.display_name} left the room.`);
+        removeParticipant(leavingId);
       }
       if (ev.type === 'position') {
         const person = participants.get(p.participant_id);
@@ -1392,7 +1530,7 @@ async function poll() {
           person.online = false;
           person.webcam_path = null;
           person.linked_to = null;
-          renderParticipant(person);
+          removeParticipant(person.id, { keepRecord: true });
           if (person.id !== cfg.myParticipantId) addSystemMessage(`${person.display_name} left the room.`);
         }
       }
@@ -1764,7 +1902,8 @@ async function refreshPresence() {
       if (existing) {
         existing.online = p.online;
         existing.webcam_path = p.webcam_path;
-        renderParticipant(existing);
+        if (p.online) renderParticipant(existing);
+        else if (existing.avatarEl) removeParticipant(existing.id, { keepRecord: true });
       }
     });
   } catch {}
