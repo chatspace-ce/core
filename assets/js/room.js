@@ -14,6 +14,11 @@ function mediaUrl(path) {
   return appUrl(path);
 }
 
+function cacheBust(url) {
+  if (!url || /^(?:data|blob):/.test(url)) return url;
+  return `${url}${url.includes('?') ? '&' : '?'}v=${Date.now()}`;
+}
+
 let cfg = null;
 const participants = new Map();
 const dmUsers = new Map();
@@ -29,6 +34,7 @@ const textCtxMenu = document.getElementById('text-ctx-menu');
 const msgActionMenu = document.getElementById('msg-action-menu');
 const tabCtxMenu = document.getElementById('tab-ctx-menu');
 const roomMenu = document.getElementById('room-menu');
+const roomActionMenu = document.getElementById('room-action-menu');
 const emojiPicker = document.getElementById('emoji-picker');
 const gifPicker = document.getElementById('gif-picker');
 const gifSearchInput = document.getElementById('gif-search-input');
@@ -96,6 +102,9 @@ let roomExitInProgress = false;
 let gifSearchTimer = null;
 const gifDurationCache = new Map();
 let messagesPinnedToBottom = true;
+const loadedRoomEffectModules = new Map();
+let activeRoomEffectController = null;
+let activeRoomEffect = null;
 
 function apiPost(url, body) {
   return fetch(appUrl(url), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
@@ -274,8 +283,12 @@ function participantRoleClass(p) {
 }
 
 function setPermissionUI() {
-  const editRoomBtn = document.getElementById('edit-room-btn');
-  if (editRoomBtn) editRoomBtn.hidden = !cfg?.canEditRoom;
+  const actionBtn = document.getElementById('room-action-btn');
+  if (actionBtn) actionBtn.hidden = !(cfg?.canEditRoom || cfg?.canUseHostTools);
+  const editAction = document.getElementById('room-action-edit');
+  if (editAction) editAction.hidden = !cfg?.canEditRoom;
+  const effectsAction = document.getElementById('room-action-effects');
+  if (effectsAction) effectsAction.hidden = !cfg?.canUseHostTools;
 }
 
 function allChannelMaps() {
@@ -1382,6 +1395,125 @@ function renderReactions(msg) {
   }).join('')}</div>`;
 }
 
+function roomEffectByKey(key) {
+  return (cfg.roomEffects || []).find(effect => effect.key === key) || null;
+}
+
+async function loadRoomEffectModule(effect) {
+  if (!effect?.script) throw new Error('Room effect script missing.');
+  const src = appUrl(effect.script);
+  if (loadedRoomEffectModules.has(src)) return loadedRoomEffectModules.get(src);
+  await new Promise((resolve, reject) => {
+    const existing = document.querySelector(`script[data-room-effect-src="${CSS.escape(src)}"]`);
+    if (existing) {
+      if (existing.dataset.loaded === '1') resolve();
+      else existing.addEventListener('load', resolve, { once: true });
+      return;
+    }
+    const script = document.createElement('script');
+    script.src = cacheBust(src);
+    script.async = true;
+    script.dataset.roomEffectSrc = src;
+    script.addEventListener('load', () => {
+      script.dataset.loaded = '1';
+      resolve();
+    }, { once: true });
+    script.addEventListener('error', () => reject(new Error(`Could not load ${effect.label || effect.key}.`)), { once: true });
+    document.head.appendChild(script);
+  });
+  const module = window.ChatSpaceRoomEffects?.[effect.key];
+  if (!module) throw new Error(`${effect.label || effect.key} did not register itself.`);
+  loadedRoomEffectModules.set(src, module);
+  return module;
+}
+
+function roomEffectContext(effect) {
+  const disposers = [];
+  return {
+    appUrl,
+    mediaUrl,
+    roomStage,
+    participants,
+    getParticipant: id => participants.get(Number(id)),
+    getAvatars: () => [...participants.values()].filter(p => p.avatarEl).map(p => ({ participant: p, element: p.avatarEl })),
+    addStageListener: (type, handler, options) => {
+      roomStage.addEventListener(type, handler, options);
+      disposers.push(() => roomStage.removeEventListener(type, handler, options));
+    },
+    addWindowListener: (type, handler, options) => {
+      window.addEventListener(type, handler, options);
+      disposers.push(() => window.removeEventListener(type, handler, options));
+    },
+    onSystemMessage: text => addSystemMessage(text),
+    effect,
+    cleanup: () => disposers.splice(0).forEach(dispose => dispose()),
+  };
+}
+
+async function applyRoomEffect(effectPayload, announce = false) {
+  activeRoomEffectController?.destroy?.();
+  activeRoomEffectController = null;
+  activeRoomEffect = effectPayload?.active ? effectPayload : null;
+  if (!activeRoomEffect) {
+    document.body.classList.remove('has-room-effect');
+    if (announce) {
+      if (effectPayload?.expired) addSystemMessage(`${effectPayload?.label || 'Room effect'} ended.`);
+      else addSystemMessage(`${effectPayload?.stopped_by_name || 'Someone'} stopped ${effectPayload?.label || 'Room Effect'}.`);
+    }
+    return;
+  }
+  const effect = Object.assign({}, roomEffectByKey(activeRoomEffect.effect_key) || {}, activeRoomEffect);
+  try {
+    const module = await loadRoomEffectModule(effect);
+    if (!activeRoomEffect || activeRoomEffect.effect_key !== effect.effect_key) return;
+    document.body.classList.add('has-room-effect');
+    const context = roomEffectContext(effect);
+    const controller = module.mount(context) || {};
+    activeRoomEffectController = {
+      destroy() {
+        controller.destroy?.();
+        context.cleanup?.();
+      },
+    };
+    if (announce) {
+      const by = effect.changed_by_name || effect.started_by_name || 'Someone';
+      addSystemMessage(`${by} started ${effect.label}.`);
+    }
+  } catch (err) {
+    document.body.classList.remove('has-room-effect');
+    addSystemMessage(err.message || 'Room effect could not start.');
+  }
+}
+
+async function loadRoomEffectsState() {
+  const qs = new URLSearchParams({ session_id: cfg.sessionId, join_token: cfg.myJoinToken });
+  const data = await fetch(appUrl('/api/room_effects.php?' + qs)).then(r => r.json());
+  if (data.error) throw new Error(data.error);
+  cfg.roomEffects = data.effects || [];
+  cfg.activeRoomEffect = data.current || null;
+  return data;
+}
+
+function renderRoomEffectsModal() {
+  const select = document.getElementById('room-effect-select');
+  const current = document.getElementById('room-effect-current');
+  const stop = document.getElementById('room-effect-stop');
+  if (!select || !current) return;
+  const effects = cfg.roomEffects || [];
+  select.innerHTML = effects.length
+    ? effects.map(effect => `<option value="${esc(effect.key)}">${esc(effect.label)}</option>`).join('')
+    : '<option value="">No effects installed</option>';
+  select.disabled = effects.length === 0;
+  if (cfg.activeRoomEffect?.active) {
+    current.innerHTML = `<strong>Current:</strong> ${esc(cfg.activeRoomEffect.label)}${cfg.activeRoomEffect.expires_at ? `<div class="minor">Ends ${esc(fullTimestamp(cfg.activeRoomEffect.expires_at))}</div>` : '<div class="minor">Runs until disabled.</div>'}`;
+    if (select.querySelector(`option[value="${CSS.escape(cfg.activeRoomEffect.effect_key)}"]`)) select.value = cfg.activeRoomEffect.effect_key;
+    if (stop) stop.hidden = false;
+  } else {
+    current.innerHTML = '<span class="minor">No room effect is active.</span>';
+    if (stop) stop.hidden = true;
+  }
+}
+
 function backgroundMarkup(path, mime) {
   const safePath = esc(mediaUrl(path || ''));
   const safeMime = esc(mime || '');
@@ -1424,7 +1556,7 @@ function applyRoomBackground(path, mime) {
 function applyRoomUpdate(update) {
   if (update.room_name) {
     cfg.roomName = update.room_name;
-    document.querySelector('.sidebar .side-section strong').textContent = update.room_name;
+    document.getElementById('room-title-text').textContent = update.room_name;
     document.title = `${update.room_name} - ChatSpace CE`;
     updateComposerPlaceholder();
   }
@@ -1658,6 +1790,11 @@ async function poll() {
       }
       if (ev.type === 'game_start' || ev.type === 'game_end') loadGames();
       if (ev.type === 'room_update') applyRoomUpdate(p);
+      if (ev.type === 'room_effect') {
+        cfg.activeRoomEffect = p.active ? p : null;
+        applyRoomEffect(p, true);
+        renderRoomEffectsModal();
+      }
       if (ev.type === 'host_warning' && Number(p.target_user_id) === cfg.myUserId) {
         showHostNotice('Warning', p.message || 'You have received a warning.');
       }
@@ -2113,6 +2250,7 @@ function openTabContextMenu(x, y, chatKey) {
   closeTextContextMenu();
   closeMessageActionMenu();
   closeRoomMenu();
+  closeRoomActionMenu();
   closeEmojiPicker();
   closeAttachMenu();
   tabCtxTargetChat = chatKey;
@@ -2130,6 +2268,7 @@ function openMessageActionMenu(x, y, msg) {
   closeTextContextMenu();
   closeTabContextMenu();
   closeRoomMenu();
+  closeRoomActionMenu();
   msgActionTargetId = Number(msg.id);
   msgActionTargetChat = activeChat;
   const mine = Number(msg.participant_id) === cfg.myParticipantId;
@@ -2144,6 +2283,10 @@ function openMessageActionMenu(x, y, msg) {
 
 function closeRoomMenu() {
   roomMenu.classList.remove('visible');
+}
+
+function closeRoomActionMenu() {
+  roomActionMenu?.classList.remove('visible');
 }
 
 function closeEmojiPicker() {
@@ -2163,6 +2306,7 @@ function openEmojiPicker() {
   closeTextContextMenu();
   closeTabContextMenu();
   closeRoomMenu();
+  closeRoomActionMenu();
   closeAttachMenu();
   closeGifPicker();
   const btn = document.getElementById('emoji-btn');
@@ -2179,6 +2323,7 @@ function openGifPicker() {
   closeTextContextMenu();
   closeTabContextMenu();
   closeRoomMenu();
+  closeRoomActionMenu();
   closeAttachMenu();
   closeEmojiPicker();
   const btn = document.getElementById('gif-btn');
@@ -2194,6 +2339,7 @@ function openRoomMenu() {
   closeContextMenu();
   closeTextContextMenu();
   closeTabContextMenu();
+  closeRoomActionMenu();
   closeAttachMenu();
   closeGifPicker();
   const btn = document.getElementById('room-menu-btn');
@@ -2204,10 +2350,34 @@ function openRoomMenu() {
   roomMenu.style.top = `${Math.min(r.bottom + 6, window.innerHeight - mr.height - 8)}px`;
 }
 
+function openRoomActionMenu() {
+  if (!roomActionMenu) return;
+  closeContextMenu();
+  closeTextContextMenu();
+  closeTabContextMenu();
+  closeRoomMenu();
+  closeAttachMenu();
+  closeGifPicker();
+  const btn = document.getElementById('room-action-btn');
+  const r = btn.getBoundingClientRect();
+  document.getElementById('room-action-edit').style.display = cfg.canEditRoom ? 'block' : 'none';
+  document.getElementById('room-action-effects').style.display = cfg.canUseHostTools ? 'block' : 'none';
+  roomActionMenu.classList.add('visible');
+  const mr = roomActionMenu.getBoundingClientRect();
+  roomActionMenu.style.left = `${Math.max(8, Math.min(r.left, window.innerWidth - mr.width - 8))}px`;
+  roomActionMenu.style.top = `${Math.min(r.bottom + 6, window.innerHeight - mr.height - 8)}px`;
+}
+
 document.getElementById('room-menu-btn').addEventListener('click', e => {
   e.stopPropagation();
   if (roomMenu.classList.contains('visible')) closeRoomMenu();
   else openRoomMenu();
+});
+
+document.getElementById('room-action-btn')?.addEventListener('click', e => {
+  e.stopPropagation();
+  if (roomActionMenu?.classList.contains('visible')) closeRoomActionMenu();
+  else openRoomActionMenu();
 });
 
 document.getElementById('lock-session-btn')?.addEventListener('click', lockSession);
@@ -2235,6 +2405,7 @@ document.getElementById('attach-btn').addEventListener('click', e => {
   closeTextContextMenu();
   closeTabContextMenu();
   closeRoomMenu();
+  closeRoomActionMenu();
   closeEmojiPicker();
   closeGifPicker();
   attachMenu.hidden = !attachMenu.hidden;
@@ -2336,6 +2507,7 @@ document.addEventListener('click', e => {
   if (msgActionMenu && !msgActionMenu.contains(e.target) && !e.target.closest('.msg-options')) closeMessageActionMenu();
   if (tabCtxMenu && !tabCtxMenu.contains(e.target)) closeTabContextMenu();
   if (!roomMenu.contains(e.target) && !e.target.closest('#room-menu-btn')) closeRoomMenu();
+  if (roomActionMenu && !roomActionMenu.contains(e.target) && !e.target.closest('#room-action-btn')) closeRoomActionMenu();
   if (!emojiPicker.contains(e.target) && !e.target.closest('#emoji-btn')) closeEmojiPicker();
   if (gifPicker && !gifPicker.contains(e.target) && !e.target.closest('#gif-btn')) closeGifPicker();
   if (!attachMenu.contains(e.target) && !e.target.closest('#attach-btn')) closeAttachMenu();
@@ -2347,6 +2519,7 @@ document.addEventListener('keydown', e => {
     closeMessageActionMenu();
     closeTabContextMenu();
     closeRoomMenu();
+    closeRoomActionMenu();
     closeEmojiPicker();
     closeGifPicker();
     closeAttachMenu();
@@ -2815,11 +2988,71 @@ document.getElementById('game-close').addEventListener('click', () => {
 });
 
 document.getElementById('edit-room-btn')?.addEventListener('click', () => {
+  openRoomEditModal();
+});
+
+function openRoomEditModal() {
   document.getElementById('room-edit-name').value = cfg.roomName || '';
   setRoomEditPreview(cfg.backgroundPath || '', cfg.backgroundMime || '');
   resetUploadProgress(document.getElementById('room-edit-upload-progress'));
   document.getElementById('room-edit-modal').classList.add('open');
   loadRoomEjections();
+}
+
+document.getElementById('room-action-edit')?.addEventListener('click', () => {
+  closeRoomActionMenu();
+  openRoomEditModal();
+});
+
+document.getElementById('room-action-effects')?.addEventListener('click', async () => {
+  closeRoomActionMenu();
+  try {
+    await loadRoomEffectsState();
+    renderRoomEffectsModal();
+    document.getElementById('room-effects-modal').classList.add('open');
+  } catch (err) {
+    alert(err.message || err);
+  }
+});
+
+document.getElementById('room-effects-close')?.addEventListener('click', () => {
+  document.getElementById('room-effects-modal').classList.remove('open');
+});
+
+document.getElementById('room-effects-form')?.addEventListener('submit', async e => {
+  e.preventDefault();
+  const select = document.getElementById('room-effect-select');
+  if (!select.value) return;
+  try {
+    const data = await apiPost('/api/room_effects.php', {
+      session_id: cfg.sessionId,
+      join_token: cfg.myJoinToken,
+      action: 'start',
+      effect_key: select.value,
+      duration_minutes: document.getElementById('room-effect-duration').value,
+    });
+    cfg.activeRoomEffect = data.current || null;
+    await applyRoomEffect(cfg.activeRoomEffect, false);
+    renderRoomEffectsModal();
+    document.getElementById('room-effects-modal').classList.remove('open');
+  } catch (err) {
+    alert(err.message || err);
+  }
+});
+
+document.getElementById('room-effect-stop')?.addEventListener('click', async () => {
+  try {
+    await apiPost('/api/room_effects.php', {
+      session_id: cfg.sessionId,
+      join_token: cfg.myJoinToken,
+      action: 'stop',
+    });
+    cfg.activeRoomEffect = null;
+    await applyRoomEffect(null, false);
+    renderRoomEffectsModal();
+  } catch (err) {
+    alert(err.message || err);
+  }
 });
 
 document.getElementById('room-edit-close')?.addEventListener('click', () => {
@@ -3217,6 +3450,11 @@ async function bootRoom() {
   renderLinkTabs();
   renderActiveChat();
   setPermissionUI();
+  renderRoomEffectsModal();
+  if (cfg.activeRoomEffect?.active) {
+    await applyRoomEffect(cfg.activeRoomEffect, false);
+    addSystemMessage(`${cfg.activeRoomEffect.label || 'Room effect'} is currently active.`);
+  }
   updateComposerState();
   poll();
   pollAppVersion();

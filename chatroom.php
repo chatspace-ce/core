@@ -101,9 +101,11 @@ $lastEventId = (int)$pdo->query('SELECT COALESCE(MAX(id), 0) FROM events WHERE s
     <section class="side-section">
       <button class="gear-btn" id="room-menu-btn" type="button" aria-label="Room menu">⚙</button>
       <div class="side-title">Room</div>
-      <strong><?= e($room['name']) ?></strong>
+      <div class="room-title-row">
+        <strong id="room-title-text"><?= e($room['name']) ?></strong>
+        <button class="room-action-btn" id="room-action-btn" type="button" aria-label="Room actions"<?= can_use_host_tools($user, $room) ? '' : ' hidden' ?>>•••</button>
+      </div>
       <div class="minor">Created by <?= e($room['owner_name']) ?></div>
-      <button class="btn btn-primary" id="edit-room-btn" type="button" style="width:100%;margin-top:12px;"<?= ((int)$room['owner_id'] === (int)$user['id'] || in_array($user['role'] ?? 'user', ['admin', 'developer'], true)) ? '' : ' hidden' ?>>Edit Room</button>
     </section>
     <section class="side-section">
       <div class="side-title">Chatting <span id="participant-count-label">(0)</span></div>
@@ -172,6 +174,32 @@ $lastEventId = (int)$pdo->query('SELECT COALESCE(MAX(id), 0) FROM events WHERE s
       <div class="ejection-list" id="room-ejection-list">Loading...</div>
     </div>
     <button class="btn btn-primary" type="submit">Save Room</button>
+  </form>
+</div>
+<div class="modal" id="room-effects-modal">
+  <form class="modal-box room-effects-box" id="room-effects-form">
+    <div class="modal-head">
+      <strong>Room Effects</strong>
+      <button class="window-close" id="room-effects-close" type="button" aria-label="Close">×</button>
+    </div>
+    <div class="room-effect-current" id="room-effect-current"></div>
+    <label>Effect
+      <select id="room-effect-select" name="effect_key"></select>
+    </label>
+    <label>Duration
+      <select id="room-effect-duration" name="duration_minutes">
+        <option value="">Until disabled</option>
+        <option value="1">1 minute</option>
+        <option value="5">5 minutes</option>
+        <option value="10">10 minutes</option>
+        <option value="30">30 minutes</option>
+        <option value="60">1 hour</option>
+      </select>
+    </label>
+    <div class="room-effects-actions">
+      <button class="btn btn-primary" type="submit">Start Effect</button>
+      <button class="btn btn-danger" id="room-effect-stop" type="button">Stop Current</button>
+    </div>
   </form>
 </div>
 <div class="modal" id="host-warn-modal">
@@ -313,6 +341,10 @@ $lastEventId = (int)$pdo->query('SELECT COALESCE(MAX(id), 0) FROM events WHERE s
   <button id="tab-clear-history" type="button">Clear History</button>
   <button id="tab-close-dm" type="button">Close DM</button>
   <button id="tab-unlink" class="danger" type="button">Unlink</button>
+</div>
+<div id="room-action-menu">
+  <button id="room-action-edit" type="button">Edit Room</button>
+  <button id="room-action-effects" type="button">Room Effects</button>
 </div>
 <div id="room-menu">
   <button id="lock-session-btn" type="button"><img src="<?= e(app_url('/assets/images/secure.png')) ?>" alt="">Lock Session</button>

@@ -7,6 +7,7 @@ $last = (int)($_GET['last_event_id'] ?? 0);
 $lastCommunity = (int)($_GET['last_community_event_id'] ?? 0);
 $me = auth_participant($pdo, $sessionId, $_GET['join_token'] ?? '');
 cleanup_stale_participants($pdo, $sessionId);
+cleanup_room_effects($pdo, $sessionId);
 $dmLeft = 'dm:' . (int)$me['user_id'] . ':%';
 $dmRight = 'dm:%:' . (int)$me['user_id'];
 $linkKeyExprA = db_concat($pdo, ['p.id', "':'", 'p.linked_to_participant_id']);

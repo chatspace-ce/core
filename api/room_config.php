@@ -16,6 +16,7 @@ if (!$room) json_out(['error' => 'Room not found'], 404);
 
 $session = active_session_for_room($pdo, (int)$room['id']);
 cleanup_stale_participants($pdo, (int)$session['id']);
+cleanup_room_effects($pdo, (int)$session['id']);
 $participant = participant_for_user($pdo, (int)$session['id'], $user);
 $canModerateMessages = can_use_host_tools($user, $room);
 
@@ -256,6 +257,8 @@ $lastCommunityEventId = (int)$pdo->query('SELECT COALESCE(MAX(id), 0) FROM commu
 $stmt = $pdo->prepare('SELECT blocked_user_id FROM user_blocks WHERE blocker_user_id = ?');
 $stmt->execute([(int)$user['id']]);
 $blockedUserIds = array_map(fn(array $row): int => (int)$row['blocked_user_id'], $stmt->fetchAll());
+$roomEffects = array_values(room_effect_catalog());
+$activeRoomEffect = active_room_effect($pdo, (int)$session['id']);
 
 json_out([
     'roomId' => (int)$room['id'],
@@ -266,6 +269,8 @@ json_out([
     'canUseHostTools' => $canModerateMessages,
     'canModerateMessages' => $canModerateMessages,
     'canCommunityEject' => can_community_eject($user),
+    'roomEffects' => $roomEffects,
+    'activeRoomEffect' => $activeRoomEffect,
     'gifPicker' => [
         'enabled' => app_setting($pdo, 'gif_giphy_api_key') !== '' || app_setting($pdo, 'gif_tenor_api_key') !== '',
         'defaultProvider' => in_array(app_setting($pdo, 'gif_default_provider', 'giphy'), ['giphy', 'tenor'], true) ? app_setting($pdo, 'gif_default_provider', 'giphy') : 'giphy',

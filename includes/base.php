@@ -274,6 +274,19 @@ function migrate(PDO $pdo): void {
             FOREIGN KEY(session_id) REFERENCES room_sessions(id) ON DELETE CASCADE
         );
 
+        CREATE TABLE IF NOT EXISTS room_effects (
+            session_id INTEGER PRIMARY KEY,
+            effect_key TEXT NOT NULL,
+            started_by_participant_id INTEGER DEFAULT NULL,
+            started_by_user_id INTEGER DEFAULT NULL,
+            duration_minutes INTEGER DEFAULT NULL,
+            started_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            expires_at TEXT DEFAULT NULL,
+            FOREIGN KEY(session_id) REFERENCES room_sessions(id) ON DELETE CASCADE,
+            FOREIGN KEY(started_by_participant_id) REFERENCES participants(id) ON DELETE SET NULL,
+            FOREIGN KEY(started_by_user_id) REFERENCES users(id) ON DELETE SET NULL
+        );
+
         CREATE TABLE IF NOT EXISTS game_sessions (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             room_session_id INTEGER NOT NULL,
@@ -498,6 +511,20 @@ function migrate(PDO $pdo): void {
     if (!$hasLinkedTo) {
         $pdo->exec('ALTER TABLE participants ADD COLUMN linked_to_participant_id INTEGER DEFAULT NULL');
     }
+    $pdo->exec(
+        "CREATE TABLE IF NOT EXISTS room_effects (
+            session_id INTEGER PRIMARY KEY,
+            effect_key TEXT NOT NULL,
+            started_by_participant_id INTEGER DEFAULT NULL,
+            started_by_user_id INTEGER DEFAULT NULL,
+            duration_minutes INTEGER DEFAULT NULL,
+            started_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            expires_at TEXT DEFAULT NULL,
+            FOREIGN KEY(session_id) REFERENCES room_sessions(id) ON DELETE CASCADE,
+            FOREIGN KEY(started_by_participant_id) REFERENCES participants(id) ON DELETE SET NULL,
+            FOREIGN KEY(started_by_user_id) REFERENCES users(id) ON DELETE SET NULL
+        )"
+    );
     $messageCols = $pdo->query('PRAGMA table_info(messages)')->fetchAll();
     $messageColNames = array_map(fn(array $col): string => (string)$col['name'], $messageCols);
     if (!in_array('message_type', $messageColNames, true)) {
@@ -664,6 +691,102 @@ function emit_event(PDO $pdo, int $sessionId, string $type, array $payload): voi
 function emit_community_event(PDO $pdo, string $scope, ?int $sessionId, ?string $linkKey, string $type, array $payload): void {
     $stmt = $pdo->prepare('INSERT INTO community_events (scope, session_id, link_key, type, payload) VALUES (?,?,?,?,?)');
     $stmt->execute([$scope, $sessionId, $linkKey, $type, json_encode($payload, JSON_UNESCAPED_SLASHES)]);
+}
+
+function room_effect_catalog(): array {
+    $dir = __DIR__ . '/../assets/room-effects';
+    $catalog = [];
+    if (!is_dir($dir)) return $catalog;
+    foreach (glob($dir . '/*.js') ?: [] as $path) {
+        $file = basename($path);
+        $source = (string)file_get_contents($path, false, null, 0, 4096);
+        $key = preg_match('/^\s*\/\/\s*@effect-key\s+([a-z0-9_-]+)/mi', $source, $m)
+            ? $m[1]
+            : preg_replace('/[^a-z0-9_-]+/', '_', strtolower(pathinfo($file, PATHINFO_FILENAME)));
+        if (!$key || !preg_match('/^[a-z0-9_-]+$/', $key)) continue;
+        $label = preg_match('/^\s*\/\/\s*@effect-label\s+(.+)$/mi', $source, $m)
+            ? trim($m[1])
+            : ucwords(str_replace(['-', '_'], ' ', $key));
+        $description = preg_match('/^\s*\/\/\s*@effect-description\s+(.+)$/mi', $source, $m)
+            ? trim($m[1])
+            : '';
+        $catalog[$key] = [
+            'key' => $key,
+            'label' => $label,
+            'description' => $description,
+            'script' => app_url('/assets/room-effects/' . $file . '?v=' . filemtime($path)),
+        ];
+    }
+    uasort($catalog, fn(array $a, array $b): int => strcasecmp($a['label'], $b['label']));
+    return $catalog;
+}
+
+function room_effect_label(?string $key): string {
+    $catalog = room_effect_catalog();
+    return $key && isset($catalog[$key]) ? $catalog[$key]['label'] : 'Room Effect';
+}
+
+function room_effect_payload(array $row): array {
+    $catalog = room_effect_catalog();
+    $effect = $catalog[$row['effect_key']] ?? null;
+    return [
+        'active' => true,
+        'effect_key' => $row['effect_key'],
+        'label' => $effect['label'] ?? room_effect_label($row['effect_key'] ?? null),
+        'description' => $effect['description'] ?? '',
+        'script' => $effect['script'] ?? null,
+        'started_by_participant_id' => isset($row['started_by_participant_id']) ? (int)$row['started_by_participant_id'] : null,
+        'started_by_user_id' => isset($row['started_by_user_id']) ? (int)$row['started_by_user_id'] : null,
+        'started_by_name' => $row['started_by_name'] ?? 'Someone',
+        'duration_minutes' => $row['duration_minutes'] !== null ? (int)$row['duration_minutes'] : null,
+        'started_at' => $row['started_at'] ?? null,
+        'expires_at' => $row['expires_at'] ?? null,
+    ];
+}
+
+function cleanup_room_effects(PDO $pdo, ?int $sessionId = null): void {
+    $sql = 'SELECT re.*, COALESCE(u.display_name, p.display_name, "Someone") AS started_by_name
+              FROM room_effects re
+              LEFT JOIN users u ON u.id = re.started_by_user_id
+              LEFT JOIN participants p ON p.id = re.started_by_participant_id
+             WHERE re.expires_at IS NOT NULL AND re.expires_at <= CURRENT_TIMESTAMP';
+    $params = [];
+    if ($sessionId !== null) {
+        $sql .= ' AND re.session_id = ?';
+        $params[] = $sessionId;
+    }
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute($params);
+    $expired = $stmt->fetchAll();
+    if (!$expired) return;
+
+    $delete = $pdo->prepare('DELETE FROM room_effects WHERE session_id = ?');
+    foreach ($expired as $row) {
+        $sid = (int)$row['session_id'];
+        $delete->execute([$sid]);
+        emit_event($pdo, $sid, 'room_effect', [
+            'active' => false,
+            'effect_key' => $row['effect_key'],
+            'label' => room_effect_label($row['effect_key'] ?? null),
+            'expired' => true,
+            'stopped_by_name' => 'ChatSpace',
+        ]);
+    }
+}
+
+function active_room_effect(PDO $pdo, int $sessionId): ?array {
+    cleanup_room_effects($pdo, $sessionId);
+    $stmt = $pdo->prepare(
+        'SELECT re.*, COALESCE(u.display_name, p.display_name, "Someone") AS started_by_name
+           FROM room_effects re
+           LEFT JOIN users u ON u.id = re.started_by_user_id
+           LEFT JOIN participants p ON p.id = re.started_by_participant_id
+          WHERE re.session_id = ?
+          LIMIT 1'
+    );
+    $stmt->execute([$sessionId]);
+    $row = $stmt->fetch();
+    return $row ? room_effect_payload($row) : null;
 }
 
 function active_ejection_sql(string $alias = 're'): string {
