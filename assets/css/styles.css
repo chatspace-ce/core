@@ -772,13 +772,13 @@ textarea:focus { border-color: rgba(124,106,247,.8); box-shadow: 0 0 0 3px rgba(
   max-width: none;
 }
 .chat-attachment-image.chat-gif {
-  width: min(430px, 100%);
-  max-width: min(430px, 100%);
+  width: min(366px, 100%);
+  max-width: min(366px, 100%);
 }
 .chat-attachment-image.chat-gif img {
   width: 100%;
   height: auto;
-  max-height: 340px;
+  max-height: 289px;
   object-fit: contain;
 }
 .chat-file {

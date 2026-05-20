@@ -95,6 +95,7 @@ let activeAvatarEffects = 0;
 let roomExitInProgress = false;
 let gifSearchTimer = null;
 const gifDurationCache = new Map();
+let messagesPinnedToBottom = true;
 
 function apiPost(url, body) {
   return fetch(appUrl(url), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
@@ -1179,14 +1180,43 @@ document.querySelectorAll('.chat-tab[data-chat-tab]').forEach(tab => {
   tab.addEventListener('click', () => switchChat(tab.dataset.chatTab));
 });
 
+function messagesNearBottom() {
+  return messagesEl.scrollHeight - messagesEl.scrollTop - messagesEl.clientHeight <= 80;
+}
+
+function shouldAutoScrollMessages() {
+  return messagesPinnedToBottom || messagesNearBottom();
+}
+
+function scrollMessagesToBottom() {
+  messagesEl.scrollTop = messagesEl.scrollHeight;
+  messagesPinnedToBottom = true;
+}
+
+function bindMessageAutoScroll(row, shouldStick) {
+  if (!row || !shouldStick) return;
+  row.querySelectorAll('img, video, audio').forEach(media => {
+    const keepStuck = () => {
+      if (messagesPinnedToBottom || messagesNearBottom()) scrollMessagesToBottom();
+    };
+    media.addEventListener('load', keepStuck, { once: true });
+    media.addEventListener('loadedmetadata', keepStuck, { once: true });
+    media.addEventListener('canplay', keepStuck, { once: true });
+  });
+}
+
+messagesEl.addEventListener('scroll', () => {
+  messagesPinnedToBottom = messagesNearBottom();
+});
+
 function renderActiveChat() {
   clearUnread(activeChat);
   messagesEl.innerHTML = '';
   const map = channelMapFor();
   [...map.values()]
     .sort((a, b) => String(a.sent_at || '').localeCompare(String(b.sent_at || '')) || String(a.id).localeCompare(String(b.id)))
-    .forEach(msg => appendMessageEl(msg));
-  messagesEl.scrollTop = messagesEl.scrollHeight;
+    .forEach(msg => bindMessageAutoScroll(appendMessageEl(msg), true));
+  scrollMessagesToBottom();
   updateComposerPlaceholder();
   document.querySelectorAll('.chat-tab').forEach(tab => {
     tab.classList.toggle('active', tab.dataset.chatTab === activeChat);
@@ -1203,8 +1233,12 @@ function addMessageToChannel(msg, chatKey, live = false) {
     return;
   }
   if (chatKey === activeChat) {
-    appendMessageEl(msg);
-    messagesEl.scrollTop = messagesEl.scrollHeight;
+    const shouldStick = shouldAutoScrollMessages();
+    const row = appendMessageEl(msg);
+    if (shouldStick) {
+      scrollMessagesToBottom();
+      bindMessageAutoScroll(row, true);
+    }
     clearUnread(chatKey);
   } else if (live && msg.user_id !== cfg.myUserId && msg.participant_id !== cfg.myParticipantId) {
     unreadCounts.set(chatKey, (unreadCounts.get(chatKey) || 0) + 1);
@@ -1403,13 +1437,13 @@ function applyRoomUpdate(update) {
 }
 
 function appendMessageEl(msg) {
-  if (!messageVisible(msg)) return;
+  if (!messageVisible(msg)) return null;
   if (msg.system) {
     const div = document.createElement('div');
     div.className = 'chat-system';
     div.innerHTML = `<span class="system-badge">${esc(msg.content)}</span>`;
     messagesEl.appendChild(div);
-    return;
+    return div;
   }
   const mine = msg.participant_id === cfg.myParticipantId;
   const p = participants.get(msg.participant_id);
@@ -1438,6 +1472,7 @@ function appendMessageEl(msg) {
     btn.addEventListener('click', () => applyReaction(msg.id, btn.dataset.msgReaction, activeChat));
   });
   messagesEl.appendChild(row);
+  return row;
 }
 
 function renderMessage(msg, live = false) {
