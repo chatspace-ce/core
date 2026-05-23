@@ -2,8 +2,8 @@
     // ——— Params ———
     const params = new URLSearchParams(location.search);
     const raw      = params.get('lobby') || params.get('code') || 'demo';
-    const playerN  = Math.max(1, Math.min(2, parseInt(params.get('player'), 10) || 1)); // 1=White, 2=Black
-    const youColor = (playerN === 1) ? 'w' : 'b';
+    let playerN  = Math.max(1, Math.min(2, parseInt(params.get('player'), 10) || 1)); // 1=White, 2=Black
+    let youColor = (playerN === 1) ? 'w' : 'b';
     const user     = parseInt(params.get('user'), 10) || 1001;
     const gameId   = parseInt(params.get('game'), 10) || 0;
     const url = new URL(window.location.href);
@@ -39,7 +39,12 @@
     const leaveBtn     = document.getElementById('leave');
 
     // lobby/user labels removed from UI
-    if (youColor === 'b') boardWrap.classList.add('flip');
+    function applyPlayerNumber(nextPlayer) {
+      playerN = Math.max(1, Math.min(2, Number(nextPlayer) || 1));
+      youColor = (playerN === 1) ? 'w' : 'b';
+      boardWrap.classList.toggle('flip', youColor === 'b');
+    }
+    applyPlayerNumber(playerN);
 
     // ——— Build board grid ———
     for (let r=0; r<8; r++){
@@ -80,6 +85,38 @@
 
     async function sendControl(type, extra={}){
       try { await apiPost(`${base}/api/moves.php`, { lobby_id: raw, user_id: user, payload: Object.assign({type}, extra) }); } catch {}
+    }
+    function applyLobbyStatus(lobby) {
+      if (!lobby) return;
+      if (Number(lobby.user2_id) === user) applyPlayerNumber(2);
+      else applyPlayerNumber(1);
+      opponentUserId = (playerN === 1) ? Number(lobby.user2_id || 0) : Number(lobby.user1_id || 0);
+      bothJoined = Boolean(lobby.user1_id && lobby.user2_id && lobby.status !== 'ended');
+      refreshWaiting();
+    }
+    async function joinLobbyAndAssignPlayer() {
+      const joined = await apiPost(`${base}/api/lobby.php`, { action:'join', lobby_id: raw, user_id: user }).catch(() => null);
+      if (joined?.ok) {
+        applyLobbyStatus(joined);
+        return joined;
+      }
+      const status = await apiGet(`${base}/api/lobby.php?action=status&lobby_id=${encodeURIComponent(raw)}`).catch(() => null);
+      applyLobbyStatus(status);
+      return status;
+    }
+    async function pollLobbyStatus() {
+      try {
+        const status = await apiGet(`${base}/api/lobby.php?action=status&lobby_id=${encodeURIComponent(raw)}`);
+        if (status?.status === 'ended') {
+          gameOver = true;
+          overlayTitle.textContent = 'Lobby Closed';
+          overlaySub.textContent = 'This game has ended.';
+          overlay.style.display = 'flex';
+          disableInputs(true);
+          return;
+        }
+        applyLobbyStatus(status);
+      } catch {}
     }
     async function recordResult(result, reason='completed', score=0){
       try { await apiPost(`${base}/api/result.php`, { lobby_id: raw, user_id: user, result, reason, score }); }
@@ -514,6 +551,7 @@
       } catch {
         state = initialState();
       }
+      await joinLobbyAndAssignPlayer();
       drawBoard();
 
       // Announce join & show waiting until we detect opponent
@@ -534,5 +572,6 @@
 
       // Begin polling
       setInterval(poll, 1200);
+      setInterval(pollLobbyStatus, 1500);
     })();
   

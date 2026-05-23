@@ -35,12 +35,27 @@ if ($action === 'join') {
     } elseif (!$row['user2_id'] && (int)$row['user1_id'] !== $user) {
         $pdo->prepare('UPDATE game_lobbies SET user2_id = ?, status = "active", updated_at = CURRENT_TIMESTAMP WHERE lobby_code = ?')->execute([$user, $lobby]);
     }
-    json_out(['ok' => true]);
+    $stmt = $pdo->prepare('SELECT * FROM game_lobbies WHERE lobby_code = ? LIMIT 1');
+    $stmt->execute([$lobby]);
+    $row = $stmt->fetch();
+    json_out([
+        'ok' => true,
+        'lobby_id' => $row['lobby_code'],
+        'lobby_code' => $row['lobby_code'],
+        'game_id' => (int)$row['game_id'],
+        'user1_id' => $row['user1_id'] ? (int)$row['user1_id'] : null,
+        'user2_id' => $row['user2_id'] ? (int)$row['user2_id'] : null,
+        'status' => $row['status'],
+    ]);
 }
 
 if ($action === 'close') {
     $pdo->prepare('UPDATE game_lobbies SET status = "ended", updated_at = CURRENT_TIMESTAMP WHERE lobby_code = ?')->execute([$lobby]);
     $pdo->prepare('UPDATE game_sessions SET ended_at = CURRENT_TIMESTAMP WHERE lobby_code = ?')->execute([$lobby]);
+    $stmt = $pdo->prepare('SELECT room_session_id FROM game_sessions WHERE lobby_code = ? LIMIT 1');
+    $stmt->execute([$lobby]);
+    $sessionId = (int)($stmt->fetchColumn() ?: 0);
+    if ($sessionId) emit_event($pdo, $sessionId, 'game_end', ['lobby_code' => $lobby]);
     json_out(['ok' => true]);
 }
 

@@ -2,7 +2,7 @@
   // ——— Params ———
   const params = new URLSearchParams(location.search);
   const raw    = params.get('lobby') || params.get('code') || 'demo';
-  const player = Math.max(1, Math.min(2, parseInt(params.get('player'), 10) || 1)); // 1=Red, 2=White
+  let player = Math.max(1, Math.min(2, parseInt(params.get('player'), 10) || 1)); // 1=Red, 2=White
   const user   = parseInt(params.get('user'), 10) || 1001;
   const gameId = parseInt(params.get('game'), 10) || 0;
 
@@ -40,8 +40,14 @@
 
   // lobby/user labels removed from UI
 
+  function applyPlayerNumber(nextPlayer) {
+    player = Math.max(1, Math.min(2, Number(nextPlayer) || 1));
+    yourTurn = !bothJoined ? (player === 1) : yourTurn;
+    boardWrap.classList.toggle('flip', player === 2);
+  }
+
   // POV: flip board when you're Player 2 so YOU are always bottom
-  if (player === 2) boardWrap.classList.add('flip');
+  applyPlayerNumber(player);
 
   // ——— Build board grid ———
   for (let r=0; r<8; r++){
@@ -203,6 +209,32 @@
   async function tryCloseLobby(){
     try { await apiPost(`${base}/api/lobby.php`, { action:'close', lobby_id: raw, user_id: user }); } catch {}
   }
+  function asMovesArray(resp){
+    if (Array.isArray(resp)) return resp;
+    if (resp && Array.isArray(resp.moves)) return resp.moves;
+    return [];
+  }
+  function applyLobbyStatus(lobby) {
+    if (!lobby) return;
+    if (Number(lobby.user2_id) === user) applyPlayerNumber(2);
+    else applyPlayerNumber(1);
+    opponentUserId = (player === 1) ? Number(lobby.user2_id || 0) : Number(lobby.user1_id || 0);
+    if (lobby.status === 'ended') {
+      showLobbyClosed();
+      return;
+    }
+    if (lobby.user1_id && lobby.user2_id && !bothJoined) startMatch();
+  }
+  async function joinLobbyAndAssignPlayer() {
+    const joined = await apiPost(`${base}/api/lobby.php`, { action:'join', lobby_id: raw, user_id: user }).catch(() => null);
+    if (joined?.ok) {
+      applyLobbyStatus(joined);
+      return joined;
+    }
+    const status = await apiGet(`${base}/api/lobby.php?action=status&lobby_id=${encodeURIComponent(raw)}`).catch(() => null);
+    applyLobbyStatus(status);
+    return status;
+  }
 
   // ——— Initial board ———
   function initBoard(){
@@ -235,6 +267,16 @@
     if (opponentUserId && opponentUserId !== user){
       startMatch();
     }
+  }
+
+  function showLobbyClosed(){
+    if (gameOver) return;
+    gameOver = true;
+    disableBoard();
+    overlay.style.display = 'flex';
+    overlayTitle.textContent = 'Lobby Closed';
+    overlaySub.textContent = 'This game has ended.';
+    playAgainBtn.style.display = 'none';
   }
 
   function checkGameEnd(){
@@ -304,12 +346,11 @@
   async function pollLobbyStatus(){
     try{
       const s = await apiGet(`${base}/api/lobby.php?action=status&lobby_id=${raw}`);
-      if (s && (s.status === 'active' || s.status === 'ongoing') && !bothJoined){
-        startMatch();
+      if (s && s.status === 'ended' && !gameOver){
+        showLobbyClosed();
+        return;
       }
-      if (s && s.status === 'over' && !gameOver){
-        finishMatch(false, 'Lobby closed');
-      }
+      applyLobbyStatus(s);
     } catch {}
   }
 
@@ -325,21 +366,23 @@
     }
     drawBoard();
 
-    // Tell server we joined (server will also broadcast "join" and maybe "start")
-    try {
-      await apiPost(`${base}/api/lobby.php`, { action:'join', lobby_id: raw, user_id: user });
-    } catch {}
+    // Seat this browser in the lobby and derive player 1/2 from the server.
+    await joinLobbyAndAssignPlayer();
 
     // Start in waiting mode until we detect opponent
-    setWaiting(true);
-    disableBoard();
+    if (!bothJoined) {
+      setWaiting(true);
+      disableBoard();
+    }
+    await sendControl('join', { player, user_id: user });
 
     // Seed moves
     try {
       const initMoves = await apiGet(`${base}/api/moves.php?lobby=${raw}&lastSeq=0`);
-      if (Array.isArray(initMoves) && initMoves.length) {
-        lastSeq = initMoves[initMoves.length-1].sequence || 0;
-        for (const m of initMoves){
+      const arr = asMovesArray(initMoves);
+      if (arr.length) {
+        lastSeq = arr[arr.length-1].sequence || 0;
+        for (const m of arr){
           const p = m.payload || {};
           if (p.type === 'join' && m.user_id !== user) opponentUserId = m.user_id;
         }
@@ -352,8 +395,9 @@
     setInterval(async ()=>{
       try{
         const mv = await apiGet(`${base}/api/moves.php?lobby=${raw}&lastSeq=${lastSeq}`);
-        if (!Array.isArray(mv)) return;
-        for (const m of mv){
+        const arr = asMovesArray(mv);
+        if (!arr.length) return;
+        for (const m of arr){
           lastSeq = m.sequence || lastSeq;
           const {payload, user_id} = m;
           const p = payload || {};

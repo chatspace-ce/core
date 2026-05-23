@@ -30,6 +30,9 @@ if ($action === 'create') {
     $role = (string)($body['role'] ?? 'user');
     if ($email === '' || $name === '' || $password === '') json_out(['error' => 'Email, name, and password required'], 400);
     if (!in_array($role, $roles, true)) json_out(['error' => 'Invalid role'], 400);
+    $nameCheck = $pdo->prepare('SELECT 1 FROM users WHERE LOWER(display_name) = LOWER(?) LIMIT 1');
+    $nameCheck->execute([$name]);
+    if ($nameCheck->fetchColumn()) json_out(['error' => 'That display name is already taken.'], 400);
     $stmt = $pdo->prepare('INSERT INTO users (email, password_hash, display_name, role, avatar_path) VALUES (?,?,?,?,?)');
     $stmt->execute([$email, password_hash($password, PASSWORD_DEFAULT), $name, $role, 'preset:Default']);
     log_tool($pdo, (int)$me['id'], 'admin_create_user', (int)$pdo->lastInsertId(), null, $name . ' (' . $role . ')');

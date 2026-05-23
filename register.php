@@ -21,10 +21,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $error = 'Use a valid email, display name, password of at least 8 characters, and an avatar image.';
     } else {
         try {
+            $nameCheck = db()->prepare('SELECT 1 FROM users WHERE LOWER(display_name) = LOWER(?) LIMIT 1');
+            $nameCheck->execute([$name]);
+            if ($nameCheck->fetchColumn()) {
+                throw new RuntimeException('That display name is already taken.');
+            }
             $stmt = db()->prepare('INSERT INTO users (email, password_hash, display_name, avatar_path) VALUES (?,?,?,?)');
             $stmt->execute([$email, password_hash($password, PASSWORD_DEFAULT), $name, $avatarPath]);
             $_SESSION['user_id'] = (int)db()->lastInsertId();
             redirect_to('/lobby.php');
+        } catch (RuntimeException $e) {
+            $error = $e->getMessage();
         } catch (PDOException $e) {
             $error = 'That email is already registered.';
         }

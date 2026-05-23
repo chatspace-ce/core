@@ -99,6 +99,7 @@ let pendingLinkIconTargetId = null;
 const animatedDmMessageIds = new Set();
 let activeAvatarEffects = 0;
 let roomExitInProgress = false;
+let activeGame = null;
 let gifSearchTimer = null;
 const gifDurationCache = new Map();
 let messagesPinnedToBottom = true;
@@ -591,6 +592,7 @@ async function renderParticipantWhenReady(p, options = {}) {
 }
 
 function renderParticipant(p, options = {}) {
+  if (roomExitInProgress && Number(p.id) === Number(cfg?.myParticipantId)) return;
   const existing = participants.get(p.id) || {};
   const merged = Object.assign(existing, p);
   participants.set(p.id, merged);
@@ -1664,6 +1666,7 @@ document.getElementById('composer').addEventListener('submit', e => {
 });
 
 async function poll() {
+  if (roomExitInProgress) return;
   try {
     const qs = new URLSearchParams({ session_id: cfg.sessionId, last_event_id: lastEventId, last_community_event_id: lastCommunityEventId, join_token: cfg.myJoinToken });
     const data = await fetch(appUrl('/api/poll.php?' + qs)).then(r => r.json());
@@ -1865,7 +1868,7 @@ async function poll() {
   } catch (err) {
     console.warn(err);
   } finally {
-    setTimeout(poll, 25);
+    if (!roomExitInProgress) setTimeout(poll, 25);
   }
 }
 
@@ -2153,7 +2156,10 @@ async function leaveRoomWithLocalExit(href) {
   closeEmojiPicker();
   stopTypingNow();
   const me = participants.get(cfg?.myParticipantId);
-  if (me) await removeParticipant(me.id, { keepRecord: true });
+  if (me) {
+    me.exiting = true;
+    await removeParticipant(me.id, { keepRecord: true });
+  }
   await leaveRoomNow();
   window.location.href = href;
 }
@@ -2169,6 +2175,7 @@ document.getElementById('logout-link')?.addEventListener('click', async e => {
 });
 
 async function refreshPresence() {
+  if (roomExitInProgress) return;
   try {
     const qs = new URLSearchParams({ session_id: cfg.sessionId, join_token: cfg.myJoinToken });
     const data = await fetch(appUrl('/api/presence.php?' + qs)).then(r => r.json());
@@ -2977,14 +2984,35 @@ function gamePath(type) {
 }
 
 function openGame(a) {
+  activeGame = a;
   document.getElementById('game-title').textContent = gameName(a.game_type);
   document.getElementById('game-frame').src = appUrl(`/games/${gamePath(a.game_type)}/index.html?lobby=${encodeURIComponent(a.lobby_code)}&user=${cfg.myParticipantId}`);
   document.getElementById('game-modal').classList.add('open');
 }
 
-document.getElementById('game-close').addEventListener('click', () => {
+async function closeGame(lobbyCode = activeGame?.lobby_code) {
+  if (lobbyCode) {
+    await apiPost('/api/games.php', {
+      action: 'close',
+      session_id: cfg.sessionId,
+      participant_id: cfg.myParticipantId,
+      join_token: cfg.myJoinToken,
+      lobby_code: lobbyCode,
+    }).catch(console.warn);
+  }
+  activeGame = null;
   document.getElementById('game-frame').src = 'about:blank';
   document.getElementById('game-modal').classList.remove('open');
+  await loadGames();
+}
+
+document.getElementById('game-close').addEventListener('click', () => {
+  closeGame();
+});
+
+window.addEventListener('message', e => {
+  if (e.origin !== window.location.origin) return;
+  if (e.data?.type === 'game_close') closeGame(e.data.lobby);
 });
 
 document.getElementById('edit-room-btn')?.addEventListener('click', () => {
