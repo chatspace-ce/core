@@ -8,6 +8,7 @@ if ($communityEjection) {
 }
 $ejectionNotice = $_SESSION['room_ejection_notice'] ?? null;
 unset($_SESSION['room_ejection_notice']);
+$lobbyError = null;
 cleanup_stale_participants($pdo);
 
 if (($_GET['leave'] ?? '') === '1') {
@@ -19,34 +20,23 @@ if (($_GET['leave'] ?? '') === '1') {
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $name = trim($_POST['name'] ?? '');
     if ($name !== '') {
-        $bgPath = null;
-        $bgMime = null;
-        if (!empty($_FILES['background']['tmp_name']) && is_uploaded_file($_FILES['background']['tmp_name'])) {
-            $finfo = new finfo(FILEINFO_MIME_TYPE);
-            $mime = $finfo->file($_FILES['background']['tmp_name']) ?: '';
-            $allowed = ['image/jpeg','image/png','image/webp','image/gif','video/mp4','video/webm'];
-            $isVideo = str_starts_with($mime, 'video/');
-            $maxBytes = $isVideo ? app_setting_bytes($pdo, 'room_video_max_size_mb', 200) : app_setting_bytes($pdo, 'room_image_max_size_mb', 10);
-            if (in_array($mime, $allowed, true) && (int)$_FILES['background']['size'] <= $maxBytes) {
-                $ext = match ($mime) {
-                    'image/png' => 'png',
-                    'image/webp' => 'webp',
-                    'image/gif' => 'gif',
-                    'video/mp4' => 'mp4',
-                    'video/webm' => 'webm',
-                    default => 'jpg',
-                };
-                $file = bin2hex(random_bytes(12)) . '.' . $ext;
-                $dest = __DIR__ . '/assets/uploads/backgrounds/' . $file;
-                move_uploaded_file($_FILES['background']['tmp_name'], $dest);
-                $bgPath = '/assets/uploads/backgrounds/' . $file;
-                $bgMime = $mime;
+        try {
+            $bgPath = null;
+            $bgMime = null;
+            $bgThumbPath = null;
+            if (!empty($_FILES['background']['tmp_name']) && is_uploaded_file($_FILES['background']['tmp_name'])) {
+                $saved = save_room_background_upload($_FILES['background'], $_FILES['background_thumb'] ?? null);
+                $bgPath = $saved['path'];
+                $bgMime = $saved['mime'];
+                $bgThumbPath = $saved['thumb_path'];
             }
+            $stmt = $pdo->prepare('INSERT INTO rooms (public_id, owner_id, name, background_path, background_mime, background_thumb_path) VALUES (?,?,?,?,?,?)');
+            $stmt->execute([uuid_v4(), (int)$user['id'], $name, $bgPath, $bgMime, $bgThumbPath]);
+            active_session_for_room($pdo, (int)$pdo->lastInsertId());
+            redirect_to('/lobby.php');
+        } catch (RuntimeException $e) {
+            $lobbyError = $e->getMessage();
         }
-        $stmt = $pdo->prepare('INSERT INTO rooms (public_id, owner_id, name, background_path, background_mime) VALUES (?,?,?,?,?)');
-        $stmt->execute([uuid_v4(), (int)$user['id'], $name, $bgPath, $bgMime]);
-        active_session_for_room($pdo, (int)$pdo->lastInsertId());
-        redirect_to('/lobby.php');
     }
 }
 
@@ -110,6 +100,7 @@ $rooms = $roomsStmt->fetchAll();
       <form class="room-card create-room-tile" id="create-room-form" method="post" enctype="multipart/form-data">
         <div class="create-room-tile-inner">
           <h2>Create Room</h2>
+          <?php if ($lobbyError): ?><div class="form-error"><?= e($lobbyError) ?></div><?php endif; ?>
           <label>Room name<input name="name" required placeholder="Moonlit Study, Neon Lounge, Table 7..."></label>
           <label>Background image or video
             <span class="file-picker">
@@ -127,9 +118,15 @@ $rooms = $roomsStmt->fetchAll();
       </form>
       <?php foreach ($rooms as $room): ?>
       <article class="room-card">
-        <div class="room-card-media" <?php if ($room['background_path'] && !str_starts_with((string)$room['background_mime'], 'video/')): ?>style="background-image:url('<?= e(media_url($room['background_path'])) ?>')"<?php endif; ?>>
-          <?php if ($room['background_path'] && str_starts_with((string)$room['background_mime'], 'video/')): ?>
-          <video autoplay muted loop playsinline><source src="<?= e(media_url($room['background_path'])) ?>" type="<?= e($room['background_mime']) ?>"></video>
+        <?php
+          $tileBg = $room['background_path'];
+          if ($room['background_path'] && str_starts_with((string)$room['background_mime'], 'video/')) {
+              $tileBg = $room['background_thumb_path'] ?: null;
+          }
+        ?>
+        <div class="room-card-media" <?php if ($tileBg): ?>style="background-image:url('<?= e(media_url($tileBg)) ?>')"<?php endif; ?>>
+          <?php if ($room['background_path'] && str_starts_with((string)$room['background_mime'], 'video/') && !$room['background_thumb_path']): ?>
+          <div class="room-video-placeholder">Video Room</div>
           <?php endif; ?>
         </div>
         <div class="room-card-body">
@@ -138,7 +135,7 @@ $rooms = $roomsStmt->fetchAll();
           <p class="room-card-actions">
             <a class="btn btn-primary" href="<?= e(app_url('/chatroom.php?id=' . rawurlencode((string)$room['public_id']))) ?>">Enter</a>
             <?php if ((int)$room['owner_id'] === (int)$user['id'] || in_array($user['role'] ?? 'user', ['admin', 'developer'], true)): ?>
-            <button class="btn btn-primary room-edit-open" type="button" data-room-id="<?= e($room['public_id']) ?>" data-room-name="<?= e($room['name']) ?>" data-room-bg="<?= e($room['background_path'] ? media_url($room['background_path']) : '') ?>" data-room-mime="<?= e($room['background_mime'] ?? '') ?>">Edit</button>
+            <button class="btn btn-primary room-edit-open" type="button" data-room-id="<?= e($room['public_id']) ?>" data-room-name="<?= e($room['name']) ?>" data-room-bg="<?= e($room['background_path'] ? media_url($room['background_path']) : '') ?>" data-room-thumb="<?= e($room['background_thumb_path'] ? media_url($room['background_thumb_path']) : '') ?>" data-room-mime="<?= e($room['background_mime'] ?? '') ?>">Edit</button>
             <?php endif; ?>
           </p>
         </div>
@@ -151,7 +148,7 @@ $rooms = $roomsStmt->fetchAll();
   <form class="modal-box" id="lobby-room-edit-form" enctype="multipart/form-data">
     <div class="modal-head">
       <strong>Edit Room</strong>
-      <button class="btn" id="lobby-room-edit-close" type="button">Close</button>
+      <button class="window-close" id="lobby-room-edit-close" type="button" aria-label="Close">×</button>
     </div>
     <input type="hidden" id="lobby-room-edit-id" name="room_public_id">
     <div class="room-edit-preview" id="lobby-room-edit-preview"></div>
@@ -171,8 +168,28 @@ $rooms = $roomsStmt->fetchAll();
       <div class="side-title">Kicked Users</div>
       <div class="ejection-list" id="lobby-room-ejection-list">Loading...</div>
     </div>
-    <button class="btn btn-primary" type="submit">Save Room</button>
+    <div class="room-edit-actions">
+      <button class="btn btn-primary" type="submit">Save Room</button>
+      <button class="btn btn-danger" id="lobby-room-delete-open" type="button">Delete Room</button>
+    </div>
   </form>
+</div>
+<div class="modal" id="lobby-room-delete-modal">
+  <div class="modal-box warning-box">
+    <div class="modal-head">
+      <strong>Delete Room</strong>
+      <button class="window-close" id="lobby-room-delete-close" type="button" aria-label="Close">×</button>
+    </div>
+    <p>This will delete the room and eject anyone currently inside it.</p>
+    <div class="password-actions">
+      <button class="btn btn-danger" id="lobby-room-delete-confirm" type="button">Delete Room</button>
+      <button class="btn" id="lobby-room-delete-cancel" type="button">Cancel</button>
+    </div>
+  </div>
+</div>
+<div class="lobby-toast" id="lobby-toast" hidden>
+  <span>Aw snap, the room you were in was deleted.</span>
+  <button class="window-close" id="lobby-toast-close" type="button" aria-label="Dismiss">×</button>
 </div>
 <?php if ($ejectionNotice): ?>
 <div class="modal open" id="lobby-ejection-modal">

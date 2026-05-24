@@ -270,6 +270,7 @@ json_out([
     'roomId' => (int)$room['id'],
     'roomPublicId' => $room['public_id'],
     'roomName' => $room['name'],
+    'backgroundThumbPath' => $room['background_thumb_path'] ?? null,
     'isRoomOwner' => (int)$room['owner_id'] === (int)$user['id'],
     'canEditRoom' => (int)$room['owner_id'] === (int)$user['id'] || in_array($user['role'] ?? 'user', ['admin', 'developer'], true),
     'canUseHostTools' => $canModerateMessages,

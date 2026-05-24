@@ -145,6 +145,7 @@ function mysqlize_schema(string $schema): string {
     $shortColumns = [
         'email' => 'VARCHAR(191)',
         'public_id' => 'VARCHAR(64)',
+        'session_public_id' => 'VARCHAR(64)',
         'password_hash' => 'VARCHAR(255)',
         'display_name' => 'VARCHAR(191)',
         'role' => 'VARCHAR(32)',
@@ -152,6 +153,8 @@ function mysqlize_schema(string $schema): string {
         'avatar_url' => 'VARCHAR(512)',
         'background_path' => 'VARCHAR(512)',
         'background_mime' => 'VARCHAR(128)',
+        'background_thumb_path' => 'VARCHAR(512)',
+        'room_name' => 'VARCHAR(191)',
         'webcam_path' => 'VARCHAR(512)',
         'join_token' => 'VARCHAR(96)',
         'message_type' => 'VARCHAR(32)',
@@ -202,6 +205,7 @@ function migrate(PDO $pdo): void {
             name TEXT NOT NULL,
             background_path TEXT DEFAULT NULL,
             background_mime TEXT DEFAULT NULL,
+            background_thumb_path TEXT DEFAULT NULL,
             created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY(owner_id) REFERENCES users(id) ON DELETE CASCADE
         );
@@ -212,6 +216,16 @@ function migrate(PDO $pdo): void {
             room_id INTEGER NOT NULL UNIQUE,
             started_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY(room_id) REFERENCES rooms(id) ON DELETE CASCADE
+        );
+
+        CREATE TABLE IF NOT EXISTS room_deletion_notices (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            session_public_id TEXT NOT NULL,
+            join_token TEXT NOT NULL,
+            user_id INTEGER DEFAULT NULL,
+            room_name TEXT DEFAULT NULL,
+            payload TEXT NOT NULL,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
         );
 
         CREATE TABLE IF NOT EXISTS participants (
@@ -481,6 +495,11 @@ function migrate(PDO $pdo): void {
         foreach (split_sql_statements($driverSchema) as $statement) {
             if ($statement !== '') $pdo->exec($statement);
         }
+        try {
+            $pdo->exec('ALTER TABLE rooms ADD COLUMN background_thumb_path VARCHAR(512) DEFAULT NULL');
+        } catch (Throwable $e) {
+            // Existing installs already have this column.
+        }
     } else {
         $pdo->exec($schema);
     }
@@ -510,6 +529,10 @@ function migrate(PDO $pdo): void {
     if (!$hasPublicId) {
         $pdo->exec('ALTER TABLE rooms ADD COLUMN public_id TEXT DEFAULT NULL');
         $pdo->exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_rooms_public_id ON rooms(public_id)');
+    }
+    $roomColNames = array_map(fn(array $col): string => (string)$col['name'], $cols);
+    if (!in_array('background_thumb_path', $roomColNames, true)) {
+        $pdo->exec('ALTER TABLE rooms ADD COLUMN background_thumb_path TEXT DEFAULT NULL');
     }
     $sessionCols = $pdo->query('PRAGMA table_info(room_sessions)')->fetchAll();
     $hasSessionPublicId = false;
@@ -675,6 +698,63 @@ function message_gesture(?string $content): ?array {
     if (!$content) return null;
     $decoded = json_decode($content, true);
     return is_array($decoded) ? $decoded : null;
+}
+
+function save_room_background_upload(array $upload, ?array $thumbUpload = null): array {
+    if (empty($upload['tmp_name']) || !is_uploaded_file($upload['tmp_name'])) {
+        return ['path' => null, 'mime' => null, 'thumb_path' => null];
+    }
+    $pdo = db();
+    $finfo = new finfo(FILEINFO_MIME_TYPE);
+    $mime = $finfo->file($upload['tmp_name']) ?: '';
+    $allowed = ['image/jpeg','image/png','image/webp','image/gif','video/mp4','video/webm'];
+    if (!in_array($mime, $allowed, true)) {
+        throw new RuntimeException('Unsupported background type');
+    }
+    $isVideo = str_starts_with($mime, 'video/');
+    $maxBytes = $isVideo ? app_setting_bytes($pdo, 'room_video_max_size_mb', 200) : app_setting_bytes($pdo, 'room_image_max_size_mb', 10);
+    if ((int)($upload['size'] ?? 0) > $maxBytes) {
+        throw new RuntimeException('Background file is too large');
+    }
+    $ext = match ($mime) {
+        'image/png' => 'png',
+        'image/webp' => 'webp',
+        'image/gif' => 'gif',
+        'video/mp4' => 'mp4',
+        'video/webm' => 'webm',
+        default => 'jpg',
+    };
+    $dir = __DIR__ . '/../assets/uploads/backgrounds';
+    if (!is_dir($dir)) mkdir($dir, 0775, true);
+    $base = bin2hex(random_bytes(12));
+    $file = $base . '.' . $ext;
+    $dest = $dir . '/' . $file;
+    if (!move_uploaded_file($upload['tmp_name'], $dest)) {
+        throw new RuntimeException('Could not save background');
+    }
+    $path = '/assets/uploads/backgrounds/' . $file;
+    $thumbPath = null;
+    if ($isVideo && $thumbUpload && !empty($thumbUpload['tmp_name']) && is_uploaded_file($thumbUpload['tmp_name'])) {
+        $thumbInfo = new finfo(FILEINFO_MIME_TYPE);
+        $thumbMime = $thumbInfo->file($thumbUpload['tmp_name']) ?: '';
+        if (in_array($thumbMime, ['image/jpeg', 'image/png', 'image/webp'], true) && (int)($thumbUpload['size'] ?? 0) <= 2 * 1024 * 1024) {
+            $thumbFile = $base . '-thumb.jpg';
+            $thumbDest = $dir . '/' . $thumbFile;
+            if (move_uploaded_file($thumbUpload['tmp_name'], $thumbDest)) {
+                $thumbPath = '/assets/uploads/backgrounds/' . $thumbFile;
+            }
+        }
+    }
+    if ($isVideo && !$thumbPath && function_exists('shell_exec')) {
+        $thumbFile = $base . '-thumb.jpg';
+        $thumbDest = $dir . '/' . $thumbFile;
+        $cmd = 'ffmpeg -y -i ' . escapeshellarg($dest) . ' -ss 00:00:01 -frames:v 1 -vf ' . escapeshellarg('scale=720:-1') . ' ' . escapeshellarg($thumbDest) . ' 2>/dev/null';
+        @shell_exec($cmd);
+        if (is_file($thumbDest) && filesize($thumbDest) > 0) {
+            $thumbPath = '/assets/uploads/backgrounds/' . $thumbFile;
+        }
+    }
+    return ['path' => $path, 'mime' => $mime, 'thumb_path' => $thumbPath];
 }
 
 function log_tool(PDO $pdo, ?int $actorUserId, string $action, ?int $targetUserId = null, ?int $roomId = null, ?string $detail = null): void {

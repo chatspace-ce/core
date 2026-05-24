@@ -105,6 +105,7 @@ let pendingLinkIconTargetId = null;
 const animatedDmMessageIds = new Set();
 let activeAvatarEffects = 0;
 let roomExitInProgress = false;
+let roomDeleteInProgress = false;
 let activeGame = null;
 let gifSearchTimer = null;
 const gifDurationCache = new Map();
@@ -159,6 +160,51 @@ function resetUploadProgress(progressEl) {
   progressEl.classList.remove('open');
   setUploadProgress(progressEl, 0, 'Waiting...');
   progressEl.classList.remove('open');
+}
+
+function videoThumbnailBlob(file) {
+  return new Promise((resolve) => {
+    if (!file || !String(file.type || '').startsWith('video/')) {
+      resolve(null);
+      return;
+    }
+    const video = document.createElement('video');
+    const url = URL.createObjectURL(file);
+    const cleanup = () => URL.revokeObjectURL(url);
+    video.muted = true;
+    video.preload = 'metadata';
+    video.playsInline = true;
+    video.addEventListener('loadeddata', () => {
+      try {
+        video.currentTime = Math.min(1, Math.max(0, (video.duration || 1) / 4));
+      } catch (err) {
+        cleanup();
+        resolve(null);
+      }
+    }, { once: true });
+    video.addEventListener('seeked', () => {
+      try {
+        const canvas = document.createElement('canvas');
+        const width = 720;
+        const ratio = video.videoWidth ? video.videoHeight / video.videoWidth : 9 / 16;
+        canvas.width = width;
+        canvas.height = Math.max(1, Math.round(width * ratio));
+        canvas.getContext('2d')?.drawImage(video, 0, 0, canvas.width, canvas.height);
+        canvas.toBlob(blob => {
+          cleanup();
+          resolve(blob);
+        }, 'image/jpeg', 0.82);
+      } catch (err) {
+        cleanup();
+        resolve(null);
+      }
+    }, { once: true });
+    video.addEventListener('error', () => {
+      cleanup();
+      resolve(null);
+    }, { once: true });
+    video.src = url;
+  });
 }
 
 function apiUploadWithProgress(url, formData, progressEl, submitBtn = null) {
@@ -686,6 +732,27 @@ function removeParticipant(participantId, options = {}) {
   } else {
     finish();
     return Promise.resolve();
+  }
+}
+
+async function handleRoomDeleted(payload = {}) {
+  if (roomDeleteInProgress) return;
+  roomDeleteInProgress = true;
+  roomExitInProgress = true;
+  try {
+    [ctxMenu, textCtxMenu, msgActionMenu, tabCtxMenu, roomMenu, roomActionMenu].forEach(menu => menu?.classList.remove('visible'));
+    document.querySelectorAll('.modal.open').forEach(modal => modal.classList.remove('open'));
+    addSystemMessage('Aw snap, this room was deleted.');
+    const others = [...participants.values()]
+      .filter(person => Number(person.id) !== Number(cfg.myParticipantId) && person.avatarEl)
+      .sort((a, b) => String(a.display_name || '').localeCompare(String(b.display_name || '')));
+    for (const person of others) {
+      await removeParticipant(person.id, { keepRecord: true });
+    }
+    const me = participants.get(Number(cfg.myParticipantId));
+    if (me) await removeParticipant(me.id, { keepRecord: true });
+  } finally {
+    window.location.href = appUrl('/lobby.php?room_deleted=1');
   }
 }
 
@@ -1562,19 +1629,23 @@ function backgroundMarkup(path, mime) {
   return '';
 }
 
-function roomPreviewMarkup(path, mime) {
+function roomPreviewMarkup(path, mime, thumbPath = '') {
   const safePath = esc(mediaUrl(path || ''));
+  const safeThumb = esc(mediaUrl(thumbPath || ''));
   const safeMime = esc(mime || '');
   if (!safePath) return '<div class="room-edit-preview-empty">No background selected</div>';
+  if (String(mime || '').startsWith('video/') && safeThumb) {
+    return `<img src="${safeThumb}" alt="Current room background thumbnail">`;
+  }
   if (String(mime || '').startsWith('video/')) {
     return `<video muted loop playsinline preload="metadata"><source src="${safePath}" type="${safeMime}"></video>`;
   }
   return `<img src="${safePath}" alt="Current room background">`;
 }
 
-function setRoomEditPreview(path, mime) {
+function setRoomEditPreview(path, mime, thumbPath = '') {
   const preview = document.getElementById('room-edit-preview');
-  if (preview) preview.innerHTML = roomPreviewMarkup(path, mime);
+  if (preview) preview.innerHTML = roomPreviewMarkup(path, mime, thumbPath);
 }
 
 function applyRoomBackground(path, mime) {
@@ -1601,8 +1672,9 @@ function applyRoomUpdate(update) {
   if ('background_path' in update) {
     cfg.backgroundPath = update.background_path;
     cfg.backgroundMime = update.background_mime;
+    cfg.backgroundThumbPath = update.background_thumb_path || null;
     applyRoomBackground(update.background_path, update.background_mime);
-    setRoomEditPreview(update.background_path, update.background_mime);
+    setRoomEditPreview(update.background_path, update.background_mime, update.background_thumb_path || '');
   }
 }
 
@@ -1829,6 +1901,7 @@ async function poll() {
       }
       if (ev.type === 'game_start' || ev.type === 'game_end') loadGames();
       if (ev.type === 'room_update') applyRoomUpdate(p);
+      if (ev.type === 'room_deleted') handleRoomDeleted(p);
       if (ev.type === 'room_effect') {
         cfg.activeRoomEffect = p.active ? p : null;
         applyRoomEffect(p, true);
@@ -2656,13 +2729,16 @@ function renderGestureGrid(gestures) {
       <button class="gesture-global" type="button" title="${gesture.is_public ? 'Community gesture' : 'Private gesture'}"${gesture.mine ? '' : ' disabled'}>🌐</button>
       ${gesture.audio_is_silent ? '' : '<button class="gesture-audio" type="button" title="Play gesture audio"><span>🎧</span></button>'}
     `;
+    tile.addEventListener('click', e => {
+      if (e.target.closest('.gesture-star, .gesture-global, .gesture-audio')) return;
+      sendGesture(gesture);
+    });
     tile.addEventListener('mouseenter', () => {
       if (gestureTray) gestureTray.textContent = gestureTileLabel(gesture);
     });
     tile.addEventListener('mouseleave', () => {
       if (gestureTray) gestureTray.textContent = '';
     });
-    tile.querySelector('.gesture-play')?.addEventListener('click', () => sendGesture(gesture));
     tile.querySelector('.gesture-star')?.addEventListener('click', e => {
       e.stopPropagation();
       deleteGesture(gesture);
@@ -3302,7 +3378,7 @@ document.getElementById('edit-room-btn')?.addEventListener('click', () => {
 
 function openRoomEditModal() {
   document.getElementById('room-edit-name').value = cfg.roomName || '';
-  setRoomEditPreview(cfg.backgroundPath || '', cfg.backgroundMime || '');
+  setRoomEditPreview(cfg.backgroundPath || '', cfg.backgroundMime || '', cfg.backgroundThumbPath || '');
   resetUploadProgress(document.getElementById('room-edit-upload-progress'));
   document.getElementById('room-edit-modal').classList.add('open');
   loadRoomEjections();
@@ -3368,6 +3444,34 @@ document.getElementById('room-edit-close')?.addEventListener('click', () => {
   document.getElementById('room-edit-modal').classList.remove('open');
 });
 
+function closeRoomDeleteModal() {
+  document.getElementById('room-delete-modal')?.classList.remove('open');
+}
+
+document.getElementById('room-delete-open')?.addEventListener('click', () => {
+  document.getElementById('room-delete-modal')?.classList.add('open');
+});
+
+document.getElementById('room-delete-close')?.addEventListener('click', closeRoomDeleteModal);
+document.getElementById('room-delete-cancel')?.addEventListener('click', closeRoomDeleteModal);
+
+document.getElementById('room-delete-confirm')?.addEventListener('click', async e => {
+  const btn = e.currentTarget;
+  btn.disabled = true;
+  try {
+    await apiPost('/api/room_delete.php', {
+      session_id: cfg.sessionId,
+      join_token: cfg.myJoinToken,
+    });
+    closeRoomDeleteModal();
+    document.getElementById('room-edit-modal')?.classList.remove('open');
+    await handleRoomDeleted({ room_name: cfg.roomName });
+  } catch (err) {
+    alert(err.message || err);
+    btn.disabled = false;
+  }
+});
+
 document.getElementById('room-edit-background')?.addEventListener('change', e => {
   const file = e.target.files && e.target.files[0];
   document.getElementById('room-edit-background-name').textContent = file ? file.name : 'No file selected';
@@ -3380,6 +3484,9 @@ document.getElementById('room-edit-form')?.addEventListener('submit', async e =>
   const fd = new FormData(form);
   fd.append('session_id', cfg.sessionId);
   fd.append('join_token', cfg.myJoinToken);
+  const bgFile = fd.get('background');
+  const thumb = await videoThumbnailBlob(bgFile);
+  if (thumb) fd.append('background_thumb', thumb, 'background-thumb.jpg');
   const progressEl = document.getElementById('room-edit-upload-progress');
   const submitBtn = form.querySelector('button[type="submit"]');
   try {

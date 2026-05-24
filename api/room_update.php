@@ -31,41 +31,26 @@ if ($name === '') json_out(['error' => 'Room name required'], 400);
 
 $bgPath = $room['background_path'];
 $bgMime = $room['background_mime'];
+$bgThumbPath = $room['background_thumb_path'] ?? null;
 if (!empty($_FILES['background']['tmp_name']) && is_uploaded_file($_FILES['background']['tmp_name'])) {
-    $finfo = new finfo(FILEINFO_MIME_TYPE);
-    $mime = $finfo->file($_FILES['background']['tmp_name']) ?: '';
-    $allowed = ['image/jpeg','image/png','image/webp','image/gif','video/mp4','video/webm'];
-    if (!in_array($mime, $allowed, true)) json_out(['error' => 'Unsupported background type'], 400);
-    $isVideo = str_starts_with($mime, 'video/');
-    $maxBytes = $isVideo ? app_setting_bytes($pdo, 'room_video_max_size_mb', 200) : app_setting_bytes($pdo, 'room_image_max_size_mb', 10);
-    if ((int)$_FILES['background']['size'] > $maxBytes) {
-        json_out(['error' => 'Background file is too large'], 400);
+    try {
+        $saved = save_room_background_upload($_FILES['background'], $_FILES['background_thumb'] ?? null);
+        $bgPath = $saved['path'];
+        $bgMime = $saved['mime'];
+        $bgThumbPath = $saved['thumb_path'];
+    } catch (RuntimeException $e) {
+        json_out(['error' => $e->getMessage()], 400);
     }
-    $ext = match ($mime) {
-        'image/png' => 'png',
-        'image/webp' => 'webp',
-        'image/gif' => 'gif',
-        'video/mp4' => 'mp4',
-        'video/webm' => 'webm',
-        default => 'jpg',
-    };
-    $dir = __DIR__ . '/../assets/uploads/backgrounds';
-    if (!is_dir($dir)) mkdir($dir, 0775, true);
-    $file = bin2hex(random_bytes(12)) . '.' . $ext;
-    if (!move_uploaded_file($_FILES['background']['tmp_name'], $dir . '/' . $file)) {
-        json_out(['error' => 'Could not save background'], 500);
-    }
-    $bgPath = '/assets/uploads/backgrounds/' . $file;
-    $bgMime = $mime;
 }
 
-$pdo->prepare('UPDATE rooms SET name = ?, background_path = ?, background_mime = ? WHERE id = ?')
-    ->execute([$name, $bgPath, $bgMime, (int)$room['id']]);
+$pdo->prepare('UPDATE rooms SET name = ?, background_path = ?, background_mime = ?, background_thumb_path = ? WHERE id = ?')
+    ->execute([$name, $bgPath, $bgMime, $bgThumbPath, (int)$room['id']]);
 
 $payload = [
     'room_name' => $name,
     'background_path' => $bgPath,
     'background_mime' => $bgMime,
+    'background_thumb_path' => $bgThumbPath,
 ];
 if ($sessionId) {
     emit_event($pdo, $sessionId, 'room_update', $payload);

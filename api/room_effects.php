@@ -39,7 +39,10 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') json_out(['error' => 'POST required']
 $action = (string)($body['action'] ?? 'start');
 
 if ($action === 'stop') {
-    $current = active_room_effect($pdo, $sessionId);
+    $stmt = $pdo->prepare('SELECT * FROM room_effects WHERE session_id = ? LIMIT 1');
+    $stmt->execute([$sessionId]);
+    $currentRow = $stmt->fetch();
+    $current = $currentRow ? room_effect_payload($currentRow) : null;
     $pdo->prepare('DELETE FROM room_effects WHERE session_id = ?')->execute([$sessionId]);
     $payload = [
         'active' => false,

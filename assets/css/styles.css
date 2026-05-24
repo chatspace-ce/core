@@ -433,10 +433,56 @@ textarea:focus { border-color: rgba(124,106,247,.8); box-shadow: 0 0 0 3px rgba(
 .create-room-tile h2 {
   margin: 0 0 2px;
 }
+.create-room-tile input[name="name"],
+.create-room-tile input[name="name"]:hover,
+.create-room-tile input[name="name"]:focus,
+.create-room-tile input[name="name"]:active,
+.create-room-tile input[name="name"]:valid,
+.create-room-tile input[name="name"]:invalid,
+.create-room-tile input[name="name"]:disabled {
+  color: var(--text) !important;
+  -webkit-text-fill-color: var(--text) !important;
+  caret-color: var(--text);
+  background: #22252e !important;
+  border-color: rgba(255,255,255,.14);
+  appearance: none;
+}
+.create-room-tile input[name="name"]:focus {
+  border-color: rgba(124,106,247,.75);
+  box-shadow: 0 0 0 2px rgba(124,106,247,.22);
+}
+.create-room-tile input[name="name"]:-webkit-autofill,
+.create-room-tile input[name="name"]:-webkit-autofill:hover,
+.create-room-tile input[name="name"]:-webkit-autofill:focus {
+  -webkit-text-fill-color: var(--text) !important;
+  box-shadow: 0 0 0 1000px #22252e inset !important;
+  transition: background-color 9999s ease-out 0s;
+}
+.form-error {
+  padding: 9px 10px;
+  border: 1px solid rgba(255,95,122,.38);
+  border-radius: var(--radius-sm);
+  color: #ffd7df;
+  background: rgba(255,95,122,.12);
+  font-size: 12px;
+  font-weight: 800;
+}
 .create-room-tile .btn-aqua,
 .create-room-tile .btn-primary { width: 100%; }
 .room-card-media { position: absolute; inset: 0; background: linear-gradient(135deg, rgba(124,106,247,.38), rgba(39,211,195,.22)); background-size: cover; background-position: center; }
 .room-card video { width: 100%; height: 100%; object-fit: cover; }
+.room-video-placeholder {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: rgba(255,255,255,.72);
+  font-weight: 900;
+  letter-spacing: .02em;
+  background:
+    radial-gradient(circle at 24% 18%, rgba(124,106,247,.35), transparent 34%),
+    linear-gradient(135deg, rgba(12,14,22,.96), rgba(24,31,44,.98));
+}
 .room-card-body {
   position: relative;
   padding: 15px;
@@ -1508,7 +1554,7 @@ textarea:focus { border-color: rgba(124,106,247,.8); box-shadow: 0 0 0 3px rgba(
   border: 1px solid rgba(255,255,255,0.15);
 }
 .chat-bubble.chat-bubble-gif {
-  width: min(260px, 22vw);
+  width: max-content;
   max-width: min(260px, 22vw);
   padding: 6px;
   background: rgba(10,11,16,.76);
@@ -1516,13 +1562,15 @@ textarea:focus { border-color: rgba(124,106,247,.8); box-shadow: 0 0 0 3px rgba(
 }
 .chat-bubble.chat-bubble-gif img {
   display: block;
-  width: 100%;
+  width: auto;
+  max-width: 100%;
   max-height: min(210px, 24vh);
+  margin: 0 auto;
   object-fit: contain;
   border-radius: 7px;
 }
 .chat-bubble.chat-bubble-gesture {
-  width: min(221px, 19vw);
+  width: max-content;
   max-width: min(221px, 19vw);
   pointer-events: auto;
   cursor: pointer;
@@ -1616,6 +1664,38 @@ textarea:focus { border-color: rgba(124,106,247,.8); box-shadow: 0 0 0 3px rgba(
   color: var(--text-muted);
   font-size: 13px;
   font-weight: 700;
+}
+.room-edit-actions {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 10px;
+  align-items: center;
+}
+.room-edit-actions .btn-primary {
+  justify-self: start;
+}
+.lobby-toast {
+  position: fixed;
+  right: 18px;
+  bottom: 18px;
+  z-index: 10002;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  max-width: min(420px, calc(100vw - 36px));
+  padding: 13px 14px;
+  border: 1px solid rgba(124,106,247,.38);
+  border-radius: var(--radius-sm);
+  background: rgba(16,17,25,.96);
+  color: var(--text);
+  box-shadow: 0 14px 38px rgba(0,0,0,.45);
+  transform: translateY(12px);
+  opacity: 0;
+  transition: opacity .2s ease, transform .2s ease;
+}
+.lobby-toast.show {
+  transform: translateY(0);
+  opacity: 1;
 }
 .window-close {
   width: 24px;
@@ -2289,17 +2369,20 @@ textarea:focus { border-color: rgba(124,106,247,.8); box-shadow: 0 0 0 3px rgba(
 .gesture-play {
   width: 100%;
   height: 100%;
-  display: block;
+  display: grid;
+  place-items: center;
   padding: 0;
   border: 0;
-  background: transparent;
+  background: rgba(0,0,0,.24);
   cursor: pointer;
 }
 .gesture-play img {
-  width: 100%;
-  height: 100%;
+  width: auto;
+  height: auto;
+  max-width: 100%;
+  max-height: 100%;
   display: block;
-  object-fit: cover;
+  object-fit: contain;
 }
 .gesture-star,
 .gesture-global,

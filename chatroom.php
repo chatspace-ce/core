@@ -145,10 +145,12 @@ $lastEventId = (int)$pdo->query('SELECT COALESCE(MAX(id), 0) FROM events WHERE s
   <form class="modal-box" id="room-edit-form" enctype="multipart/form-data">
     <div class="modal-head">
       <strong>Edit Room</strong>
-      <button class="btn" id="room-edit-close" type="button">Close</button>
+      <button class="window-close" id="room-edit-close" type="button" aria-label="Close">×</button>
     </div>
     <div class="room-edit-preview" id="room-edit-preview">
-      <?php if ($room['background_path'] && str_starts_with((string)$room['background_mime'], 'video/')): ?>
+      <?php if ($room['background_path'] && str_starts_with((string)$room['background_mime'], 'video/') && !empty($room['background_thumb_path'])): ?>
+      <img src="<?= e(media_url($room['background_thumb_path'])) ?>" alt="Current room background thumbnail">
+      <?php elseif ($room['background_path'] && str_starts_with((string)$room['background_mime'], 'video/')): ?>
       <video muted loop playsinline preload="metadata"><source src="<?= e(media_url($room['background_path'])) ?>" type="<?= e($room['background_mime']) ?>"></video>
       <?php elseif ($room['background_path']): ?>
       <img src="<?= e(media_url($room['background_path'])) ?>" alt="Current room background">
@@ -172,8 +174,24 @@ $lastEventId = (int)$pdo->query('SELECT COALESCE(MAX(id), 0) FROM events WHERE s
       <div class="side-title">Kicked Users</div>
       <div class="ejection-list" id="room-ejection-list">Loading...</div>
     </div>
-    <button class="btn btn-primary" type="submit">Save Room</button>
+    <div class="room-edit-actions">
+      <button class="btn btn-primary" type="submit">Save Room</button>
+      <button class="btn btn-danger" id="room-delete-open" type="button">Delete Room</button>
+    </div>
   </form>
+</div>
+<div class="modal" id="room-delete-modal">
+  <div class="modal-box warning-box">
+    <div class="modal-head">
+      <strong>Delete Room</strong>
+      <button class="window-close" id="room-delete-close" type="button" aria-label="Close">×</button>
+    </div>
+    <p>This will delete the room and eject everyone currently inside it.</p>
+    <div class="password-actions">
+      <button class="btn btn-danger" id="room-delete-confirm" type="button">Delete Room</button>
+      <button class="btn" id="room-delete-cancel" type="button">Cancel</button>
+    </div>
+  </div>
 </div>
 <div class="modal" id="room-effects-modal">
   <form class="modal-box room-effects-box" id="room-effects-form">

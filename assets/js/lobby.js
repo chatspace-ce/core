@@ -48,6 +48,8 @@ const lobbyRoomEditBackgroundName = document.getElementById('lobby-room-edit-bac
 const lobbyRoomEditProgress = document.getElementById('lobby-room-edit-upload-progress');
 const lobbyRoomEjectionList = document.getElementById('lobby-room-ejection-list');
 const lobbyRoomEditPreview = document.getElementById('lobby-room-edit-preview');
+const lobbyRoomDeleteModal = document.getElementById('lobby-room-delete-modal');
+const lobbyToast = document.getElementById('lobby-toast');
 const passwordModal = document.getElementById('password-modal');
 const passwordForm = document.getElementById('password-form');
 const passwordStatus = document.getElementById('password-status');
@@ -101,13 +103,74 @@ function resetUploadProgress(progressEl) {
   progressEl.classList.remove('open');
 }
 
+function videoThumbnailBlob(file) {
+  return new Promise((resolve) => {
+    if (!file || !String(file.type || '').startsWith('video/')) {
+      resolve(null);
+      return;
+    }
+    const video = document.createElement('video');
+    const url = URL.createObjectURL(file);
+    const cleanup = () => URL.revokeObjectURL(url);
+    video.muted = true;
+    video.preload = 'metadata';
+    video.playsInline = true;
+    video.addEventListener('loadeddata', () => {
+      try {
+        video.currentTime = Math.min(1, Math.max(0, (video.duration || 1) / 4));
+      } catch (err) {
+        cleanup();
+        resolve(null);
+      }
+    }, { once: true });
+    video.addEventListener('seeked', () => {
+      try {
+        const canvas = document.createElement('canvas');
+        const width = 720;
+        const ratio = video.videoWidth ? video.videoHeight / video.videoWidth : 9 / 16;
+        canvas.width = width;
+        canvas.height = Math.max(1, Math.round(width * ratio));
+        canvas.getContext('2d')?.drawImage(video, 0, 0, canvas.width, canvas.height);
+        canvas.toBlob(blob => {
+          cleanup();
+          resolve(blob);
+        }, 'image/jpeg', 0.82);
+      } catch (err) {
+        cleanup();
+        resolve(null);
+      }
+    }, { once: true });
+    video.addEventListener('error', () => {
+      cleanup();
+      resolve(null);
+    }, { once: true });
+    video.src = url;
+  });
+}
+
+async function roomBackgroundFormData(form) {
+  const fd = new FormData(form);
+  const file = fd.get('background');
+  const thumb = await videoThumbnailBlob(file);
+  if (thumb) fd.append('background_thumb', thumb, 'background-thumb.jpg');
+  return fd;
+}
+
 function uploadFormWithProgress(form, url, progressEl) {
-  return new Promise((resolve, reject) => {
+  return new Promise(async (resolve, reject) => {
     const xhr = new XMLHttpRequest();
     const submitBtn = form.querySelector('button[type="submit"]');
     const previousDisabled = submitBtn ? submitBtn.disabled : false;
     if (submitBtn) submitBtn.disabled = true;
     setUploadProgress(progressEl, 0, 'Uploading...');
+    let formData;
+    try {
+      formData = await roomBackgroundFormData(form);
+    } catch (err) {
+      if (submitBtn) submitBtn.disabled = previousDisabled;
+      reject(err);
+      return;
+    }
 
     xhr.upload.addEventListener('progress', event => {
       if (!event.lengthComputable) {
@@ -139,7 +202,7 @@ function uploadFormWithProgress(form, url, progressEl) {
     });
 
     xhr.open('POST', url);
-    xhr.send(new FormData(form));
+    xhr.send(formData);
   });
 }
 
@@ -189,6 +252,9 @@ document.querySelectorAll('.room-edit-open').forEach(btn => {
     lobbyRoomEditBackgroundName.textContent = 'No file selected';
     resetUploadProgress(lobbyRoomEditProgress);
     setLobbyRoomPreview(btn.dataset.roomBg || '', btn.dataset.roomMime || '');
+    if (String(btn.dataset.roomMime || '').startsWith('video/') && btn.dataset.roomThumb) {
+      lobbyRoomEditPreview.innerHTML = `<img src="${esc(btn.dataset.roomThumb)}" alt="Current room background thumbnail">`;
+    }
     lobbyRoomEditModal.classList.add('open');
     loadLobbyRoomEjections(lobbyRoomEditId.value);
   });
@@ -198,8 +264,48 @@ document.getElementById('lobby-room-edit-close')?.addEventListener('click', () =
   lobbyRoomEditModal.classList.remove('open');
 });
 
+document.getElementById('lobby-room-delete-open')?.addEventListener('click', () => {
+  lobbyRoomDeleteModal?.classList.add('open');
+});
+
+function closeLobbyRoomDeleteModal() {
+  lobbyRoomDeleteModal?.classList.remove('open');
+}
+
+document.getElementById('lobby-room-delete-close')?.addEventListener('click', closeLobbyRoomDeleteModal);
+document.getElementById('lobby-room-delete-cancel')?.addEventListener('click', closeLobbyRoomDeleteModal);
+
+document.getElementById('lobby-room-delete-confirm')?.addEventListener('click', async e => {
+  const btn = e.currentTarget;
+  btn.disabled = true;
+  try {
+    const fd = new FormData();
+    fd.append('room_public_id', lobbyRoomEditId.value);
+    const resp = await fetch(appUrl('/api/room_delete.php'), { method: 'POST', body: fd });
+    const data = await resp.json();
+    if (!resp.ok || data.error) throw new Error(data.error || 'Room delete failed');
+    window.location.href = appUrl('/lobby.php?room_deleted=1');
+  } catch (err) {
+    alert(err.message || err);
+    btn.disabled = false;
+  }
+});
+
 document.getElementById('lobby-ejection-understand')?.addEventListener('click', () => {
   document.getElementById('lobby-ejection-modal')?.classList.remove('open');
+});
+
+if (new URLSearchParams(window.location.search).get('room_deleted') === '1' && lobbyToast) {
+  lobbyToast.hidden = false;
+  lobbyToast.classList.add('show');
+  const clean = new URL(window.location.href);
+  clean.searchParams.delete('room_deleted');
+  window.history.replaceState({}, document.title, clean.toString());
+}
+
+document.getElementById('lobby-toast-close')?.addEventListener('click', () => {
+  lobbyToast?.classList.remove('show');
+  if (lobbyToast) lobbyToast.hidden = true;
 });
 
 lobbyRoomEditBackground?.addEventListener('change', () => {
