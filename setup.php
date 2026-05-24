@@ -142,12 +142,8 @@ $requiredMissing = array_filter($requirements, fn($r) => $r['required'] && !$r['
 <body data-app-base="<?= e(app_base_path()) ?>">
 <main class="setup-shell">
   <section class="setup-card">
-    <div class="app-title setup-brand">
-      <img src="<?= e(app_url('/assets/images/chatspace-ce-logo.png')) ?>" alt="">
-      <div>
-        <div class="app-name">ChatSpace</div>
-        <div class="app-edition">Community Edition</div>
-      </div>
+    <div class="app-title setup-brand setup-brand-full">
+      <img src="<?= e(app_url('/assets/images/logos/chatspace-ce-full-logo.png')) ?>" alt="ChatSpace Community Edition">
     </div>
     <div class="setup-steps">
       <span class="setup-step <?= $step === 'database' ? 'active' : 'done' ?>">Database</span>

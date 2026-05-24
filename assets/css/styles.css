@@ -102,6 +102,10 @@ textarea:focus { border-color: rgba(124,106,247,.8); box-shadow: 0 0 0 3px rgba(
   box-shadow: 0 28px 90px rgba(0,0,0,.42);
 }
 .setup-brand { margin-bottom: 20px; }
+.setup-brand-full img {
+  width: min(360px, 100%);
+  height: auto;
+}
 .setup-steps {
   display: flex;
   align-items: center;
