@@ -28,6 +28,21 @@ button, input, select { font: inherit; }
 .auth-shell, .picker-shell { min-height: 100%; display: grid; place-items: center; padding: 28px; background: radial-gradient(circle at 15% 10%, rgba(39,211,195,.16), transparent 28%), radial-gradient(circle at 85% 0%, rgba(124,106,247,.2), transparent 30%), #0c0d12; }
 .auth-card, .picker-main { width: min(1040px, 100%); background: rgba(15,17,24,.88); border: 1px solid var(--line); border-radius: 8px; padding: 24px; box-shadow: 0 24px 80px rgba(0,0,0,.35); }
 .auth-card { max-width: 430px; }
+.auth-logo-link {
+  display: block;
+  margin: 0 auto 24px;
+  text-decoration: none;
+}
+.auth-logo-full {
+  display: block;
+  width: min(320px, 100%);
+  height: auto;
+  margin: 0 auto;
+}
+.auth-about-link {
+  margin-top: -4px;
+  text-align: center;
+}
 .brand { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 22px; }
 .brand h1 { font-size: 24px; margin: 0; letter-spacing: 0; }
 .brand span { color: var(--muted); font-size: 13px; }
@@ -401,7 +416,9 @@ textarea:focus { border-color: rgba(124,106,247,.8); box-shadow: 0 0 0 3px rgba(
 #lobby-menu button,
 #lobby-menu a {
   width: 100%;
-  display: block;
+  display: flex;
+  align-items: center;
+  gap: 10px;
   border: 0;
   border-radius: 6px;
   padding: 10px 12px;
@@ -411,6 +428,12 @@ textarea:focus { border-color: rgba(124,106,247,.8); box-shadow: 0 0 0 3px rgba(
   text-decoration: none;
   cursor: pointer;
   font: inherit;
+}
+#lobby-menu img {
+  width: 18px;
+  height: 18px;
+  object-fit: contain;
+  flex: 0 0 18px;
 }
 #lobby-menu button:hover,
 #lobby-menu a:hover { background: var(--surface-hover); }

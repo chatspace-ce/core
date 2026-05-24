@@ -89,11 +89,11 @@ $rooms = $roomsStmt->fetchAll();
         <button class="gear-btn lobby-gear" id="lobby-menu-btn" type="button" aria-label="Lobby menu">⚙</button>
       </div>
       <div id="lobby-menu">
-        <button id="password-open" type="button">Update Password</button>
+        <button id="password-open" type="button"><img src="<?= e(app_url('/assets/images/secure.png')) ?>" alt="">Update Password</button>
         <?php if (in_array($user['role'] ?? 'user', ['admin', 'developer'], true)): ?>
-        <button id="admin-open" type="button">Admin</button>
+        <button id="admin-open" type="button"><img src="<?= e(app_url('/assets/images/lobby.png')) ?>" alt="">Admin</button>
         <?php endif; ?>
-        <a href="<?= e(app_url('/logout.php')) ?>">Log Out</a>
+        <a href="<?= e(app_url('/logout.php')) ?>"><img src="<?= e(app_url('/assets/images/logout.png')) ?>" alt="">Log Out</a>
       </div>
     </div>
     <div class="room-grid">

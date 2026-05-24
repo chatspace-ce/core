@@ -49,12 +49,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <body data-app-base="<?= e(app_base_path()) ?>">
 <main class="auth-shell">
   <section class="auth-card">
-    <div class="brand">
-      <div>
-        <h1>ChatSpace CE</h1>
-        <span>Create your community account</span>
-      </div>
-    </div>
+    <a class="auth-logo-link" href="<?= e(app_url('/about.html')) ?>" aria-label="About ChatSpace Community Edition">
+      <img class="auth-logo-full" src="<?= e(app_url('/assets/images/logos/chatspace-ce-full-logo.png')) ?>" alt="ChatSpace Community Edition">
+    </a>
     <?php if ($error): ?><div class="error"><?= e($error) ?></div><?php endif; ?>
     <form class="form-grid" method="post" enctype="multipart/form-data">
       <label>Email<input type="email" name="email" required autocomplete="email"></label>
@@ -63,6 +60,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       <label>Password<input type="password" name="password" required minlength="8" autocomplete="new-password"></label>
       <button class="btn btn-primary" type="submit">Sign Up</button>
       <p class="minor">Already have an account? <a href="<?= e(app_url('/login.php')) ?>">Log in</a></p>
+      <p class="minor auth-about-link"><a href="<?= e(app_url('/about.html')) ?>">About ChatSpace Community Edition</a></p>
     </form>
   </section>
 </main>
