@@ -35,10 +35,16 @@ const msgActionMenu = document.getElementById('msg-action-menu');
 const tabCtxMenu = document.getElementById('tab-ctx-menu');
 const roomMenu = document.getElementById('room-menu');
 const roomActionMenu = document.getElementById('room-action-menu');
-const emojiPicker = document.getElementById('emoji-picker');
-const gifPicker = document.getElementById('gif-picker');
-const gifSearchInput = document.getElementById('gif-search-input');
+const mediaPicker = document.getElementById('media-picker');
+const mediaSearchInput = document.getElementById('media-search-input');
 const gifResults = document.getElementById('gif-results');
+const gestureGrid = document.getElementById('gesture-grid');
+const gestureFileInput = document.getElementById('gesture-file-input');
+const gestureTray = document.getElementById('gesture-tray');
+const gesturePageLabel = document.getElementById('gesture-page-label');
+const gesturePrev = document.getElementById('gesture-prev');
+const gestureNext = document.getElementById('gesture-next');
+const emojiGrid = document.getElementById('emoji-grid');
 const attachMenu = document.getElementById('attach-menu');
 const chatFileInput = document.getElementById('chat-file-input');
 const voiceNoteModal = document.getElementById('voice-note-modal');
@@ -106,6 +112,17 @@ let messagesPinnedToBottom = true;
 const loadedRoomEffectModules = new Map();
 let activeRoomEffectController = null;
 let activeRoomEffect = null;
+let activeMediaTab = 'gifs';
+let gesturePage = 1;
+let gestureHasMore = false;
+let gestureSearchTimer = null;
+let activeGestureAudio = null;
+const EMOJI_OPTIONS = [
+  '😀','😃','😄','😁','😂','🤣','😊','😌','😉','😏','😈','😍','🥰','😘','😇','🙂','🙃','😋','😜','🤭',
+  '😭','🥺','😤','😡','😱','😳','🤔','🙄','😴','🤯','😎','🥳','🖤','🤍','❤️','🧡','💛','💚','💙','💜',
+  '💕','💞','💋','✨','🔥','🌙','⭐','🌸','🌹','🍒','🍓','☕','🍷','🎉','🎵','🎧','🎮','♟️','✅','👀',
+  '👍','👎','👏','🙏','💅','👑','💬','🌐','✉️','➕','🔒','🔓','⚠️','💀','🫶','🫦','😌','😏','😉','😈'
+];
 
 function apiPost(url, body) {
   return fetch(appUrl(url), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
@@ -1308,7 +1325,19 @@ function messageSpeechText(msg) {
   if (msg.message_type === 'voice_note') return 'sent a voice note';
   if (msg.message_type === 'file') return msg.original_name ? `sent ${msg.original_name}` : 'sent a file';
   if (msg.message_type === 'gif') return 'sent a GIF';
+  if (msg.message_type === 'gesture') return gestureFromMessage(msg)?.text || msg.original_name || 'sent a gesture';
   return msg.content;
+}
+
+function gestureFromMessage(msg) {
+  if (!msg || msg.message_type !== 'gesture') return null;
+  if (msg.gesture && typeof msg.gesture === 'object') return msg.gesture;
+  try {
+    const parsed = JSON.parse(msg.content || '{}');
+    return parsed && typeof parsed === 'object' ? parsed : null;
+  } catch {
+    return null;
+  }
 }
 
 function messageBodyHtml(msg) {
@@ -1317,6 +1346,13 @@ function messageBodyHtml(msg) {
   const mime = String(msg.mime_type || '');
   if (msg.message_type === 'gif') {
     return `<a class="chat-attachment-image chat-gif" href="${url}" target="_blank" rel="noopener"><img src="${url}" alt="${name}"></a>`;
+  }
+  if (msg.message_type === 'gesture') {
+    const gesture = gestureFromMessage(msg);
+    if (!gesture) return esc(msg.original_name || 'Gesture');
+    const gif = esc(mediaUrl(gesture.gif_path || gesture.gif_url || ''));
+    const text = esc(gesture.text || gesture.name || msg.original_name || 'Gesture');
+    return `<div class="chat-gesture"><a class="chat-attachment-image chat-gif chat-gesture-gif" href="${gif}" target="_blank" rel="noopener"><img src="${gif}" alt="${text}"></a><div class="chat-gesture-text">${text}</div></div>`;
   }
   if (msg.message_type === 'voice_note') {
     return `<div class="voice-note-player"><audio controls src="${url}"></audio></div>`;
@@ -1898,6 +1934,8 @@ function showTyping(participantId, active) {
 function clearAvatarSpeech(participantId, person) {
   const p = person || participants.get(participantId);
   if (!p?.speechEl) return;
+  p.speechAudio?.pause?.();
+  p.speechAudio = null;
   p.speechEl.classList.remove('show');
   setTimeout(() => {
     if (p.speechEl) p.speechEl.remove();
@@ -1910,7 +1948,9 @@ function showAvatarSpeech(participantId, msg) {
   if (!p) return;
   if (isUserBlocked(p.user_id)) return;
   const isGif = msg?.message_type === 'gif';
-  const text = isGif ? '' : messageSpeechText(msg || {});
+  const isGesture = msg?.message_type === 'gesture';
+  const text = (isGif || isGesture) ? '' : messageSpeechText(msg || {});
+  const gesture = gestureFromMessage(msg);
   const token = (p.speechToken || 0) + 1;
   p.speechToken = token;
   if (!p.speechEl) {
@@ -1921,14 +1961,30 @@ function showAvatarSpeech(participantId, msg) {
   }
   clearTimeout(speechTimers.get(participantId));
   p.speechEl.classList.remove('show');
-  p.speechEl.classList.toggle('chat-bubble-gif', isGif);
+  p.speechEl.classList.toggle('chat-bubble-gif', isGif || isGesture);
+  p.speechEl.classList.toggle('chat-bubble-gesture', isGesture);
+  p.speechEl.onclick = null;
   let timerStarted = false;
   const scheduleHide = () => {
     if (timerStarted || p.speechToken !== token) return;
     timerStarted = true;
-    if (isGif) {
+    if (isGesture && gesture && gesture.audio_path && !gesture.audio_is_silent) {
+      const audio = new Audio(mediaUrl(gesture.audio_path));
+      audio.addEventListener('ended', () => {
+        if (p.speechToken === token) clearAvatarSpeech(participantId, p);
+      }, { once: true });
+      audio.addEventListener('error', () => {
+        if (p.speechToken === token) {
+          speechTimers.set(participantId, setTimeout(() => clearAvatarSpeech(participantId, p), 4200));
+        }
+      }, { once: true });
+      p.speechAudio = audio;
+      audio.play().catch(() => {
+        if (p.speechToken === token) speechTimers.set(participantId, setTimeout(() => clearAvatarSpeech(participantId, p), 4200));
+      });
+    } else if (isGif || isGesture) {
       speechTimers.set(participantId, setTimeout(() => clearAvatarSpeech(participantId, p), 3200));
-      gifLoopDurationMs(msg.content).then(duration => {
+      gifLoopDurationMs(isGesture ? gesture?.gif_path : msg.content).then(duration => {
         if (p.speechToken === token && p.speechEl?.classList.contains('chat-bubble-gif')) {
           clearTimeout(speechTimers.get(participantId));
           speechTimers.set(participantId, setTimeout(() => clearAvatarSpeech(participantId, p), duration));
@@ -1948,11 +2004,23 @@ function showAvatarSpeech(participantId, msg) {
       scheduleHide();
     });
   };
-  if (isGif) {
+  if (isGif || isGesture) {
     const img = document.createElement('img');
-    img.src = mediaUrl(msg.content);
-    img.alt = msg.original_name || 'GIF';
-    p.speechEl.replaceChildren(img);
+    img.src = mediaUrl(isGesture ? gesture?.gif_path : msg.content);
+    img.alt = isGesture ? (gesture?.text || gesture?.name || 'Gesture') : (msg.original_name || 'GIF');
+    if (isGesture) {
+      const caption = document.createElement('div');
+      caption.className = 'chat-bubble-gesture-text';
+      caption.textContent = gesture?.text || gesture?.name || msg.original_name || '';
+      p.speechEl.replaceChildren(img, caption);
+      p.speechEl.onclick = () => {
+        p.speechAudio?.pause?.();
+        p.speechAudio = null;
+        clearAvatarSpeech(participantId, p);
+      };
+    } else {
+      p.speechEl.replaceChildren(img);
+    }
     let revealed = false;
     const revealOnce = () => {
       if (revealed) return;
@@ -2296,12 +2364,12 @@ function closeRoomActionMenu() {
   roomActionMenu?.classList.remove('visible');
 }
 
-function closeEmojiPicker() {
-  emojiPicker.classList.remove('visible');
+function closeMediaPicker() {
+  if (mediaPicker) mediaPicker.hidden = true;
 }
 
-function closeGifPicker() {
-  if (gifPicker) gifPicker.hidden = true;
+function closeEmojiPicker() {
+  closeMediaPicker();
 }
 
 function closeAttachMenu() {
@@ -2315,31 +2383,16 @@ function openEmojiPicker() {
   closeRoomMenu();
   closeRoomActionMenu();
   closeAttachMenu();
-  closeGifPicker();
+  closeMediaPicker();
   const btn = document.getElementById('emoji-btn');
   const r = btn.getBoundingClientRect();
-  emojiPicker.classList.add('visible');
-  const er = emojiPicker.getBoundingClientRect();
-  emojiPicker.style.left = `${Math.max(8, Math.min(r.left, window.innerWidth - er.width - 8))}px`;
-  emojiPicker.style.top = `${Math.max(8, r.top - er.height - 8)}px`;
-}
-
-function openGifPicker() {
-  if (!cfg?.gifPicker?.enabled || !gifPicker) return;
-  closeContextMenu();
-  closeTextContextMenu();
-  closeTabContextMenu();
-  closeRoomMenu();
-  closeRoomActionMenu();
-  closeAttachMenu();
-  closeEmojiPicker();
-  const btn = document.getElementById('gif-btn');
-  const r = btn.getBoundingClientRect();
-  gifPicker.hidden = false;
-  const gr = gifPicker.getBoundingClientRect();
-  gifPicker.style.left = `${Math.max(8, Math.min(r.left - gr.width + r.width, window.innerWidth - gr.width - 8))}px`;
-  gifPicker.style.top = `${Math.max(8, r.top - gr.height - 8)}px`;
-  gifSearchInput?.focus();
+  mediaPicker.hidden = false;
+  const er = mediaPicker.getBoundingClientRect();
+  mediaPicker.style.left = `${Math.max(8, Math.min(r.right - er.width, window.innerWidth - er.width - 8))}px`;
+  mediaPicker.style.top = `${Math.max(8, r.top - er.height - 8)}px`;
+  mediaSearchInput?.focus();
+  if (activeMediaTab === 'gestures') loadGestures();
+  if (activeMediaTab === 'emojis') renderEmojiGrid();
 }
 
 function openRoomMenu() {
@@ -2348,7 +2401,7 @@ function openRoomMenu() {
   closeTabContextMenu();
   closeRoomActionMenu();
   closeAttachMenu();
-  closeGifPicker();
+  closeMediaPicker();
   const btn = document.getElementById('room-menu-btn');
   const r = btn.getBoundingClientRect();
   roomMenu.classList.add('visible');
@@ -2364,7 +2417,7 @@ function openRoomActionMenu() {
   closeTabContextMenu();
   closeRoomMenu();
   closeAttachMenu();
-  closeGifPicker();
+  closeMediaPicker();
   const btn = document.getElementById('room-action-btn');
   const r = btn.getBoundingClientRect();
   document.getElementById('room-action-edit').style.display = cfg.canEditRoom ? 'block' : 'none';
@@ -2396,14 +2449,8 @@ sessionLockForm?.addEventListener('submit', e => {
 
 document.getElementById('emoji-btn').addEventListener('click', e => {
   e.stopPropagation();
-  if (emojiPicker.classList.contains('visible')) closeEmojiPicker();
+  if (!mediaPicker.hidden) closeMediaPicker();
   else openEmojiPicker();
-});
-
-document.getElementById('gif-btn')?.addEventListener('click', e => {
-  e.stopPropagation();
-  if (gifPicker.hidden) openGifPicker();
-  else closeGifPicker();
 });
 
 document.getElementById('attach-btn').addEventListener('click', e => {
@@ -2414,7 +2461,7 @@ document.getElementById('attach-btn').addEventListener('click', e => {
   closeRoomMenu();
   closeRoomActionMenu();
   closeEmojiPicker();
-  closeGifPicker();
+  closeMediaPicker();
   attachMenu.hidden = !attachMenu.hidden;
 });
 
@@ -2428,18 +2475,51 @@ document.getElementById('attach-voice-btn').addEventListener('click', () => {
   startVoiceNote().catch(err => alert(err.message || err));
 });
 
-emojiPicker.querySelectorAll('button').forEach(btn => {
-  btn.addEventListener('click', () => {
-    const input = document.getElementById('chat-input');
-    const start = input.selectionStart ?? input.value.length;
-    const end = input.selectionEnd ?? input.value.length;
-    input.value = (input.value.slice(0, start) + btn.textContent + input.value.slice(end)).slice(0, input.maxLength);
-    const next = start + btn.textContent.length;
-    input.setSelectionRange(Math.min(next, input.value.length), Math.min(next, input.value.length));
-    input.focus();
-    updateComposerState();
-    closeEmojiPicker();
+function insertEmoji(emoji) {
+  const input = document.getElementById('chat-input');
+  const start = input.selectionStart ?? input.value.length;
+  const end = input.selectionEnd ?? input.value.length;
+  input.value = (input.value.slice(0, start) + emoji + input.value.slice(end)).slice(0, input.maxLength);
+  const next = start + emoji.length;
+  input.setSelectionRange(Math.min(next, input.value.length), Math.min(next, input.value.length));
+  input.focus();
+  updateComposerState();
+}
+
+function renderEmojiGrid() {
+  if (!emojiGrid || emojiGrid.dataset.rendered === '1') return;
+  emojiGrid.innerHTML = '';
+  EMOJI_OPTIONS.forEach(emoji => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.textContent = emoji;
+    btn.addEventListener('click', () => insertEmoji(emoji));
+    emojiGrid.appendChild(btn);
   });
+  emojiGrid.dataset.rendered = '1';
+}
+
+function setMediaTab(tab) {
+  activeMediaTab = tab;
+  mediaPicker?.querySelectorAll('[data-media-tab]').forEach(btn => btn.classList.toggle('active', btn.dataset.mediaTab === tab));
+  mediaPicker?.querySelectorAll('.media-panel').forEach(panel => panel.classList.toggle('active', panel.id === `media-panel-${tab}`));
+  if (mediaSearchInput) {
+    mediaSearchInput.placeholder = tab === 'gifs' ? 'Search GIFs' : (tab === 'gestures' ? 'Search gesture text' : 'Search emojis');
+    mediaSearchInput.value = '';
+    mediaSearchInput.style.display = tab === 'emojis' ? 'none' : '';
+  }
+  if (tab === 'gifs' && gifResults && !cfg?.gifPicker?.enabled) {
+    gifResults.innerHTML = '<div class="minor">GIF Selector is not configured.</div>';
+  }
+  if (tab === 'gestures') {
+    gesturePage = 1;
+    loadGestures();
+  }
+  if (tab === 'emojis') renderEmojiGrid();
+}
+
+mediaPicker?.querySelectorAll('[data-media-tab]').forEach(btn => {
+  btn.addEventListener('click', () => setMediaTab(btn.dataset.mediaTab || 'gifs'));
 });
 
 async function searchGifs(query) {
@@ -2478,13 +2558,22 @@ async function searchGifs(query) {
   }
 }
 
-gifSearchInput?.addEventListener('input', e => {
-  clearTimeout(gifSearchTimer);
-  gifSearchTimer = setTimeout(() => searchGifs(e.target.value), 250);
+mediaSearchInput?.addEventListener('input', e => {
+  if (activeMediaTab === 'gifs') {
+    clearTimeout(gifSearchTimer);
+    gifSearchTimer = setTimeout(() => searchGifs(e.target.value), 250);
+  }
+  if (activeMediaTab === 'gestures') {
+    clearTimeout(gestureSearchTimer);
+    gestureSearchTimer = setTimeout(() => {
+      gesturePage = 1;
+      loadGestures();
+    }, 250);
+  }
 });
 
 async function sendGif(result) {
-  closeGifPicker();
+  closeMediaPicker();
   const payload = { session_id: cfg.sessionId, join_token: cfg.myJoinToken, action: 'gif', gif_url: result.url, title: result.title || 'GIF', channel: activeChat };
   const partnerId = activeLinkPartnerId();
   const dmUserId = activeDmUserId();
@@ -2508,6 +2597,200 @@ async function sendGif(result) {
   }
 }
 
+function currentGestureQuery() {
+  return activeMediaTab === 'gestures' ? (mediaSearchInput?.value || '') : '';
+}
+
+async function loadGestures() {
+  if (!gestureGrid) return;
+  gestureGrid.innerHTML = '<div class="gif-loading">Loading gestures...</div>';
+  try {
+    const qs = new URLSearchParams({
+      session_id: cfg.sessionId,
+      join_token: cfg.myJoinToken,
+      page: String(gesturePage),
+      q: currentGestureQuery(),
+    });
+    const data = await fetch(appUrl(`/api/gestures.php?${qs}`)).then(r => r.json());
+    if (data.error) throw new Error(data.error);
+    gestureHasMore = Boolean(data.has_more);
+    if (gesturePageLabel) gesturePageLabel.textContent = `Page ${data.page || gesturePage}`;
+    if (gesturePrev) gesturePrev.disabled = gesturePage <= 1;
+    if (gestureNext) gestureNext.disabled = !gestureHasMore;
+    renderGestureGrid(data.gestures || []);
+  } catch (err) {
+    gestureGrid.innerHTML = `<div class="minor">${esc(err.message || 'Gestures could not load.')}</div>`;
+  }
+}
+
+function gestureTileLabel(gesture) {
+  return gesture.text || gesture.name || 'Gesture';
+}
+
+function renderGestureGrid(gestures) {
+  gestureGrid.innerHTML = '';
+  const uploadTile = document.createElement('button');
+  uploadTile.className = 'gesture-upload-tile';
+  uploadTile.type = 'button';
+  uploadTile.innerHTML = '<span>+</span><small>Upload .agst</small><div class="gesture-upload-progress"><i></i></div>';
+  uploadTile.addEventListener('click', () => gestureFileInput?.click());
+  gestureGrid.appendChild(uploadTile);
+
+  if (!gestures.length) {
+    const empty = document.createElement('div');
+    empty.className = 'gesture-empty';
+    empty.textContent = 'No gestures found.';
+    gestureGrid.appendChild(empty);
+    return;
+  }
+
+  gestures.forEach(gesture => {
+    const tile = document.createElement('div');
+    tile.className = `gesture-tile${gesture.mine ? ' mine' : ''}${gesture.is_public ? ' public' : ''}`;
+    tile.dataset.gestureId = gesture.id;
+    tile.innerHTML = `
+      <button class="gesture-play" type="button" aria-label="Send ${esc(gestureTileLabel(gesture))}">
+        <img src="${esc(mediaUrl(gesture.gif_path || gesture.gif_url))}" alt="${esc(gestureTileLabel(gesture))}">
+      </button>
+      ${gesture.mine ? '<button class="gesture-star" type="button" title="My gesture">★</button>' : ''}
+      <button class="gesture-global" type="button" title="${gesture.is_public ? 'Community gesture' : 'Private gesture'}"${gesture.mine ? '' : ' disabled'}>🌐</button>
+      ${gesture.audio_is_silent ? '' : '<button class="gesture-audio" type="button" title="Play gesture audio"><span>🎧</span></button>'}
+    `;
+    tile.addEventListener('mouseenter', () => {
+      if (gestureTray) gestureTray.textContent = gestureTileLabel(gesture);
+    });
+    tile.addEventListener('mouseleave', () => {
+      if (gestureTray) gestureTray.textContent = '';
+    });
+    tile.querySelector('.gesture-play')?.addEventListener('click', () => sendGesture(gesture));
+    tile.querySelector('.gesture-star')?.addEventListener('click', e => {
+      e.stopPropagation();
+      deleteGesture(gesture);
+    });
+    tile.querySelector('.gesture-global')?.addEventListener('click', e => {
+      e.stopPropagation();
+      if (gesture.mine) toggleGesturePublic(gesture, !gesture.is_public);
+    });
+    tile.querySelector('.gesture-audio')?.addEventListener('click', e => {
+      e.stopPropagation();
+      toggleGestureAudio(gesture, e.currentTarget);
+    });
+    gestureGrid.appendChild(tile);
+  });
+}
+
+async function uploadGesture(file) {
+  const uploadTile = gestureGrid?.querySelector('.gesture-upload-tile');
+  const bar = uploadTile?.querySelector('.gesture-upload-progress i');
+  if (uploadTile) uploadTile.classList.add('uploading');
+  if (bar) bar.style.width = '0%';
+  const formData = new FormData();
+  formData.append('session_id', cfg.sessionId);
+  formData.append('join_token', cfg.myJoinToken);
+  formData.append('gesture', file);
+  await new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.upload.addEventListener('progress', event => {
+      if (bar && event.lengthComputable) bar.style.width = `${Math.max(4, Math.round((event.loaded / event.total) * 100))}%`;
+    });
+    xhr.addEventListener('load', () => {
+      let data = {};
+      try { data = JSON.parse(xhr.responseText || '{}'); } catch { reject(new Error('Gesture response was not readable.')); return; }
+      if (xhr.status >= 200 && xhr.status < 400 && !data.error) resolve(data);
+      else reject(new Error(data.error || 'Gesture upload failed.'));
+    });
+    xhr.addEventListener('error', () => reject(new Error('Gesture upload failed.')));
+    xhr.open('POST', appUrl('/api/gestures.php'));
+    xhr.send(formData);
+  });
+  if (bar) bar.style.width = '100%';
+  await loadGestures();
+}
+
+gestureFileInput?.addEventListener('change', () => {
+  const file = gestureFileInput.files && gestureFileInput.files[0];
+  gestureFileInput.value = '';
+  if (!file) return;
+  uploadGesture(file).catch(err => alert(err.message || err));
+});
+
+gesturePrev?.addEventListener('click', () => {
+  if (gesturePage <= 1) return;
+  gesturePage -= 1;
+  loadGestures();
+});
+
+gestureNext?.addEventListener('click', () => {
+  if (!gestureHasMore) return;
+  gesturePage += 1;
+  loadGestures();
+});
+
+async function toggleGesturePublic(gesture, isPublic) {
+  try {
+    await apiPost('/api/gestures.php', { session_id: cfg.sessionId, join_token: cfg.myJoinToken, action: 'toggle_public', gesture_id: gesture.id, is_public: isPublic });
+    await loadGestures();
+  } catch (err) {
+    alert(err.message || err);
+  }
+}
+
+async function deleteGesture(gesture) {
+  const msg = gesture.is_public
+    ? 'Delete this gesture? It is public, so this removes it from everyone.'
+    : 'Delete this gesture?';
+  if (!confirm(msg)) return;
+  try {
+    await apiPost('/api/gestures.php', { session_id: cfg.sessionId, join_token: cfg.myJoinToken, action: 'delete', gesture_id: gesture.id });
+    await loadGestures();
+  } catch (err) {
+    alert(err.message || err);
+  }
+}
+
+function toggleGestureAudio(gesture, btn) {
+  if (!gesture.audio_path) return;
+  if (activeGestureAudio?.btn === btn) {
+    activeGestureAudio.audio.pause();
+    activeGestureAudio = null;
+    btn.classList.remove('playing');
+    btn.style.setProperty('--progress', '0deg');
+    return;
+  }
+  if (activeGestureAudio) {
+    activeGestureAudio.audio.pause();
+    activeGestureAudio.btn.classList.remove('playing');
+    activeGestureAudio.btn.style.setProperty('--progress', '0deg');
+  }
+  const audio = new Audio(mediaUrl(gesture.audio_path));
+  activeGestureAudio = { audio, btn };
+  btn.classList.add('playing');
+  const update = () => {
+    if (activeGestureAudio?.audio !== audio) return;
+    const ratio = audio.duration ? audio.currentTime / audio.duration : 0;
+    btn.style.setProperty('--progress', `${Math.round(ratio * 360)}deg`);
+    if (!audio.paused && !audio.ended) requestAnimationFrame(update);
+  };
+  audio.addEventListener('ended', () => {
+    btn.classList.remove('playing');
+    btn.style.setProperty('--progress', '0deg');
+    if (activeGestureAudio?.audio === audio) activeGestureAudio = null;
+  }, { once: true });
+  audio.play().then(update).catch(err => alert(err.message || 'Could not play audio.'));
+}
+
+async function sendGesture(gesture) {
+  closeMediaPicker();
+  const payload = { session_id: cfg.sessionId, join_token: cfg.myJoinToken, action: 'gesture', gesture_id: gesture.id, channel: 'room' };
+  try {
+    const msg = await apiPost('/api/messages.php', payload);
+    switchChat('room');
+    renderMessage(msg, true);
+  } catch (err) {
+    alert(err.message || err);
+  }
+}
+
 document.addEventListener('click', e => {
   if (!ctxMenu.contains(e.target)) closeContextMenu();
   if (!textCtxMenu.contains(e.target)) closeTextContextMenu();
@@ -2515,8 +2798,7 @@ document.addEventListener('click', e => {
   if (tabCtxMenu && !tabCtxMenu.contains(e.target)) closeTabContextMenu();
   if (!roomMenu.contains(e.target) && !e.target.closest('#room-menu-btn')) closeRoomMenu();
   if (roomActionMenu && !roomActionMenu.contains(e.target) && !e.target.closest('#room-action-btn')) closeRoomActionMenu();
-  if (!emojiPicker.contains(e.target) && !e.target.closest('#emoji-btn')) closeEmojiPicker();
-  if (gifPicker && !gifPicker.contains(e.target) && !e.target.closest('#gif-btn')) closeGifPicker();
+  if (mediaPicker && !mediaPicker.contains(e.target) && !e.target.closest('#emoji-btn')) closeMediaPicker();
   if (!attachMenu.contains(e.target) && !e.target.closest('#attach-btn')) closeAttachMenu();
 });
 document.addEventListener('keydown', e => {
@@ -2527,8 +2809,7 @@ document.addEventListener('keydown', e => {
     closeTabContextMenu();
     closeRoomMenu();
     closeRoomActionMenu();
-    closeEmojiPicker();
-    closeGifPicker();
+    closeMediaPicker();
     closeAttachMenu();
     closeLinkIconModal();
     document.getElementById('host-warn-modal')?.classList.remove('open');
@@ -3457,8 +3738,6 @@ async function bootRoom() {
   if (cfg.error) throw new Error(cfg.error);
   lastEventId = cfg.lastEventId || 0;
   lastCommunityEventId = cfg.lastCommunityEventId || 0;
-  const gifBtn = document.getElementById('gif-btn');
-  if (gifBtn) gifBtn.hidden = !cfg.gifPicker?.enabled;
   restoreSessionLock();
   (cfg.blockedUserIds || []).forEach(id => blockedUserIds.add(Number(id)));
   Object.entries(cfg.linkIcons || {}).forEach(([key, icon]) => linkIcons.set(key, icon || 'plus'));

@@ -388,6 +388,23 @@ function migrate(PDO $pdo): void {
             value TEXT NOT NULL
         );
 
+        CREATE TABLE IF NOT EXISTS gestures (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            public_id TEXT NOT NULL UNIQUE,
+            owner_user_id INTEGER NOT NULL,
+            name TEXT NOT NULL,
+            gesture_text TEXT NOT NULL,
+            gif_path TEXT NOT NULL,
+            audio_path TEXT DEFAULT NULL,
+            audio_is_silent INTEGER NOT NULL DEFAULT 1,
+            is_public INTEGER NOT NULL DEFAULT 0,
+            file_size INTEGER DEFAULT NULL,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            deleted_at TEXT DEFAULT NULL,
+            FOREIGN KEY(owner_user_id) REFERENCES users(id) ON DELETE CASCADE
+        );
+
         CREATE TABLE IF NOT EXISTS tool_logs (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             actor_user_id INTEGER DEFAULT NULL,
@@ -638,6 +655,26 @@ function set_app_setting(PDO $pdo, string $key, string $value): void {
         : 'INSERT INTO app_settings (setting_key, value) VALUES (?,?) ON CONFLICT(setting_key) DO UPDATE SET value = excluded.value'
     );
     $stmt->execute([$key, $value]);
+}
+
+function gesture_snapshot(array $gesture): array {
+    return [
+        'id' => (int)$gesture['id'],
+        'public_id' => $gesture['public_id'],
+        'name' => $gesture['name'],
+        'text' => $gesture['gesture_text'],
+        'gif_path' => $gesture['gif_path'],
+        'audio_path' => $gesture['audio_path'] ?? null,
+        'audio_is_silent' => !empty($gesture['audio_is_silent']),
+        'is_public' => !empty($gesture['is_public']),
+        'owner_user_id' => (int)$gesture['owner_user_id'],
+    ];
+}
+
+function message_gesture(?string $content): ?array {
+    if (!$content) return null;
+    $decoded = json_decode($content, true);
+    return is_array($decoded) ? $decoded : null;
 }
 
 function log_tool(PDO $pdo, ?int $actorUserId, string $action, ?int $targetUserId = null, ?int $roomId = null, ?string $detail = null): void {

@@ -164,9 +164,10 @@ if ($action === 'delete') {
     json_out(['ok' => true, 'message_id' => $messageId, 'deleted_at' => $deletedAt]);
 }
 
-$messageType = $action === 'gif' ? 'gif' : 'text';
-$mimeType = $messageType === 'gif' ? 'image/gif' : null;
+$messageType = $action === 'gif' ? 'gif' : ($action === 'gesture' ? 'gesture' : 'text');
+$mimeType = $messageType === 'gif' ? 'image/gif' : ($messageType === 'gesture' ? 'application/x-chatspace-gesture' : null);
 $originalName = null;
+$snapshot = null;
 if ($messageType === 'gif') {
     $content = trim((string)($body['gif_url'] ?? ''));
     $originalName = trim((string)($body['title'] ?? 'GIF'));
@@ -177,12 +178,22 @@ if ($messageType === 'gif') {
     if (!str_contains($host, 'giphy.com') && !str_contains($host, 'tenor.com') && !str_contains($host, 'tenor.googleapis.com')) {
         json_out(['error' => 'Unsupported GIF provider'], 400);
     }
+} elseif ($messageType === 'gesture') {
+    $gestureId = (int)($body['gesture_id'] ?? 0);
+    if (!$gestureId) json_out(['error' => 'Gesture required'], 400);
+    $stmt = $pdo->prepare('SELECT * FROM gestures WHERE id = ? AND deleted_at IS NULL AND (owner_user_id = ? OR is_public = 1) LIMIT 1');
+    $stmt->execute([$gestureId, (int)$participant['user_id']]);
+    $gesture = $stmt->fetch();
+    if (!$gesture) json_out(['error' => 'Gesture unavailable'], 404);
+    $snapshot = gesture_snapshot($gesture);
+    $content = json_encode($snapshot, JSON_UNESCAPED_SLASHES);
+    $originalName = $snapshot['text'] ?: $snapshot['name'];
 } else {
     $content = trim((string)($body['content'] ?? ''));
 }
 if ($content === '') json_out(['error' => 'Message required'], 400);
 $contentLength = function_exists('mb_strlen') ? mb_strlen($content, 'UTF-8') : strlen($content);
-if ($contentLength > 1000) json_out(['error' => 'Message too long'], 400);
+if ($messageType === 'text' && $contentLength > 1000) json_out(['error' => 'Message too long'], 400);
 $maxPerSecond = app_setting_float($pdo, 'chat_posts_per_second', 3);
 $rateCutoff = gmdate('Y-m-d H:i:s', time() - 1);
 $roomRecent = $pdo->prepare("SELECT COUNT(*) FROM messages WHERE participant_id = ? AND sent_at >= ?");
@@ -211,6 +222,7 @@ if ($channel === 'community') {
         'role' => $authorContext['role'],
         'is_owner' => $authorContext['is_owner'],
         'content' => $content,
+        'gesture' => $messageType === 'gesture' ? $snapshot : null,
         'message_type' => $messageType,
         'mime_type' => $mimeType,
         'original_name' => $originalName,
@@ -250,6 +262,7 @@ if ($channel === 'link') {
         'role' => $authorContext['role'],
         'is_owner' => $authorContext['is_owner'],
         'content' => $content,
+        'gesture' => $messageType === 'gesture' ? $snapshot : null,
         'message_type' => $messageType,
         'mime_type' => $mimeType,
         'original_name' => $originalName,
@@ -295,6 +308,7 @@ if ($channel === 'dm') {
         'role' => $authorContext['role'],
         'is_owner' => false,
         'content' => $content,
+        'gesture' => $messageType === 'gesture' ? $snapshot : null,
         'message_type' => $messageType,
         'mime_type' => $mimeType,
         'original_name' => $originalName,
@@ -316,6 +330,7 @@ $msg = [
     'role' => $authorContext['role'],
     'is_owner' => $authorContext['is_owner'],
     'content' => $content,
+    'gesture' => $messageType === 'gesture' ? $snapshot : null,
     'message_type' => $messageType,
     'mime_type' => $mimeType,
     'original_name' => $originalName,

@@ -85,8 +85,7 @@ $lastEventId = (int)$pdo->query('SELECT COALESCE(MAX(id), 0) FROM events WHERE s
         <textarea id="chat-input" maxlength="1000" rows="1" autocomplete="off" placeholder="Message <?= e($room['name']) ?>"></textarea>
         <div class="composer-actions">
           <span class="char-counter" id="char-counter">0/1000</span>
-          <button class="composer-icon-btn gif-btn" id="gif-btn" type="button" aria-label="GIF picker" hidden><img src="<?= e(app_url('/assets/images/input-gif.png')) ?>" alt=""></button>
-          <button class="composer-icon-btn emoji-btn" id="emoji-btn" type="button" aria-label="Emoji picker"><img src="<?= e(app_url('/assets/images/input-emoji.png')) ?>" alt=""></button>
+          <button class="composer-icon-btn emoji-btn" id="emoji-btn" type="button" aria-label="Media palette"><img src="<?= e(app_url('/assets/images/input-emoji.png')) ?>" alt=""></button>
           <button class="send-btn" type="submit" aria-label="Send message"><img src="<?= e(app_url('/assets/images/input-send.png')) ?>" alt=""></button>
         </div>
       </form>
@@ -367,18 +366,32 @@ $lastEventId = (int)$pdo->query('SELECT COALESCE(MAX(id), 0) FROM events WHERE s
     <button class="btn btn-primary" type="submit">Unlock Session</button>
   </form>
 </div>
-<div id="emoji-picker">
-  <button type="button">😀</button><button type="button">😂</button><button type="button">😌</button><button type="button">😏</button>
-  <button type="button">😉</button><button type="button">😈</button><button type="button">🖤</button><button type="button">✨</button>
-  <button type="button">🔥</button><button type="button">💜</button><button type="button">👍</button><button type="button">❤️</button>
-  <button type="button">🤣</button><button type="button">😭</button><button type="button">🥰</button><button type="button">👀</button>
-</div>
-<div id="gif-picker" hidden>
-  <div class="gif-search-row">
-    <input id="gif-search-input" type="search" placeholder="Search GIFs" autocomplete="off">
+<div id="media-picker" hidden>
+  <div class="media-picker-tabs">
+    <button class="active" type="button" data-media-tab="gifs">GIF Selector</button>
+    <button type="button" data-media-tab="gestures">Gestures</button>
+    <button type="button" data-media-tab="emojis">Emojis</button>
   </div>
-  <div class="gif-results" id="gif-results">
-    <div class="minor">Search for a GIF.</div>
+  <div class="media-search-row">
+    <input id="media-search-input" type="search" placeholder="Search GIFs" autocomplete="off">
+  </div>
+  <div class="media-panel active" id="media-panel-gifs">
+    <div class="gif-results" id="gif-results">
+      <div class="minor">Search for a GIF.</div>
+    </div>
+  </div>
+  <div class="media-panel" id="media-panel-gestures">
+    <input class="hidden-file-input" id="gesture-file-input" type="file" accept=".agst,application/zip">
+    <div class="gesture-grid" id="gesture-grid"></div>
+    <div class="gesture-pager">
+      <button class="btn" id="gesture-prev" type="button">Previous</button>
+      <span id="gesture-page-label">Page 1</span>
+      <button class="btn" id="gesture-next" type="button">Next</button>
+    </div>
+    <div class="gesture-tray" id="gesture-tray"></div>
+  </div>
+  <div class="media-panel" id="media-panel-emojis">
+    <div class="emoji-grid" id="emoji-grid"></div>
   </div>
 </div>
 <input type="file" id="avatar-file-input" accept="image/jpeg,image/png,image/gif,image/webp" style="display:none">

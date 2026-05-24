@@ -63,6 +63,9 @@ function community_message_payload(array $m, string $channel, array $reactionsMa
         'sent_at' => $m['sent_at'],
         'reactions' => $reactionsMap[(int)$m['id']] ?? [],
     ];
+    if (($row['message_type'] ?? 'text') === 'gesture') {
+        $row['gesture'] = message_gesture((string)$m['content']);
+    }
     if (isset($m['link_key'])) {
         $row[$channel === 'dm' ? 'dm_key' : 'link_key'] = $m['link_key'];
     }
@@ -155,6 +158,9 @@ $messages = array_map(function(array $m) use ($canModerateMessages, $reactionsMa
         'sent_at' => $m['sent_at'],
         'reactions' => $reactionsMap[(int)$m['id']] ?? [],
     ];
+    if (($row['message_type'] ?? 'text') === 'gesture') {
+        $row['gesture'] = message_gesture((string)$m['content']);
+    }
     if ($canModerateMessages) {
         $row['original_content'] = $m['original_content'] ?? null;
     }

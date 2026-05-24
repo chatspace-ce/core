@@ -38,6 +38,7 @@ ChatSpace Community Edition gives communities self-hosted shared rooms with avat
 - Locate Friends with room navigation and DM actions.
 - Games: Chess and Checkers.
 - Voice chat, voice notes, file attachments, image/PDF/document uploads, reactions, edit/delete history, and moderator-visible deleted messages.
+- `.agst` Gestures with animated GIF playback, optional audio, private/published palettes, and shared room-stage playback.
 - Moderation tools for room owners, guides, developers, and admins, including warn, kick, room ejection lists, blocks, and community ejection for higher staff roles.
 - Admin dashboard for users, roles, system limits, backups, restores, tool logs, and block/ejection cleanup.
 - Setup flow with SQLite recommended and optional MySQL/MariaDB support.
@@ -62,6 +63,10 @@ That promise is being kept here.
 ChatSpace Community Edition is led by NeO/Mark from ChatSpace, working in collaboration with Catie Clark + Lyra AI.
 
 See [AUTHORS.md](AUTHORS.md) for project credits.
+
+## Open Standards Attribution
+
+AstroPlaces Chat proposed the `.agst` Gesture format adopted here as an open standard for portable animated gestures with text and optional audio, following the Astro Places Package Format with `toc.json` manifests.
 
 ## License
 
