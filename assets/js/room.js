@@ -327,6 +327,15 @@ function avatarUrl(p) {
   return mediaUrl(p.avatar_path || cfg.avatarPresets.Default);
 }
 
+function messageAvatarUrl(msg, participant = null) {
+  if (participant) return avatarUrl(participant);
+  if (isUserBlocked(msg?.user_id)) return appUrl('/assets/images/baghead.png');
+  if (msg?.avatar_url) return mediaUrl(msg.avatar_url);
+  if (msg?.avatar_path?.startsWith('preset:')) return cfg.avatarPresets[msg.avatar_path.slice(7)] || cfg.avatarPresets.Default;
+  if (msg?.avatar_path) return mediaUrl(msg.avatar_path);
+  return cfg.avatarPresets.Default;
+}
+
 function isUserBlocked(userId) {
   return blockedUserIds.has(Number(userId));
 }
@@ -1789,7 +1798,7 @@ function appendMessageEl(msg) {
   const original = canShowOriginal ? `<details class="msg-original"><summary>Show original</summary><div>${esc(msg.original_content)}</div></details>` : '';
   const body = msg.is_deleted && cfg.canModerateMessages ? `<div class="msg-deleted-body">${messageBodyHtml(msg)}</div>` : messageBodyHtml(msg);
   const optionsButton = msg.channel === 'game' ? '' : '<button class="msg-options" type="button" aria-label="Message options">⋯</button>';
-  row.innerHTML = `<div class="bubble"><div class="msg-head"><div class="msg-name ${participantRoleClass(author)}" title="${esc(participantRoleLabel(author))}"><img src="${esc(p ? avatarUrl(p) : (msg.avatar_url || cfg.avatarPresets.Default))}" alt=""><span class="msg-name-copy"><span class="msg-name-text">${esc(p ? displayNameFor(p) : msg.display_name)}</span>${flagTime}</span></div>${optionsButton}</div><div class="msg-content">${body}</div>${deletedMeta}${original}<div class="msg-meta-line">${renderReactions(msg)}</div></div>`;
+  row.innerHTML = `<div class="bubble"><div class="msg-head"><div class="msg-name ${participantRoleClass(author)}" title="${esc(participantRoleLabel(author))}"><img src="${esc(messageAvatarUrl(msg, p))}" alt=""><span class="msg-name-copy"><span class="msg-name-text">${esc(p ? displayNameFor(p) : msg.display_name)}</span>${flagTime}</span></div>${optionsButton}</div><div class="msg-content">${body}</div>${deletedMeta}${original}<div class="msg-meta-line">${renderReactions(msg)}</div></div>`;
   row.querySelector('.msg-options')?.addEventListener('click', e => {
     e.stopPropagation();
     openMessageActionMenu(e.clientX, e.clientY, msg);

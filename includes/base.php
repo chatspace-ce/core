@@ -251,6 +251,10 @@ function migrate(PDO $pdo): void {
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             session_id INTEGER NOT NULL,
             participant_id INTEGER,
+            user_id INTEGER DEFAULT NULL,
+            display_name TEXT DEFAULT NULL,
+            avatar_path TEXT DEFAULT NULL,
+            avatar_url TEXT DEFAULT NULL,
             content TEXT NOT NULL,
             original_content TEXT DEFAULT NULL,
             message_type TEXT NOT NULL DEFAULT 'text',
@@ -263,7 +267,8 @@ function migrate(PDO $pdo): void {
             is_deleted INTEGER NOT NULL DEFAULT 0,
             sent_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY(session_id) REFERENCES room_sessions(id) ON DELETE CASCADE,
-            FOREIGN KEY(participant_id) REFERENCES participants(id) ON DELETE SET NULL
+            FOREIGN KEY(participant_id) REFERENCES participants(id) ON DELETE SET NULL,
+            FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE SET NULL
         );
 
         CREATE TABLE IF NOT EXISTS message_reactions (
@@ -516,6 +521,18 @@ function migrate(PDO $pdo): void {
         } catch (Throwable $e) {
             // Existing installs already have this column.
         }
+        foreach ([
+            'user_id INTEGER DEFAULT NULL',
+            'display_name VARCHAR(191) DEFAULT NULL',
+            'avatar_path VARCHAR(512) DEFAULT NULL',
+            'avatar_url VARCHAR(512) DEFAULT NULL',
+        ] as $definition) {
+            try {
+                $pdo->exec('ALTER TABLE messages ADD COLUMN ' . $definition);
+            } catch (Throwable $e) {
+                // Existing installs already have this column.
+            }
+        }
     } else {
         $pdo->exec($schema);
     }
@@ -585,6 +602,18 @@ function migrate(PDO $pdo): void {
     $messageColNames = array_map(fn(array $col): string => (string)$col['name'], $messageCols);
     if (!in_array('message_type', $messageColNames, true)) {
         $pdo->exec("ALTER TABLE messages ADD COLUMN message_type TEXT NOT NULL DEFAULT 'text'");
+    }
+    if (!in_array('user_id', $messageColNames, true)) {
+        $pdo->exec('ALTER TABLE messages ADD COLUMN user_id INTEGER DEFAULT NULL');
+    }
+    if (!in_array('display_name', $messageColNames, true)) {
+        $pdo->exec('ALTER TABLE messages ADD COLUMN display_name TEXT DEFAULT NULL');
+    }
+    if (!in_array('avatar_path', $messageColNames, true)) {
+        $pdo->exec('ALTER TABLE messages ADD COLUMN avatar_path TEXT DEFAULT NULL');
+    }
+    if (!in_array('avatar_url', $messageColNames, true)) {
+        $pdo->exec('ALTER TABLE messages ADD COLUMN avatar_url TEXT DEFAULT NULL');
     }
     if (!in_array('original_content', $messageColNames, true)) {
         $pdo->exec('ALTER TABLE messages ADD COLUMN original_content TEXT DEFAULT NULL');

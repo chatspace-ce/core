@@ -54,11 +54,12 @@ if (!move_uploaded_file($tmpName, $target)) {
 }
 
 $publicPath = '/assets/uploads/voice/' . $filename;
+$avatarUrl = $participant['webcam_path'] ?: resolve_avatar($participant['avatar_path']);
 $stmt = $pdo->prepare(
-    "INSERT INTO messages (session_id, participant_id, content, message_type, file_size, mime_type, original_name)
-     VALUES (?,?,?,?,?,?,?)"
+    "INSERT INTO messages (session_id, participant_id, user_id, display_name, avatar_path, avatar_url, content, message_type, file_size, mime_type, original_name)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?)"
 );
-$stmt->execute([$sessionId, (int)$participant['id'], $publicPath, 'voice_note', (int)$file['size'], $mimeType, 'Voice Note']);
+$stmt->execute([$sessionId, (int)$participant['id'], (int)$participant['user_id'], $participant['display_name'], $participant['avatar_path'], $avatarUrl, $publicPath, 'voice_note', (int)$file['size'], $mimeType, 'Voice Note']);
 $id = (int)$pdo->lastInsertId();
 
 $msg = [
@@ -66,7 +67,8 @@ $msg = [
     'participant_id' => (int)$participant['id'],
     'user_id' => (int)$participant['user_id'],
     'display_name' => $participant['display_name'],
-    'avatar_url' => $participant['webcam_path'] ?: resolve_avatar($participant['avatar_path']),
+    'avatar_path' => $participant['avatar_path'],
+    'avatar_url' => $avatarUrl,
     'role' => $authorContext['role'],
     'is_owner' => $authorContext['is_owner'],
     'content' => $publicPath,

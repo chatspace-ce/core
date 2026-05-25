@@ -104,12 +104,16 @@ $participants = array_map(function(array $p) use ($roomOwnerId): array {
 }, $stmt->fetchAll());
 
 $stmt = $pdo->prepare(
-    'SELECT m.*, p.display_name, p.avatar_path, p.webcam_path, p.user_id AS author_user_id,
+    'SELECT m.*,
+            COALESCE(p.display_name, m.display_name, u.display_name) AS author_display_name,
+            COALESCE(p.avatar_path, m.avatar_path, u.avatar_path) AS author_avatar_path,
+            COALESCE(p.webcam_path, m.avatar_url) AS author_avatar_url,
+            COALESCE(p.user_id, m.user_id) AS author_user_id,
             u.role AS author_role,
-            CASE WHEN p.user_id = ? THEN 1 ELSE 0 END AS author_is_owner
+            CASE WHEN COALESCE(p.user_id, m.user_id) = ? THEN 1 ELSE 0 END AS author_is_owner
      FROM messages m
      LEFT JOIN participants p ON p.id = m.participant_id
-     LEFT JOIN users u ON u.id = p.user_id
+     LEFT JOIN users u ON u.id = COALESCE(p.user_id, m.user_id)
      WHERE m.session_id = ?
        AND (? = 1 OR COALESCE(m.is_deleted, 0) = 0)
      ORDER BY m.sent_at ASC LIMIT 120'
@@ -143,8 +147,9 @@ $messages = array_map(function(array $m) use ($canModerateMessages, $reactionsMa
         'id' => (int)$m['id'],
         'participant_id' => $m['participant_id'] ? (int)$m['participant_id'] : null,
         'user_id' => $m['author_user_id'] ? (int)$m['author_user_id'] : null,
-        'display_name' => $m['display_name'] ?: 'Someone',
-        'avatar_url' => ($m['webcam_path'] ?: resolve_avatar($m['avatar_path'] ?? 'preset:Default')),
+        'display_name' => $m['author_display_name'] ?: 'Someone',
+        'avatar_path' => $m['author_avatar_path'] ?? null,
+        'avatar_url' => ($m['author_avatar_url'] ?: resolve_avatar($m['author_avatar_path'] ?? 'preset:Default')),
         'role' => $m['author_role'] ?: 'user',
         'is_owner' => !empty($m['author_is_owner']),
         'content' => $m['content'],

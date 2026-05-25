@@ -318,15 +318,17 @@ if ($channel === 'dm') {
     json_out($msg);
 }
 
-$stmt = $pdo->prepare('INSERT INTO messages (session_id, participant_id, content, message_type, mime_type, original_name) VALUES (?,?,?,?,?,?)');
-$stmt->execute([$sessionId, (int)$participant['id'], $content, $messageType, $mimeType, $originalName]);
+$avatarUrl = $participant['webcam_path'] ?: resolve_avatar($participant['avatar_path']);
+$stmt = $pdo->prepare('INSERT INTO messages (session_id, participant_id, user_id, display_name, avatar_path, avatar_url, content, message_type, mime_type, original_name) VALUES (?,?,?,?,?,?,?,?,?,?)');
+$stmt->execute([$sessionId, (int)$participant['id'], (int)$participant['user_id'], $participant['display_name'], $participant['avatar_path'], $avatarUrl, $content, $messageType, $mimeType, $originalName]);
 $id = (int)$pdo->lastInsertId();
 $msg = [
     'id' => $id,
     'participant_id' => (int)$participant['id'],
     'user_id' => (int)$participant['user_id'],
     'display_name' => $participant['display_name'],
-    'avatar_url' => $participant['webcam_path'] ?: resolve_avatar($participant['avatar_path']),
+    'avatar_path' => $participant['avatar_path'],
+    'avatar_url' => $avatarUrl,
     'role' => $authorContext['role'],
     'is_owner' => $authorContext['is_owner'],
     'content' => $content,
