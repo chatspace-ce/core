@@ -75,9 +75,13 @@ $lastEventId = (int)$pdo->query('SELECT COALESCE(MAX(id), 0) FROM events WHERE s
         <div class="game-stage-head">
           <div>
             <div class="side-title">Game</div>
-            <strong id="game-stage-title">Game</strong>
+            <strong class="game-stage-title"><img id="game-stage-icon" src="" alt="" hidden><span id="game-stage-title">Game</span></strong>
           </div>
-          <button class="window-close" id="game-close" type="button" aria-label="Close game">×</button>
+          <div class="game-stage-actions">
+            <button class="btn" id="game-rematch" type="button">Play Again</button>
+            <button class="btn btn-danger" id="game-resign" type="button">Resign</button>
+            <button class="window-close" id="game-close" type="button" aria-label="Close game">×</button>
+          </div>
         </div>
         <div class="game-stage-body">
           <aside class="game-player-card" id="game-player-one">

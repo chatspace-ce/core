@@ -1179,7 +1179,8 @@ function renderPeople() {
   const makePersonBits = p => {
     const game = gameForParticipant(p);
     const gameBadge = game ? `<span class="user-game-badge" title="${esc(gameName(game.game_type))}"><img src="${esc(appUrl(`/assets/images/${gamePath(game.game_type)}-icon.png`))}" alt=""></span>` : '';
-    return `<span class="user-avatar-wrap"><img src="${esc(avatarUrl(p))}" alt=""><span class="status-dot ${p.online ? 'on' : ''}"></span>${gameBadge}</span><div><strong>${esc(displayNameFor(p))}</strong><div class="minor">${p.id === cfg.myParticipantId ? 'You' : (p.online ? 'Online' : 'Away')}</div></div>`;
+    const nameIcon = game ? `<img class="person-game-name-icon" src="${esc(gameIconUrl(game.game_type))}" alt="" title="${esc(gameName(game.game_type))}">` : '';
+    return `<span class="user-avatar-wrap"><img src="${esc(avatarUrl(p))}" alt=""><span class="status-dot ${p.online ? 'on' : ''}"></span>${gameBadge}</span><div><strong class="person-name-line">${nameIcon}<span>${esc(displayNameFor(p))}</span></strong><div class="minor">${p.id === cfg.myParticipantId ? 'You' : (p.online ? 'Online' : 'Away')}</div></div>`;
   };
   people.forEach(p => {
     if (rendered.has(p.id)) return;
@@ -1339,6 +1340,7 @@ function switchChat(chatKey) {
   stopTypingNow();
   stopGameTypingNow();
   activeChat = chatKey;
+  setGameLayerVisibility();
   renderActiveChat();
 }
 
@@ -3450,14 +3452,18 @@ async function loadGames() {
     activeGames.set(a.lobby_code, a);
     const row = document.createElement('div');
     row.className = `game-row${activeGame?.lobby_code === a.lobby_code ? ' active' : ''}`;
+    const inGame = (a.players || []).some(player => Number(player.participant_id) === Number(cfg.myParticipantId));
     const players = (a.players || []).map(player => `<img src="${esc(mediaUrl(player.avatar_url))}" alt="${esc(player.display_name)}" title="${esc(player.display_name)}">`).join('');
-    row.innerHTML = `<div class="game-row-main"><strong>${esc(gameName(a.game_type))}</strong><div class="minor">Started by ${esc(a.started_by_name)}</div><div class="game-row-players">${players || '<span class="minor">Waiting for players</span>'}</div></div><button class="btn">Open</button>`;
-    row.querySelector('button').addEventListener('click', () => openGame(a));
+    const action = inGame ? '<span class="game-row-state">In-game</span>' : '<button class="btn">Open</button>';
+    row.innerHTML = `<div class="game-row-main"><strong class="game-row-title"><img src="${esc(gameIconUrl(a.game_type))}" alt="">${esc(gameName(a.game_type))}</strong><div class="minor">Started by ${esc(a.started_by_name)}</div><div class="game-row-players">${players || '<span class="minor">Waiting for players</span>'}</div></div>${action}`;
+    row.querySelector('button')?.addEventListener('click', () => openGame(a));
+    if (inGame) row.addEventListener('click', () => openGame(a));
     gameListEl.appendChild(row);
   });
   if (activeGame && activeGames.has(activeGame.lobby_code)) {
     activeGame = Object.assign(activeGame, activeGames.get(activeGame.lobby_code));
     updateGameStagePlayers();
+    setGameLayerVisibility();
   } else if (activeGame) {
     hideGameOverlay();
   }
@@ -3471,6 +3477,21 @@ function gameName(type) {
 
 function gamePath(type) {
   return ({ chess: 'chess', checkers: 'checkers' })[type] || type;
+}
+
+function gameIconUrl(type) {
+  return appUrl(`/assets/images/${gamePath(type)}-icon.png`);
+}
+
+function gameSeatRole(type, seat) {
+  if (type === 'chess') return Number(seat) === 1 ? 'White' : 'Black';
+  if (type === 'checkers') return Number(seat) === 1 ? 'Red' : 'White';
+  return `Player ${seat}`;
+}
+
+function setGameLayerVisibility() {
+  if (!gameStage) return;
+  gameStage.hidden = !(activeGame && activeChat === gameChatKey(activeGame.lobby_code));
 }
 
 async function openGame(a) {
@@ -3489,8 +3510,12 @@ async function openGame(a) {
     console.warn(err);
   }
   document.getElementById('game-stage-title').textContent = gameName(activeGame.game_type);
+  const stageIcon = document.getElementById('game-stage-icon');
+  if (stageIcon) {
+    stageIcon.src = gameIconUrl(activeGame.game_type);
+    stageIcon.hidden = false;
+  }
   gameFrame.src = appUrl(`/games/${gamePath(activeGame.game_type)}/index.html?lobby=${encodeURIComponent(activeGame.lobby_code)}&user=${cfg.myParticipantId}`);
-  gameStage.hidden = false;
   updateGameStagePlayers();
   renderLinkTabs();
   switchChat(`game:${activeGame.lobby_code}`);
@@ -3540,7 +3565,10 @@ function updateGameStagePlayers() {
     const sub = card.querySelector('.minor');
     if (img) img.src = mediaUrl(player?.avatar_url || appUrl('/assets/images/baghead.png'));
     if (name) name.textContent = player?.display_name || 'Waiting';
-    if (sub) sub.textContent = player ? label : `${label} open`;
+    if (sub) {
+      sub.className = `minor game-player-role${player && Number(player.participant_id) === Number(cfg.myParticipantId) ? ' is-you' : ''}`;
+      sub.textContent = player ? gameSeatRole(activeGame.game_type, player.seat || (label === 'Player 1' ? 1 : 2)) : `${label} open`;
+    }
     card.dataset.participantId = player?.participant_id || '';
     card.classList.toggle('typing', player && gameTypingIds.has(Number(player.participant_id)));
   });
@@ -3633,6 +3661,14 @@ function handleGameTypingInput() {
 
 document.getElementById('game-close').addEventListener('click', () => {
   closeGame();
+});
+
+document.getElementById('game-rematch')?.addEventListener('click', () => {
+  gameFrame?.contentWindow?.postMessage({ type: 'game_control', action: 'rematch' }, window.location.origin);
+});
+
+document.getElementById('game-resign')?.addEventListener('click', () => {
+  gameFrame?.contentWindow?.postMessage({ type: 'game_control', action: 'resign' }, window.location.origin);
 });
 
 window.addEventListener('message', e => {

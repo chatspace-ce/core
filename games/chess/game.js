@@ -38,6 +38,13 @@
     const playAgainBtn = document.getElementById('play-again');
     const leaveBtn     = document.getElementById('leave');
 
+    window.addEventListener('message', e => {
+      if (e.origin !== window.location.origin) return;
+      if (e.data?.type !== 'game_control') return;
+      if (e.data.action === 'rematch') startBtn?.click();
+      if (e.data.action === 'resign') resignBtn?.click();
+    });
+
     // lobby/user labels removed from UI
     function applyPlayerNumber(nextPlayer) {
       playerN = Math.max(1, Math.min(2, Number(nextPlayer) || 1));
