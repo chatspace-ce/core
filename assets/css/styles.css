@@ -896,10 +896,15 @@ textarea:focus { border-color: rgba(124,106,247,.8); box-shadow: 0 0 0 3px rgba(
   max-width: min(320px, 100%);
 }
 .chat-gesture .chat-attachment-image.chat-gif {
-  width: min(320px, 100%);
+  display: inline-grid;
+  place-items: center;
+  width: max-content;
   max-width: min(320px, 100%);
 }
 .chat-gesture .chat-attachment-image.chat-gif img {
+  width: auto;
+  height: auto;
+  max-width: 100%;
   max-height: 238px;
 }
 .chat-gesture-text {

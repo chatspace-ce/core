@@ -1313,7 +1313,7 @@ function renderActiveChat() {
   messagesEl.innerHTML = '';
   const map = channelMapFor();
   [...map.values()]
-    .sort((a, b) => String(a.sent_at || '').localeCompare(String(b.sent_at || '')) || String(a.id).localeCompare(String(b.id)))
+    .sort(compareMessages)
     .forEach(msg => bindMessageAutoScroll(appendMessageEl(msg), true));
   scrollMessagesToBottom();
   updateComposerPlaceholder();
@@ -1464,6 +1464,15 @@ async function gifLoopDurationMs(url) {
 function parseServerDate(value) {
   if (!value) return null;
   return new Date(String(value).replace(' ', 'T') + (String(value).includes('Z') ? '' : 'Z'));
+}
+
+function messageSortMs(msg) {
+  const date = parseServerDate(msg?.sent_at || msg?.created_at || '');
+  return date && !Number.isNaN(date.getTime()) ? date.getTime() : 0;
+}
+
+function compareMessages(a, b) {
+  return messageSortMs(a) - messageSortMs(b) || String(a.id).localeCompare(String(b.id));
 }
 
 function fullTimestamp(value) {
