@@ -21,6 +21,7 @@
   --msg-text-indent: 55px;
 }
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 html, body { height: 100%; margin: 0; }
 body { font-family: Outfit, system-ui, sans-serif; background: var(--bg); color: var(--text); }
 a { color: inherit; }

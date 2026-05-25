@@ -1555,12 +1555,22 @@ function roomEffectContext(effect) {
   };
 }
 
-async function applyRoomEffect(effectPayload, announce = false) {
+function cleanupRoomEffectVisuals() {
   activeRoomEffectController?.destroy?.();
   activeRoomEffectController = null;
+  document.body.classList.remove('has-room-effect');
+  roomStage?.querySelectorAll('.room-effect-layer').forEach(layer => layer.remove());
+  if (roomStage) {
+    [...roomStage.classList].forEach(className => {
+      if (className.startsWith('effect-')) roomStage.classList.remove(className);
+    });
+  }
+}
+
+async function applyRoomEffect(effectPayload, announce = false) {
+  cleanupRoomEffectVisuals();
   activeRoomEffect = effectPayload?.active ? effectPayload : null;
   if (!activeRoomEffect) {
-    document.body.classList.remove('has-room-effect');
     if (announce) {
       if (effectPayload?.expired) addSystemMessage(`${effectPayload?.label || 'Room effect'} ended.`);
       else addSystemMessage(`${effectPayload?.stopped_by_name || 'Someone'} stopped ${effectPayload?.label || 'Room Effect'}.`);
@@ -1585,7 +1595,7 @@ async function applyRoomEffect(effectPayload, announce = false) {
       addSystemMessage(`${by} started ${effect.label}.`);
     }
   } catch (err) {
-    document.body.classList.remove('has-room-effect');
+    cleanupRoomEffectVisuals();
     addSystemMessage(err.message || 'Room effect could not start.');
   }
 }
