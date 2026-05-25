@@ -459,6 +459,20 @@ function linkIconUrl(iconName = 'plus') {
   return appUrl(`/assets/images/cs-icons/${clean}.png`);
 }
 
+function linkIconNameForStage(key) {
+  const iconName = linkIcons.get(key) || 'plus';
+  return iconName === 'none' ? '' : iconName;
+}
+
+function linkIconNameForList(key) {
+  const iconName = linkIcons.get(key) || 'plus';
+  return iconName === 'none' ? 'plus' : iconName;
+}
+
+function linkPairGap(key) {
+  return linkIconNameForStage(key) ? 12 : 2;
+}
+
 function channelMapFor(chatKey = activeChat) {
   if (chatKey === 'room') return channelMessages.room;
   if (chatKey === 'community') return channelMessages.community;
@@ -872,6 +886,8 @@ function updateStageLinkIcons() {
   const active = new Set();
   linkedPairs().forEach(([key, a, b]) => {
     if (!a.avatarEl || !b.avatarEl) return;
+    const iconName = linkIconNameForStage(key);
+    if (!iconName) return;
     active.add(key);
     let el = stageLinkEls.get(key);
     if (!el) {
@@ -881,7 +897,7 @@ function updateStageLinkIcons() {
       roomStage.appendChild(el);
       stageLinkEls.set(key, el);
     }
-    const iconName = linkIcons.get(key) || 'plus';
+    el.classList.remove('removing');
     const img = el.querySelector('img');
     if (img.getAttribute('src') !== linkIconUrl(iconName)) img.src = linkIconUrl(iconName);
     const ax = a.avatarEl.offsetLeft + a.avatarEl.offsetWidth / 2;
@@ -894,8 +910,9 @@ function updateStageLinkIcons() {
   });
   stageLinkEls.forEach((el, key) => {
     if (active.has(key)) return;
-    el.remove();
     stageLinkEls.delete(key);
+    el.classList.add('removing');
+    setTimeout(() => el.remove(), 240);
   });
 }
 
@@ -1016,10 +1033,20 @@ function saveParticipantPositions(list) {
   }).catch(console.warn);
 }
 
+function adjustLinkedPairForIcon(linkKey, animate = true, persist = false) {
+  const pair = linkedPairs().find(([key]) => key === linkKey);
+  if (!pair) return;
+  const [, a, b] = pair;
+  const initiator = a.linked_to === b.id ? a : b;
+  const target = initiator === a ? b : a;
+  snapLinkedPair(initiator, target, animate);
+  if (persist) saveParticipantPositions([initiator, target]);
+}
+
 function snapLinkedPair(initiator, target, animate = true) {
   if (!initiator?.avatarEl || !target?.avatarEl) return;
   const avatarPx = initiator.avatarEl.offsetWidth || 150;
-  const gap = 12;
+  const gap = linkPairGap(linkKeyFor(initiator.id, target.id));
   const rW = roomStage.clientWidth;
   const rH = roomStage.clientHeight;
   const initX = Math.max(avatarPx + gap, Math.min(initiator.position_x * rW, rW - avatarPx));
@@ -1175,7 +1202,7 @@ function renderPeople() {
       const left = p.linked_to ? partner : p;
       const right = p.linked_to ? p : partner;
       const linkKey = linkKeyFor(left.id, right.id);
-      const iconName = linkIcons.get(linkKey) || 'plus';
+      const iconName = linkIconNameForList(linkKey);
       const targetId = cfg.myParticipantId === right.id ? left.id : right.id;
       const canEditIcon = cfg.myParticipantId === left.id || cfg.myParticipantId === right.id;
       row.innerHTML = `<div class="linked-half ${roleClass(left)}" data-participant-id="${left.id}">${makePersonBits(left)}</div><button class="link-mark" type="button" data-link-target="${targetId}" data-link-key="${esc(linkKey)}" aria-label="Change link icon"${canEditIcon ? '' : ' disabled'}><img src="${esc(linkIconUrl(iconName))}" alt=""></button><div class="linked-half ${roleClass(right)}" data-participant-id="${right.id}">${makePersonBits(right)}</div>`;
@@ -1947,6 +1974,7 @@ async function poll() {
       if (ev.type === 'link_icon') {
         if (p.link_key && p.icon_name) {
           linkIcons.set(p.link_key, p.icon_name);
+          adjustLinkedPairForIcon(p.link_key, true, false);
           renderPeople();
           updateStageLinkIcons();
         }
@@ -2076,6 +2104,8 @@ function clearAvatarSpeech(participantId, person) {
   if (!p?.speechEl) return;
   p.speechAudio?.pause?.();
   p.speechAudio = null;
+  clearInterval(p.speechGifLoopTimer);
+  p.speechGifLoopTimer = null;
   p.speechEl.classList.remove('show');
   setTimeout(() => {
     if (p.speechEl) p.speechEl.remove();
@@ -2110,11 +2140,29 @@ function showAvatarSpeech(participantId, msg) {
     timerStarted = true;
     if (isGesture && gesture && gesture.audio_path && !gesture.audio_is_silent) {
       const audio = new Audio(mediaUrl(gesture.audio_path));
+      gifLoopDurationMs(gesture.gif_path).then(duration => {
+        if (p.speechToken !== token || !p.speechEl?.classList.contains('chat-bubble-gesture')) return;
+        const img = p.speechEl.querySelector('img');
+        if (!img || !Number.isFinite(duration) || duration < 250) return;
+        clearInterval(p.speechGifLoopTimer);
+        p.speechGifLoopTimer = setInterval(() => {
+          if (p.speechToken !== token || audio.ended || audio.paused || !p.speechEl?.isConnected) {
+            clearInterval(p.speechGifLoopTimer);
+            p.speechGifLoopTimer = null;
+            return;
+          }
+          img.src = cacheBust(mediaUrl(gesture.gif_path));
+        }, duration);
+      });
       audio.addEventListener('ended', () => {
+        clearInterval(p.speechGifLoopTimer);
+        p.speechGifLoopTimer = null;
         if (p.speechToken === token) clearAvatarSpeech(participantId, p);
       }, { once: true });
       audio.addEventListener('error', () => {
         if (p.speechToken === token) {
+          clearInterval(p.speechGifLoopTimer);
+          p.speechGifLoopTimer = null;
           speechTimers.set(participantId, setTimeout(() => clearAvatarSpeech(participantId, p), 4200));
         }
       }, { once: true });
@@ -2332,6 +2380,7 @@ linkIconGrid?.querySelectorAll('[data-link-icon]').forEach(btn => {
     const iconName = btn.dataset.linkIcon || 'plus';
     const linkKey = linkKeyFor(cfg.myParticipantId, targetId);
     linkIcons.set(linkKey, iconName);
+    adjustLinkedPairForIcon(linkKey, true, true);
     renderPeople();
     updateStageLinkIcons();
     closeLinkIconModal();
@@ -2645,6 +2694,8 @@ function renderEmojiGrid() {
 
 function setMediaTab(tab) {
   activeMediaTab = tab;
+  mediaPicker?.classList.remove('media-tab-gifs', 'media-tab-gestures', 'media-tab-emojis');
+  mediaPicker?.classList.add(`media-tab-${tab}`);
   mediaPicker?.querySelectorAll('[data-media-tab]').forEach(btn => btn.classList.toggle('active', btn.dataset.mediaTab === tab));
   mediaPicker?.querySelectorAll('.media-panel').forEach(panel => panel.classList.toggle('active', panel.id === `media-panel-${tab}`));
   if (mediaSearchInput) {
@@ -2653,7 +2704,7 @@ function setMediaTab(tab) {
     mediaSearchInput.style.display = tab === 'emojis' ? 'none' : '';
   }
   if (tab === 'gifs' && gifResults && !cfg?.gifPicker?.enabled) {
-    gifResults.innerHTML = '<div class="minor">GIF Selector is not configured.</div>';
+    gifResults.innerHTML = '<div class="minor">GIFs are not configured.</div>';
   }
   if (tab === 'gestures') {
     gesturePage = 1;

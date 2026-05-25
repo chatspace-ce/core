@@ -318,6 +318,7 @@ $lastEventId = (int)$pdo->query('SELECT COALESCE(MAX(id), 0) FROM events WHERE s
       <button class="window-close" id="link-icon-close" type="button" aria-label="Close">×</button>
     </div>
     <div class="link-icon-grid" id="link-icon-grid">
+      <button class="link-icon-none" type="button" data-link-icon="none"><span aria-hidden="true"></span><strong>None</strong></button>
       <?php foreach (['plus','heart','wedding-rings','wedding-rings-lesbian','wedding-rings-gay','help','archer','cross-swords','lips','lotus','handcuffs'] as $icon): ?>
       <button type="button" data-link-icon="<?= e($icon) ?>"><img src="<?= e(app_url('/assets/images/cs-icons/' . $icon . '.png')) ?>" alt=""><span><?= e(ucwords(str_replace('-', ' ', $icon))) ?></span></button>
       <?php endforeach; ?>
@@ -412,7 +413,7 @@ $lastEventId = (int)$pdo->query('SELECT COALESCE(MAX(id), 0) FROM events WHERE s
 </div>
 <div id="media-picker" hidden>
   <div class="media-picker-tabs">
-    <button class="active" type="button" data-media-tab="gifs">GIF Selector</button>
+    <button class="active" type="button" data-media-tab="gifs">GIFs</button>
     <button type="button" data-media-tab="gestures">Gestures</button>
     <button type="button" data-media-tab="emojis">Emojis</button>
   </div>
