@@ -9,8 +9,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!empty($_FILES['avatar']['tmp_name']) && is_uploaded_file($_FILES['avatar']['tmp_name'])) {
         $finfo = new finfo(FILEINFO_MIME_TYPE);
         $mime = $finfo->file($_FILES['avatar']['tmp_name']) ?: '';
-        $allowed = ['image/jpeg' => 'jpg', 'image/png' => 'png', 'image/gif' => 'gif', 'image/webp' => 'webp'];
-        if (isset($allowed[$mime]) && (int)$_FILES['avatar']['size'] <= 5 * 1024 * 1024) {
+        $allowed = ['image/gif' => 'gif', 'image/webp' => 'webp'];
+        $dims = @getimagesize($_FILES['avatar']['tmp_name']);
+        $validDims = $dims && $dims[0] >= 42 && $dims[1] >= 42 && $dims[0] <= 250 && $dims[1] <= 250;
+        if (isset($allowed[$mime]) && (int)$_FILES['avatar']['size'] <= 5 * 1024 * 1024 && $validDims) {
             $file = bin2hex(random_bytes(12)) . '.' . $allowed[$mime];
             $dest = __DIR__ . '/assets/uploads/avatars/' . $file;
             move_uploaded_file($_FILES['avatar']['tmp_name'], $dest);
@@ -18,7 +20,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
     if (!filter_var($email, FILTER_VALIDATE_EMAIL) || $name === '' || strlen($password) < 8 || !$avatarPath) {
-        $error = 'Use a valid email, display name, password of at least 8 characters, and an avatar image.';
+        $error = 'Use a valid email, display name, password of at least 8 characters, and an avatar image between 42x42 and 250x250.';
     } else {
         try {
             $nameCheck = db()->prepare('SELECT 1 FROM users WHERE LOWER(display_name) = LOWER(?) LIMIT 1');
@@ -64,5 +66,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     </form>
   </section>
 </main>
+<script src="<?= e(app_url('/assets/js/avatar-processing.js')) ?>"></script>
+<script src="<?= e(app_url('/assets/js/register.js')) ?>"></script>
 </body>
 </html>

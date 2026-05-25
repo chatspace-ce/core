@@ -52,9 +52,10 @@ function setup_avatar_upload(): string {
     }
     $finfo = new finfo(FILEINFO_MIME_TYPE);
     $mime = $finfo->file($_FILES['avatar']['tmp_name']) ?: '';
-    $allowed = ['image/jpeg' => 'jpg', 'image/png' => 'png', 'image/gif' => 'gif', 'image/webp' => 'webp'];
-    if (!isset($allowed[$mime]) || (int)$_FILES['avatar']['size'] > 5 * 1024 * 1024) {
-        throw new RuntimeException('Use a JPEG, PNG, GIF, or WEBP avatar under 5 MB.');
+    $allowed = ['image/gif' => 'gif', 'image/webp' => 'webp'];
+    $dims = @getimagesize($_FILES['avatar']['tmp_name']);
+    if (!isset($allowed[$mime]) || (int)$_FILES['avatar']['size'] > 5 * 1024 * 1024 || !$dims || $dims[0] < 42 || $dims[1] < 42 || $dims[0] > 250 || $dims[1] > 250) {
+        throw new RuntimeException('Use an optimized GIF or WEBP avatar under 5 MB and between 42x42 and 250x250.');
     }
     $dir = __DIR__ . '/assets/uploads/avatars';
     if (!is_dir($dir)) mkdir($dir, 0775, true);
@@ -228,6 +229,7 @@ $requiredMissing = array_filter($requirements, fn($r) => $r['required'] && !$r['
     <?php endif; ?>
   </section>
 </main>
+<script src="<?= e(app_url('/assets/js/avatar-processing.js')) ?>"></script>
 <script src="<?= e(app_url('/assets/js/setup.js')) ?>"></script>
 </body>
 </html>

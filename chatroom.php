@@ -460,6 +460,7 @@ $lastEventId = (int)$pdo->query('SELECT COALESCE(MAX(id), 0) FROM events WHERE s
     <div class="friend-list" id="friend-results" style="margin-top:12px;"></div>
   </div>
 </div>
+<script src="<?= e(app_url('/assets/js/avatar-processing.js')) ?>"></script>
 <script src="<?= e(app_url('/assets/js/room.js')) ?>"></script>
 </body>
 </html>

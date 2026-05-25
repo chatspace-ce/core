@@ -11,10 +11,11 @@ if (empty($_FILES['avatar']['tmp_name']) || !is_uploaded_file($_FILES['avatar'][
 
 $finfo = new finfo(FILEINFO_MIME_TYPE);
 $mime = $finfo->file($_FILES['avatar']['tmp_name']) ?: '';
-$allowed = ['image/jpeg' => 'jpg', 'image/png' => 'png', 'image/gif' => 'gif', 'image/webp' => 'webp'];
+$allowed = ['image/gif' => 'gif', 'image/webp' => 'webp'];
 $maxBytes = app_setting_bytes($pdo, 'avatar_max_size_mb', 5);
-if (!isset($allowed[$mime]) || (int)$_FILES['avatar']['size'] > $maxBytes) {
-    json_out(['error' => 'Use a JPEG, PNG, GIF, or WebP under ' . app_setting($pdo, 'avatar_max_size_mb', '5') . ' MB'], 400);
+$dims = @getimagesize($_FILES['avatar']['tmp_name']);
+if (!isset($allowed[$mime]) || (int)$_FILES['avatar']['size'] > $maxBytes || !$dims || $dims[0] < 42 || $dims[1] < 42 || $dims[0] > 250 || $dims[1] > 250) {
+    json_out(['error' => 'Use an optimized GIF or WebP under ' . app_setting($pdo, 'avatar_max_size_mb', '5') . ' MB and between 42x42 and 250x250.'], 400);
 }
 
 $file = bin2hex(random_bytes(12)) . '.' . $allowed[$mime];

@@ -3371,20 +3371,23 @@ document.getElementById('ctx-unblock').addEventListener('click', () => {
 avatarFileInput.addEventListener('change', async () => {
   const file = avatarFileInput.files && avatarFileInput.files[0];
   if (!file) return;
-  const me = participants.get(cfg.myParticipantId);
-  const previewUrl = URL.createObjectURL(file);
-  if (me) {
-    me.webcam_path = null;
-    me.avatar_path = previewUrl;
-    me.avatar_url = previewUrl;
-    me.avatar_version = Date.now();
-    renderParticipant(me);
-  }
+  let preparedFile = file;
+  let previewUrl = '';
   const fd = new FormData();
   fd.append('session_id', cfg.sessionId);
   fd.append('join_token', cfg.myJoinToken);
-  fd.append('avatar', file);
   try {
+    if (window.ChatSpaceAvatar) preparedFile = await window.ChatSpaceAvatar.prepareAvatarFile(file);
+    previewUrl = URL.createObjectURL(preparedFile);
+    const me = participants.get(cfg.myParticipantId);
+    if (me) {
+      me.webcam_path = null;
+      me.avatar_path = previewUrl;
+      me.avatar_url = previewUrl;
+      me.avatar_version = Date.now();
+      renderParticipant(me);
+    }
+    fd.append('avatar', preparedFile);
     const resp = await fetch(appUrl('/api/avatar.php'), { method: 'POST', body: fd });
     const data = await resp.json();
     if (!resp.ok || data.error) throw new Error(data.error || 'Avatar upload failed');
@@ -3397,7 +3400,7 @@ avatarFileInput.addEventListener('change', async () => {
   } catch (err) {
     alert(err.message);
   } finally {
-    URL.revokeObjectURL(previewUrl);
+    if (previewUrl) URL.revokeObjectURL(previewUrl);
     avatarFileInput.value = '';
   }
 });
@@ -3966,6 +3969,13 @@ async function loadFriends() {
     const data = await fetch(appUrl('/api/locate.php?q=' + encodeURIComponent(q))).then(r => r.json());
     if (document.getElementById('friend-search').value !== q) return;
     (data.friends || []).forEach(f => {
+      const knownParticipant = [...participants.values()].find(p => Number(p.user_id) === Number(f.id));
+      const locateAvatar = knownParticipant
+        ? (knownParticipant.avatarEl?.currentSrc || knownParticipant.avatarEl?.src || avatarUrl(knownParticipant))
+        : mediaUrl(f.avatar_url);
+      const dmTarget = knownParticipant
+        ? { ...f, avatar_url: locateAvatar, avatar_path: knownParticipant.avatar_path }
+        : f;
       const row = document.createElement('div');
       row.className = 'person-row';
       const go = f.room_id
@@ -3973,10 +3983,10 @@ async function loadFriends() {
           ? `<button class="btn locate-action-btn" type="button" disabled aria-label="Room unavailable" title="Room unavailable"><img src="${esc(appUrl('/assets/images/lobby.png'))}" alt=""></button>`
           : `<a class="btn locate-action-btn" href="${esc(appUrl('/chatroom.php?id=' + encodeURIComponent(f.room_id)))}" aria-label="Go to room" title="Go"><img src="${esc(appUrl('/assets/images/lobby.png'))}" alt=""></a>`)
         : '<span class="minor locate-away">Away</span>';
-      row.innerHTML = `<img src="${esc(mediaUrl(f.avatar_url))}" alt=""><div><strong>${esc(f.display_name)}</strong><div class="minor">${f.room_name ? esc(f.room_name) : 'Not in a room'}</div></div><button class="btn locate-action-btn dm-locate-btn" type="button" aria-label="Send DM" title="DM"><img src="${esc(appUrl('/assets/images/chat-pane-dm.png'))}" alt=""></button>${go}`;
+      row.innerHTML = `<img src="${esc(locateAvatar)}" alt=""><div><strong>${esc(f.display_name)}</strong><div class="minor">${f.room_name ? esc(f.room_name) : 'Not in a room'}</div></div><button class="btn locate-action-btn dm-locate-btn" type="button" aria-label="Send DM" title="DM"><img src="${esc(appUrl('/assets/images/chat-pane-dm.png'))}" alt=""></button>${go}`;
       row.querySelector('.dm-locate-btn').addEventListener('click', () => {
         document.getElementById('locate-modal').classList.remove('open');
-        openDmWithUser(f);
+        openDmWithUser(dmTarget);
       });
       friendListEl.appendChild(row);
     });

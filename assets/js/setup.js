@@ -21,3 +21,34 @@ setupAvatar?.addEventListener('change', () => {
   const file = setupAvatar.files && setupAvatar.files[0];
   if (setupAvatarName) setupAvatarName.textContent = file ? file.name : 'No file selected';
 });
+
+const setupAdminForm = setupAvatar?.closest('form');
+setupAdminForm?.addEventListener('submit', async event => {
+  const file = setupAvatar?.files?.[0];
+  if (!file || !window.ChatSpaceAvatar) return;
+  event.preventDefault();
+  const submit = setupAdminForm.querySelector('button[type="submit"]');
+  const originalText = submit?.textContent || '';
+  if (submit) {
+    submit.disabled = true;
+    submit.textContent = 'Optimizing...';
+  }
+  try {
+    const prepared = await window.ChatSpaceAvatar.prepareAvatarFile(file);
+    window.ChatSpaceAvatar.replaceInputFile(setupAvatar, prepared);
+    if (setupAvatarName) setupAvatarName.textContent = prepared.name;
+    HTMLFormElement.prototype.submit.call(setupAdminForm);
+  } catch (err) {
+    let box = document.querySelector('.setup-alert-error');
+    if (!box) {
+      box = document.createElement('div');
+      box.className = 'setup-alert setup-alert-error';
+      document.querySelector('.setup-steps')?.after(box);
+    }
+    box.textContent = err.message || 'Could not prepare avatar.';
+    if (submit) {
+      submit.disabled = false;
+      submit.textContent = originalText;
+    }
+  }
+});
