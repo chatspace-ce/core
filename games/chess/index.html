@@ -346,6 +346,37 @@
 
     /* Force UI text to white for crisp contrast */
     .card, .card * { color: var(--text); }
+    body {
+      align-items: stretch;
+      padding: 0;
+      background: transparent;
+      overflow: hidden;
+    }
+    .card {
+      width: 100%;
+      min-width: 0;
+      height: 100vh;
+      border: 0;
+      border-radius: 0;
+      background: transparent;
+      box-shadow: none;
+    }
+    .card-body {
+      min-height: calc(100vh - 34px);
+      justify-content: center;
+      padding: 8px 14px 10px;
+    }
+    #board {
+      grid-template: repeat(8, min(6.8vh, 56px)) / repeat(8, min(6.8vh, 56px));
+    }
+    .cell {
+      width: min(6.8vh, 56px);
+      height: min(6.8vh, 56px);
+    }
+    #controls {
+      justify-content: center;
+      margin-top: 4px;
+    }
   </style>
 </head>
 <body>

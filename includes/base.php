@@ -336,6 +336,22 @@ function migrate(PDO $pdo): void {
             updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
         );
 
+        CREATE TABLE IF NOT EXISTS game_chat_messages (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            lobby_code TEXT NOT NULL,
+            participant_id INTEGER NOT NULL,
+            content TEXT NOT NULL,
+            sent_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE TABLE IF NOT EXISTS game_chat_typing (
+            lobby_code TEXT NOT NULL,
+            participant_id INTEGER NOT NULL,
+            active INTEGER NOT NULL DEFAULT 0,
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY(lobby_code, participant_id)
+        );
+
         CREATE TABLE IF NOT EXISTS voice_sessions (
             participant_id INTEGER PRIMARY KEY,
             session_id INTEGER NOT NULL,

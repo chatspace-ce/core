@@ -19,10 +19,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
             AND lobby_code IN (SELECT lobby_code FROM game_lobbies WHERE status = "ended")'
     )->execute([$sessionId]);
     $stmt = $pdo->prepare(
-        'SELECT a.lobby_code, a.game_type, a.started_by_participant_id, p.display_name AS started_by_name
+        'SELECT a.lobby_code, a.game_type, a.started_by_participant_id, p.display_name AS started_by_name,
+                gl.user1_id, gl.user2_id,
+                p1.display_name AS user1_name, p1.avatar_path AS user1_avatar, p1.webcam_path AS user1_webcam,
+                p2.display_name AS user2_name, p2.avatar_path AS user2_avatar, p2.webcam_path AS user2_webcam
          FROM game_sessions a
          JOIN game_lobbies gl ON gl.lobby_code = a.lobby_code
          LEFT JOIN participants p ON p.id = a.started_by_participant_id
+         LEFT JOIN participants p1 ON p1.id = gl.user1_id
+         LEFT JOIN participants p2 ON p2.id = gl.user2_id
          WHERE a.room_session_id = ? AND a.ended_at IS NULL AND gl.status <> "ended"
          ORDER BY a.started_at DESC'
     );
@@ -32,6 +37,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
         'game_type' => $r['game_type'],
         'started_by_id' => (int)$r['started_by_participant_id'],
         'started_by_name' => $r['started_by_name'] ?: 'Someone',
+        'players' => array_values(array_filter([
+            $r['user1_id'] ? ['participant_id' => (int)$r['user1_id'], 'display_name' => $r['user1_name'] ?: 'Player 1', 'avatar_url' => $r['user1_webcam'] ?: resolve_avatar($r['user1_avatar'] ?? 'preset:Default'), 'seat' => 1] : null,
+            $r['user2_id'] ? ['participant_id' => (int)$r['user2_id'], 'display_name' => $r['user2_name'] ?: 'Player 2', 'avatar_url' => $r['user2_webcam'] ?: resolve_avatar($r['user2_avatar'] ?? 'preset:Default'), 'seat' => 2] : null,
+        ])),
     ], $stmt->fetchAll())]);
 }
 
@@ -50,6 +59,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $pdo->prepare('INSERT INTO game_lobbies (lobby_code, game_id, user1_id, status) VALUES (?,?,?,?)')->execute([$lobby, $allowed[$type], $participantId, 'waiting']);
         $name = $pdo->query('SELECT display_name FROM participants WHERE id = ' . $participantId)->fetchColumn() ?: 'Someone';
         emit_event($pdo, $sessionId, 'game_start', ['lobby_code' => $lobby, 'game_type' => $type, 'started_by_id' => $participantId, 'started_by_name' => $name]);
+        json_out(['ok' => true, 'lobby_code' => $lobby]);
+    }
+    if ($action === 'join') {
+        $lobby = (string)($body['lobby_code'] ?? $body['lobby_id'] ?? $body['lobby'] ?? '');
+        if ($lobby === '') json_out(['error' => 'Lobby required'], 400);
+        $stmt = $pdo->prepare('SELECT gl.* FROM game_lobbies gl JOIN game_sessions gs ON gs.lobby_code = gl.lobby_code WHERE gs.room_session_id = ? AND gl.lobby_code = ? AND gs.ended_at IS NULL LIMIT 1');
+        $stmt->execute([$sessionId, $lobby]);
+        $row = $stmt->fetch();
+        if (!$row || $row['status'] === 'ended') json_out(['error' => 'Game not found'], 404);
+        if (!$row['user1_id']) {
+            $pdo->prepare('UPDATE game_lobbies SET user1_id = ?, status = "waiting", updated_at = CURRENT_TIMESTAMP WHERE lobby_code = ?')->execute([$participantId, $lobby]);
+        } elseif (!$row['user2_id'] && (int)$row['user1_id'] !== $participantId) {
+            $pdo->prepare('UPDATE game_lobbies SET user2_id = ?, status = "active", updated_at = CURRENT_TIMESTAMP WHERE lobby_code = ?')->execute([$participantId, $lobby]);
+        }
+        emit_event($pdo, $sessionId, 'game_update', ['lobby_code' => $lobby]);
         json_out(['ok' => true, 'lobby_code' => $lobby]);
     }
     if ($action === 'close') {

@@ -71,6 +71,32 @@ $lastEventId = (int)$pdo->query('SELECT COALESCE(MAX(id), 0) FROM events WHERE s
         <video autoplay loop muted playsinline><source src="<?= e(media_url($room['background_path'])) ?>" type="<?= e($room['background_mime']) ?>"></video>
         <?php endif; ?>
       </div>
+      <div class="game-stage-layer" id="game-stage" hidden>
+        <div class="game-stage-head">
+          <div>
+            <div class="side-title">Game</div>
+            <strong id="game-stage-title">Game</strong>
+          </div>
+          <button class="window-close" id="game-close" type="button" aria-label="Close game">×</button>
+        </div>
+        <div class="game-stage-body">
+          <aside class="game-player-card" id="game-player-one">
+            <img src="<?= e(app_url('/assets/images/baghead.png')) ?>" alt="">
+            <strong>Waiting</strong>
+            <span class="minor">Player 1</span>
+            <span class="game-typing-pill">typing...</span>
+          </aside>
+          <div class="game-frame-wrap">
+            <iframe id="game-frame" title="Game"></iframe>
+          </div>
+          <aside class="game-player-card" id="game-player-two">
+            <img src="<?= e(app_url('/assets/images/baghead.png')) ?>" alt="">
+            <strong>Waiting</strong>
+            <span class="minor">Player 2</span>
+            <span class="game-typing-pill">typing...</span>
+          </aside>
+        </div>
+      </div>
     </section>
     <div class="divider" id="horizontal-divider"></div>
     <section class="chat-pane">
@@ -413,15 +439,6 @@ $lastEventId = (int)$pdo->query('SELECT COALESCE(MAX(id), 0) FROM events WHERE s
   </div>
 </div>
 <input type="file" id="avatar-file-input" accept="image/jpeg,image/png,image/gif,image/webp" style="display:none">
-<div class="modal" id="game-modal">
-  <div class="modal-box">
-    <div class="modal-head">
-      <strong id="game-title">Game</strong>
-      <button class="btn" id="game-close">Close</button>
-    </div>
-    <iframe id="game-frame" title="Game" style="width:100%;height:66vh;border:1px solid var(--line);border-radius:8px;background:#fff;"></iframe>
-  </div>
-</div>
 <div class="modal" id="locate-modal">
   <div class="modal-box locate-box">
     <div class="modal-head">

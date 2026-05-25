@@ -35,6 +35,8 @@ const msgActionMenu = document.getElementById('msg-action-menu');
 const tabCtxMenu = document.getElementById('tab-ctx-menu');
 const roomMenu = document.getElementById('room-menu');
 const roomActionMenu = document.getElementById('room-action-menu');
+const gameStage = document.getElementById('game-stage');
+const gameFrame = document.getElementById('game-frame');
 const mediaPicker = document.getElementById('media-picker');
 const mediaSearchInput = document.getElementById('media-search-input');
 const gifResults = document.getElementById('gif-results');
@@ -85,6 +87,7 @@ const channelMessages = {
   community: new Map(),
   links: new Map(),
   dms: new Map(),
+  games: new Map(),
 };
 const unreadCounts = new Map();
 const closedDmUserIds = new Set();
@@ -107,6 +110,12 @@ let activeAvatarEffects = 0;
 let roomExitInProgress = false;
 let roomDeleteInProgress = false;
 let activeGame = null;
+const activeGames = new Map();
+const gameChatLastIds = new Map();
+const gameTypingIds = new Set();
+let gameChatPollTimer = null;
+let gameTypingActive = false;
+let gameTypingStopTimer = null;
 let gifSearchTimer = null;
 const gifDurationCache = new Map();
 let messagesPinnedToBottom = true;
@@ -359,6 +368,7 @@ function allChannelMaps() {
   const maps = [channelMessages.room, channelMessages.community];
   channelMessages.links.forEach(map => maps.push(map));
   channelMessages.dms.forEach(map => maps.push(map));
+  channelMessages.games.forEach(map => maps.push(map));
   return maps;
 }
 
@@ -460,6 +470,10 @@ function channelMapFor(chatKey = activeChat) {
     if (!channelMessages.dms.has(chatKey)) channelMessages.dms.set(chatKey, new Map());
     return channelMessages.dms.get(chatKey);
   }
+  if (chatKey.startsWith('game:')) {
+    if (!channelMessages.games.has(chatKey)) channelMessages.games.set(chatKey, new Map());
+    return channelMessages.games.get(chatKey);
+  }
   return channelMessages.room;
 }
 
@@ -467,6 +481,7 @@ function channelForApi(chatKey = activeChat) {
   if (chatKey === 'room' || chatKey === 'community') return chatKey;
   if (chatKey.startsWith('link:')) return 'link';
   if (chatKey.startsWith('dm:')) return 'dm';
+  if (chatKey.startsWith('game:')) return 'game';
   return 'room';
 }
 
@@ -504,6 +519,9 @@ function chatLabel(chatKey = activeChat) {
     const user = dmUsers.get(userId);
     if (isUserBlocked(userId)) return 'DM> Blocked';
     return `DM> ${user ? user.display_name : 'Friend'}`;
+  }
+  if (chatKey.startsWith('game:')) {
+    return activeGame ? `${gameName(activeGame.game_type)} Game` : 'Game';
   }
   const partner = participants.get(Number(chatKey.slice(5)));
   return `Link> ${partner ? partner.display_name : 'Friend'}`;
@@ -1130,7 +1148,12 @@ function renderPeople() {
   document.getElementById('participant-count-label').textContent = `(${people.length})`;
   const rendered = new Set();
   const roleClass = participantRoleClass;
-  const makePersonBits = p => `<span class="user-avatar-wrap"><img src="${esc(avatarUrl(p))}" alt=""><span class="status-dot ${p.online ? 'on' : ''}"></span></span><div><strong>${esc(displayNameFor(p))}</strong><div class="minor">${p.id === cfg.myParticipantId ? 'You' : (p.online ? 'Online' : 'Away')}</div></div>`;
+  const gameForParticipant = p => [...activeGames.values()].find(game => (game.players || []).some(player => Number(player.participant_id) === Number(p.id)));
+  const makePersonBits = p => {
+    const game = gameForParticipant(p);
+    const gameBadge = game ? `<span class="user-game-badge" title="${esc(gameName(game.game_type))}"><img src="${esc(appUrl(`/assets/images/${gamePath(game.game_type)}-icon.png`))}" alt=""></span>` : '';
+    return `<span class="user-avatar-wrap"><img src="${esc(avatarUrl(p))}" alt=""><span class="status-dot ${p.online ? 'on' : ''}"></span>${gameBadge}</span><div><strong>${esc(displayNameFor(p))}</strong><div class="minor">${p.id === cfg.myParticipantId ? 'You' : (p.online ? 'Online' : 'Away')}</div></div>`;
+  };
   people.forEach(p => {
     if (rendered.has(p.id)) return;
     let partner = null;
@@ -1214,6 +1237,7 @@ function renderLinkTabs() {
   const holder = document.getElementById('link-tabs');
   if (!holder || !cfg) return;
   holder.innerHTML = '';
+  renderGameTab(holder);
   const partner = linkedPartner();
   if (!partner) {
     if (activeChat.startsWith('link:')) switchChat('room');
@@ -1233,6 +1257,21 @@ function renderLinkTabs() {
   document.querySelectorAll('.chat-tab').forEach(item => {
     item.classList.toggle('active', item.dataset.chatTab === activeChat);
   });
+}
+
+function renderGameTab(holder = document.getElementById('link-tabs')) {
+  if (!holder || !activeGame) {
+    if (activeChat.startsWith('game:')) switchChat('room');
+    return;
+  }
+  const chatKey = `game:${activeGame.lobby_code}`;
+  const tab = document.createElement('button');
+  tab.className = 'chat-tab';
+  tab.type = 'button';
+  tab.dataset.chatTab = chatKey;
+  tab.innerHTML = `<img src="${esc(appUrl('/assets/images/chat-pane-game.png'))}" alt=""><span>Game</span><span class="tab-badge" hidden>0</span>`;
+  tab.addEventListener('click', () => switchChat(chatKey));
+  holder.appendChild(tab);
 }
 
 function renderDmTabs() {
@@ -1271,6 +1310,7 @@ function switchChat(chatKey) {
   clearUnread(chatKey);
   if (chatKey === activeChat) return;
   stopTypingNow();
+  stopGameTypingNow();
   activeChat = chatKey;
   renderActiveChat();
 }
@@ -1719,16 +1759,19 @@ function appendMessageEl(msg) {
   const deletedMeta = msg.is_deleted && msg.deleted_at ? `<div class="msg-audit deleted-audit">Deleted at ${esc(fullTimestamp(msg.deleted_at))}</div>` : '';
   const original = canShowOriginal ? `<details class="msg-original"><summary>Show original</summary><div>${esc(msg.original_content)}</div></details>` : '';
   const body = msg.is_deleted && cfg.canModerateMessages ? `<div class="msg-deleted-body">${messageBodyHtml(msg)}</div>` : messageBodyHtml(msg);
-  row.innerHTML = `<div class="bubble"><div class="msg-head"><div class="msg-name ${participantRoleClass(author)}" title="${esc(participantRoleLabel(author))}"><img src="${esc(p ? avatarUrl(p) : (msg.avatar_url || cfg.avatarPresets.Default))}" alt=""><span class="msg-name-copy"><span class="msg-name-text">${esc(p ? displayNameFor(p) : msg.display_name)}</span>${flagTime}</span></div><button class="msg-options" type="button" aria-label="Message options">⋯</button></div><div class="msg-content">${body}</div>${deletedMeta}${original}<div class="msg-meta-line">${renderReactions(msg)}</div></div>`;
+  const optionsButton = msg.channel === 'game' ? '' : '<button class="msg-options" type="button" aria-label="Message options">⋯</button>';
+  row.innerHTML = `<div class="bubble"><div class="msg-head"><div class="msg-name ${participantRoleClass(author)}" title="${esc(participantRoleLabel(author))}"><img src="${esc(p ? avatarUrl(p) : (msg.avatar_url || cfg.avatarPresets.Default))}" alt=""><span class="msg-name-copy"><span class="msg-name-text">${esc(p ? displayNameFor(p) : msg.display_name)}</span>${flagTime}</span></div>${optionsButton}</div><div class="msg-content">${body}</div>${deletedMeta}${original}<div class="msg-meta-line">${renderReactions(msg)}</div></div>`;
   row.querySelector('.msg-options')?.addEventListener('click', e => {
     e.stopPropagation();
     openMessageActionMenu(e.clientX, e.clientY, msg);
   });
-  row.addEventListener('contextmenu', e => {
-    e.preventDefault();
-    e.stopPropagation();
-    openMessageActionMenu(e.clientX, e.clientY, msg);
-  });
+  if (msg.channel !== 'game') {
+    row.addEventListener('contextmenu', e => {
+      e.preventDefault();
+      e.stopPropagation();
+      openMessageActionMenu(e.clientX, e.clientY, msg);
+    });
+  }
   row.querySelectorAll('.reaction-chip').forEach(btn => {
     btn.addEventListener('click', () => applyReaction(msg.id, btn.dataset.msgReaction, activeChat));
   });
@@ -1770,6 +1813,11 @@ document.getElementById('composer').addEventListener('submit', e => {
   if (!content) return;
   input.value = '';
   updateComposerState();
+  if (activeChat.startsWith('game:')) {
+    stopGameTypingNow();
+    sendGameMessage(content).catch(err => alert(err.message || err));
+    return;
+  }
   stopTypingNow();
   const payload = { session_id: cfg.sessionId, join_token: cfg.myJoinToken, content, channel: activeChat };
   const partnerId = activeLinkPartnerId();
@@ -1918,7 +1966,7 @@ async function poll() {
         participants.forEach(renderParticipant);
         renderActiveChat();
       }
-      if (ev.type === 'game_start' || ev.type === 'game_end') loadGames();
+      if (ev.type === 'game_start' || ev.type === 'game_end' || ev.type === 'game_update') loadGames();
       if (ev.type === 'room_update') applyRoomUpdate(p);
       if (ev.type === 'room_deleted') handleRoomDeleted(p);
       if (ev.type === 'room_effect') {
@@ -2168,6 +2216,10 @@ function stopTypingNow() {
 
 document.getElementById('chat-input').addEventListener('input', () => {
   updateComposerState();
+  if (activeChat.startsWith('game:')) {
+    handleGameTypingInput();
+    return;
+  }
   if (activeChat === 'community' || activeChat.startsWith('dm:')) {
     stopTypingNow();
     return;
@@ -3342,13 +3394,24 @@ async function loadGames() {
   const qs = new URLSearchParams({ session_id: cfg.sessionId, participant_id: cfg.myParticipantId, join_token: cfg.myJoinToken });
   const data = await fetch(appUrl('/api/games.php?' + qs)).then(r => r.json()).catch(() => ({ games: [] }));
   gameListEl.innerHTML = '';
+  activeGames.clear();
   (data.games || []).forEach(a => {
+    activeGames.set(a.lobby_code, a);
     const row = document.createElement('div');
-    row.className = 'game-row';
-    row.innerHTML = `<span></span><div><strong>${esc(gameName(a.game_type))}</strong><div class="minor">Started by ${esc(a.started_by_name)}</div></div><button class="btn">Open</button>`;
+    row.className = `game-row${activeGame?.lobby_code === a.lobby_code ? ' active' : ''}`;
+    const players = (a.players || []).map(player => `<img src="${esc(mediaUrl(player.avatar_url))}" alt="${esc(player.display_name)}" title="${esc(player.display_name)}">`).join('');
+    row.innerHTML = `<div class="game-row-main"><strong>${esc(gameName(a.game_type))}</strong><div class="minor">Started by ${esc(a.started_by_name)}</div><div class="game-row-players">${players || '<span class="minor">Waiting for players</span>'}</div></div><button class="btn">Open</button>`;
     row.querySelector('button').addEventListener('click', () => openGame(a));
     gameListEl.appendChild(row);
   });
+  if (activeGame && activeGames.has(activeGame.lobby_code)) {
+    activeGame = Object.assign(activeGame, activeGames.get(activeGame.lobby_code));
+    updateGameStagePlayers();
+  } else if (activeGame) {
+    hideGameOverlay();
+  }
+  renderPeople();
+  renderLinkTabs();
 }
 
 function gameName(type) {
@@ -3359,27 +3422,162 @@ function gamePath(type) {
   return ({ chess: 'chess', checkers: 'checkers' })[type] || type;
 }
 
-function openGame(a) {
-  activeGame = a;
-  document.getElementById('game-title').textContent = gameName(a.game_type);
-  document.getElementById('game-frame').src = appUrl(`/games/${gamePath(a.game_type)}/index.html?lobby=${encodeURIComponent(a.lobby_code)}&user=${cfg.myParticipantId}`);
-  document.getElementById('game-modal').classList.add('open');
-}
-
-async function closeGame(lobbyCode = activeGame?.lobby_code) {
-  if (lobbyCode) {
+async function openGame(a) {
+  activeGame = Object.assign({}, a);
+  try {
     await apiPost('/api/games.php', {
-      action: 'close',
+      action: 'join',
       session_id: cfg.sessionId,
       participant_id: cfg.myParticipantId,
       join_token: cfg.myJoinToken,
-      lobby_code: lobbyCode,
-    }).catch(console.warn);
+      lobby_code: a.lobby_code,
+    });
+    await loadGames();
+    activeGame = Object.assign(activeGame || {}, activeGames.get(a.lobby_code) || a);
+  } catch (err) {
+    console.warn(err);
   }
+  document.getElementById('game-stage-title').textContent = gameName(activeGame.game_type);
+  gameFrame.src = appUrl(`/games/${gamePath(activeGame.game_type)}/index.html?lobby=${encodeURIComponent(activeGame.lobby_code)}&user=${cfg.myParticipantId}`);
+  gameStage.hidden = false;
+  updateGameStagePlayers();
+  renderLinkTabs();
+  switchChat(`game:${activeGame.lobby_code}`);
+  startGameChatPolling();
+}
+
+function hideGameOverlay() {
+  stopGameChatPolling();
+  stopGameTypingNow();
   activeGame = null;
-  document.getElementById('game-frame').src = 'about:blank';
-  document.getElementById('game-modal').classList.remove('open');
+  if (gameFrame) gameFrame.src = 'about:blank';
+  if (gameStage) gameStage.hidden = true;
+  if (activeChat.startsWith('game:')) switchChat('room');
+  renderLinkTabs();
+}
+
+async function closeGame(lobbyCode = activeGame?.lobby_code, notifyServer = true) {
+  if (lobbyCode) {
+    if (notifyServer) {
+      await apiPost('/api/games.php', {
+        action: 'close',
+        session_id: cfg.sessionId,
+        participant_id: cfg.myParticipantId,
+        join_token: cfg.myJoinToken,
+        lobby_code: lobbyCode,
+      }).catch(console.warn);
+    }
+  }
+  hideGameOverlay();
   await loadGames();
+}
+
+function gameChatKey(lobbyCode = activeGame?.lobby_code) {
+  return lobbyCode ? `game:${lobbyCode}` : 'game:';
+}
+
+function updateGameStagePlayers() {
+  if (!activeGame) return;
+  const bySeat = new Map((activeGame.players || []).map(player => [Number(player.seat), player]));
+  [
+    [document.getElementById('game-player-one'), bySeat.get(1), 'Player 1'],
+    [document.getElementById('game-player-two'), bySeat.get(2), 'Player 2'],
+  ].forEach(([card, player, label]) => {
+    if (!card) return;
+    const img = card.querySelector('img');
+    const name = card.querySelector('strong');
+    const sub = card.querySelector('.minor');
+    if (img) img.src = mediaUrl(player?.avatar_url || appUrl('/assets/images/baghead.png'));
+    if (name) name.textContent = player?.display_name || 'Waiting';
+    if (sub) sub.textContent = player ? label : `${label} open`;
+    card.dataset.participantId = player?.participant_id || '';
+    card.classList.toggle('typing', player && gameTypingIds.has(Number(player.participant_id)));
+  });
+}
+
+function addGameMessageToChannel(msg, live = false) {
+  if (!activeGame || msg.lobby_code !== activeGame.lobby_code) return;
+  addMessageToChannel(msg, gameChatKey(msg.lobby_code), live);
+}
+
+async function sendGameMessage(content) {
+  if (!activeGame) return;
+  const msg = await apiPost('/api/game_chat.php', {
+    action: 'message',
+    session_id: cfg.sessionId,
+    join_token: cfg.myJoinToken,
+    lobby_code: activeGame.lobby_code,
+    content,
+  });
+  addGameMessageToChannel(msg, false);
+}
+
+function stopGameChatPolling() {
+  clearTimeout(gameChatPollTimer);
+  gameChatPollTimer = null;
+  gameTypingIds.clear();
+  updateGameStagePlayers();
+}
+
+async function pollGameChat() {
+  if (!activeGame) return;
+  const lobby = activeGame.lobby_code;
+  const last = gameChatLastIds.get(lobby) || 0;
+  try {
+    const qs = new URLSearchParams({
+      session_id: cfg.sessionId,
+      join_token: cfg.myJoinToken,
+      lobby_code: lobby,
+      since_id: String(last),
+    });
+    const data = await fetch(appUrl('/api/game_chat.php?' + qs)).then(r => r.json());
+    if (data.error) throw new Error(data.error);
+    (data.messages || []).forEach(msg => {
+      gameChatLastIds.set(lobby, Math.max(gameChatLastIds.get(lobby) || 0, Number(msg.id)));
+      addGameMessageToChannel(msg, true);
+    });
+    gameTypingIds.clear();
+    (data.typing || []).forEach(id => gameTypingIds.add(Number(id)));
+    updateGameStagePlayers();
+  } catch (err) {
+    console.warn(err);
+  } finally {
+    if (activeGame?.lobby_code === lobby) gameChatPollTimer = setTimeout(pollGameChat, 900);
+  }
+}
+
+function startGameChatPolling() {
+  stopGameChatPolling();
+  pollGameChat();
+}
+
+function sendGameTyping(active) {
+  if (!activeGame) return Promise.resolve();
+  return apiPost('/api/game_chat.php', {
+    action: 'typing',
+    session_id: cfg.sessionId,
+    join_token: cfg.myJoinToken,
+    lobby_code: activeGame.lobby_code,
+    active,
+  }).catch(() => {});
+}
+
+function stopGameTypingNow() {
+  clearTimeout(gameTypingStopTimer);
+  if (gameTypingActive) {
+    gameTypingActive = false;
+    sendGameTyping(false);
+  }
+}
+
+function handleGameTypingInput() {
+  if (!activeGame) return;
+  if (!gameTypingActive) {
+    gameTypingActive = true;
+    sendGameTyping(true);
+  }
+  clearTimeout(gameTypingStopTimer);
+  gameTypingStopTimer = setTimeout(stopGameTypingNow, 1200);
 }
 
 document.getElementById('game-close').addEventListener('click', () => {

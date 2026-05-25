@@ -560,6 +560,89 @@ textarea:focus { border-color: rgba(124,106,247,.8); box-shadow: 0 0 0 3px rgba(
 .room-bg::after { content: ""; position: absolute; inset: 0; background: linear-gradient(rgba(0,0,0,.1), rgba(0,0,0,.2)); }
 .room-bg-next { opacity: 0; transition: opacity .5s ease; z-index: 1; }
 .room-bg-next.show { opacity: 1; }
+.game-stage-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 12;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  padding: 16px;
+  background:
+    radial-gradient(800px 420px at 50% 0%, rgba(124,106,247,.18), transparent 58%),
+    linear-gradient(135deg, rgba(7,8,13,.98), rgba(17,19,28,.98) 52%, rgba(8,10,14,.99));
+  border-radius: inherit;
+}
+.game-stage-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 14px;
+  padding: 0 0 12px;
+}
+.game-stage-head strong {
+  display: block;
+  margin-top: 3px;
+  font-size: 20px;
+}
+.game-stage-body {
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(128px, 170px) minmax(360px, 1fr) minmax(128px, 170px);
+  gap: 14px;
+  align-items: stretch;
+}
+.game-frame-wrap {
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  border: 1px solid rgba(255,255,255,.12);
+  border-radius: 10px;
+  background:
+    radial-gradient(540px 280px at 50% 18%, rgba(124,106,247,.14), transparent 62%),
+    linear-gradient(180deg, rgba(255,255,255,.04), rgba(0,0,0,.2));
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.05), 0 18px 44px rgba(0,0,0,.36);
+}
+.game-frame-wrap iframe {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: transparent;
+}
+.game-player-card {
+  min-width: 0;
+  align-self: center;
+  display: grid;
+  justify-items: center;
+  gap: 7px;
+  padding: 14px 10px;
+  border: 1px solid rgba(255,255,255,.11);
+  border-radius: 10px;
+  background:
+    linear-gradient(180deg, rgba(255,255,255,.055), rgba(255,255,255,.025)),
+    rgba(0,0,0,.22);
+  text-align: center;
+}
+.game-player-card img {
+  width: 74px;
+  height: 74px;
+  object-fit: cover;
+  border-radius: 8px;
+}
+.game-player-card strong {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+.game-typing-pill {
+  display: none;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: rgba(124,106,247,.24);
+  color: rgba(255,255,255,.82);
+  font-size: 11px;
+  font-weight: 800;
+}
+.game-player-card.typing .game-typing-pill { display: inline-flex; }
 .room-stage.effect-romantic-mood {
   box-shadow:
     inset 0 0 38px rgba(255, 94, 184, .45),
@@ -1407,6 +1490,24 @@ textarea:focus { border-color: rgba(124,106,247,.8); box-shadow: 0 0 0 3px rgba(
   background: #555;
 }
 .status-dot.on { background: var(--aqua); box-shadow: 0 0 10px rgba(39,211,195,.8); }
+.user-game-badge {
+  position: absolute;
+  left: -5px;
+  bottom: -5px;
+  width: 18px;
+  height: 18px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(255,255,255,.34);
+  border-radius: 999px;
+  background: rgba(11,12,18,.92);
+  box-shadow: 0 4px 10px rgba(0,0,0,.4);
+}
+.user-game-badge img {
+  width: 12px;
+  height: 12px;
+  object-fit: contain;
+}
 .avatar {
   position: absolute;
   width: 150px;
@@ -1629,6 +1730,36 @@ textarea:focus { border-color: rgba(124,106,247,.8); box-shadow: 0 0 0 3px rgba(
 .chat-bubble.tr::before { bottom: -16px; left: 12px; border-top-color: rgba(255,255,255,0.12); }
 .chat-bubble.tl::before { bottom: -16px; right: 12px; border-top-color: rgba(255,255,255,0.12); }
 .game-picker { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
+.game-row {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+}
+.game-row.active {
+  border-color: rgba(124,106,247,.55);
+  background: rgba(124,106,247,.13);
+}
+.game-row-main {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+.game-row-players {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0;
+  min-height: 24px;
+  margin-top: 2px;
+}
+.game-row-players img {
+  width: 24px;
+  height: 24px;
+  object-fit: cover;
+  border-radius: 999px;
+  border: 1px solid rgba(255,255,255,.38);
+  background: #11131b;
+  margin-right: -6px;
+}
 .game-btn {
   min-height: 46px;
   display: flex;
@@ -2722,4 +2853,17 @@ textarea:focus { border-color: rgba(124,106,247,.8); box-shadow: 0 0 0 3px rgba(
   }
   .create-row { grid-template-columns: 1fr; }
   .message { max-width: 92%; }
+  .game-stage-layer { padding: 10px; }
+  .game-stage-body {
+    grid-template-columns: 82px minmax(220px, 1fr) 82px;
+    gap: 8px;
+  }
+  .game-player-card {
+    padding: 10px 6px;
+    font-size: 11px;
+  }
+  .game-player-card img {
+    width: 48px;
+    height: 48px;
+  }
 }

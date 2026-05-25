@@ -38,6 +38,10 @@ if ($action === 'join') {
     $stmt = $pdo->prepare('SELECT * FROM game_lobbies WHERE lobby_code = ? LIMIT 1');
     $stmt->execute([$lobby]);
     $row = $stmt->fetch();
+    $sessionStmt = $pdo->prepare('SELECT room_session_id FROM game_sessions WHERE lobby_code = ? AND ended_at IS NULL LIMIT 1');
+    $sessionStmt->execute([$lobby]);
+    $sessionId = (int)($sessionStmt->fetchColumn() ?: 0);
+    if ($sessionId) emit_event($pdo, $sessionId, 'game_update', ['lobby_code' => $lobby]);
     json_out([
         'ok' => true,
         'lobby_id' => $row['lobby_code'],
