@@ -249,6 +249,10 @@ $rooms = $roomsStmt->fetchAll();
         <button class="admin-nav-item" data-admin-section="database" type="button">
           <img src="<?= e(app_url('/assets/images/secure.png')) ?>" alt=""> Database
         </button>
+        <button class="admin-nav-item" data-admin-section="link-icons" type="button">
+          <img src="<?= e(app_url('/assets/images/cs-icons/plus.png')) ?>" alt=""> Link Icons
+          <span class="admin-nav-count" id="admin-link-icon-count">0</span>
+        </button>
         <div class="admin-nav-label">Moderation</div>
         <button class="admin-nav-item" data-admin-section="moderation" type="button">
           <img src="<?= e(app_url('/assets/images/block-user.png')) ?>" alt=""> Actions
@@ -337,19 +341,46 @@ $rooms = $roomsStmt->fetchAll();
 
         <section class="admin-section" id="admin-section-database">
           <div class="admin-section-title">Database</div>
-          <div class="admin-section-sub">Download a local backup or restore a known-good SQLite database.</div>
+          <div class="admin-section-sub">Download full SQLite backups, or move users, rooms, settings, and files through a portable JSON bundle.</div>
           <div class="admin-panel">
             <div class="admin-actions">
               <a class="btn" href="<?= e(app_url('/api/admin_database.php?action=download')) ?>">Download Database</a>
+              <a class="btn btn-primary" href="<?= e(app_url('/api/admin_database.php?action=export_core')) ?>">Export Users + Rooms + Settings</a>
               <form id="admin-db-restore" class="admin-restore">
+                <label>Import type
+                  <select name="restore_type">
+                    <option value="sqlite">Full SQLite database</option>
+                    <option value="core_bundle">Users + Rooms + Settings bundle</option>
+                  </select>
+                </label>
                 <label class="file-picker">
-                  <input name="database" type="file" accept=".sqlite,.db,application/vnd.sqlite3,application/octet-stream" required>
-                  <span class="file-picker-btn">Choose Backup</span>
+                  <input name="database" type="file" accept=".sqlite,.db,.json,application/json,application/vnd.sqlite3,application/octet-stream" required>
+                  <span class="file-picker-btn">Choose File</span>
                   <span class="file-picker-name" id="admin-db-restore-name">No file selected</span>
                 </label>
-                <button class="btn btn-danger" type="submit">Restore Database</button>
+                <button class="btn btn-danger" type="submit">Import</button>
               </form>
             </div>
+          </div>
+        </section>
+
+        <section class="admin-section" id="admin-section-link-icons">
+          <div class="admin-section-title">Link Pairing Icons</div>
+          <div class="admin-section-sub">Add custom pairing icons for linked users. Built-in icons are protected, custom icons can be renamed or removed.</div>
+          <div class="admin-panel">
+            <form class="admin-link-icon-create" id="admin-link-icon-create" enctype="multipart/form-data">
+              <input name="label" placeholder="Icon label" required>
+              <label class="file-picker">
+                <input name="icon" type="file" accept="image/png,image/webp,image/gif,image/jpeg" required>
+                <span class="file-picker-btn">Choose Icon</span>
+                <span class="file-picker-name" id="admin-link-icon-file-name">No file selected</span>
+              </label>
+              <button class="btn btn-primary" type="submit">Add Icon</button>
+              <div class="admin-form-status" aria-live="polite"></div>
+            </form>
+          </div>
+          <div class="admin-panel">
+            <div class="admin-link-icons" id="admin-link-icons"></div>
           </div>
         </section>
 

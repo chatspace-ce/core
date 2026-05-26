@@ -6,7 +6,7 @@ $pdo = db();
 $sessionId = resolve_session_id($pdo, $body['session_id'] ?? '');
 $p = auth_participant($pdo, $sessionId, $body['join_token'] ?? '');
 $action = $body['action'] ?? 'position';
-$allowedLinkIcons = ['none', 'plus', 'wedding-rings', 'heart', 'wedding-rings-lesbian', 'help', 'wedding-rings-gay', 'archer', 'cross-swords', 'lips', 'lotus', 'handcuffs'];
+$allowedLinkIcons = allowed_link_icon_names($pdo);
 
 if ($action === 'position' || $action === 'update_position') {
     $maxMoves = app_setting_float($pdo, 'avatar_movements_per_second', 12);

@@ -48,6 +48,7 @@ emit_event($pdo, (int)$session['id'], 'participant_join', [
     'joined_at' => gmdate('Y-m-d H:i:s'),
 ]);
 $lastEventId = (int)$pdo->query('SELECT COALESCE(MAX(id), 0) FROM events WHERE session_id = ' . (int)$session['id'])->fetchColumn();
+$linkIconCatalog = link_icon_catalog($pdo);
 
 ?>
 <!doctype html>
@@ -323,8 +324,8 @@ $lastEventId = (int)$pdo->query('SELECT COALESCE(MAX(id), 0) FROM events WHERE s
     </div>
     <div class="link-icon-grid" id="link-icon-grid">
       <button class="link-icon-none" type="button" data-link-icon="none"><span aria-hidden="true"></span><strong>None</strong></button>
-      <?php foreach (['plus','heart','wedding-rings','wedding-rings-lesbian','wedding-rings-gay','help','archer','cross-swords','lips','lotus','handcuffs'] as $icon): ?>
-      <button type="button" data-link-icon="<?= e($icon) ?>"><img src="<?= e(app_url('/assets/images/cs-icons/' . $icon . '.png')) ?>" alt=""><span><?= e(ucwords(str_replace('-', ' ', $icon))) ?></span></button>
+      <?php foreach ($linkIconCatalog as $icon): ?>
+      <button type="button" data-link-icon="<?= e($icon['icon_name']) ?>"><img src="<?= e(app_url($icon['file_path'])) ?>" alt=""><span><?= e($icon['label']) ?></span></button>
       <?php endforeach; ?>
     </div>
   </div>

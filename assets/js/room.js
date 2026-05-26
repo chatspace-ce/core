@@ -465,6 +465,9 @@ function linkKeyFor(a, b) {
 
 function linkIconUrl(iconName = 'plus') {
   const clean = String(iconName || 'plus').replace(/[^a-z0-9-]/g, '') || 'plus';
+  const catalog = Array.isArray(cfg?.linkIconCatalog) ? cfg.linkIconCatalog : [];
+  const item = catalog.find(icon => icon.icon_name === clean);
+  if (item?.file_path) return appUrl(item.file_path);
   return appUrl(`/assets/images/cs-icons/${clean}.png`);
 }
 
@@ -1953,7 +1956,7 @@ async function poll() {
           person.online = false;
           person.webcam_path = null;
           person.linked_to = null;
-          removeParticipant(person.id, { keepRecord: true });
+          removeParticipant(person.id);
           if (person.id !== cfg.myParticipantId) addSystemMessage(`${person.display_name} left the room.`);
         }
       }

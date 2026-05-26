@@ -380,10 +380,13 @@ const adminRoomEjections = document.getElementById('admin-room-ejections');
 const adminCommunityEjections = document.getElementById('admin-community-ejections');
 const adminSettings = document.getElementById('admin-settings');
 const adminDbRestore = document.getElementById('admin-db-restore');
+const adminLinkIcons = document.getElementById('admin-link-icons');
+const adminLinkIconCreate = document.getElementById('admin-link-icon-create');
 const adminCounts = {
   users: document.getElementById('admin-user-count'),
   logs: document.getElementById('admin-log-count'),
   moderation: document.getElementById('admin-moderation-count'),
+  linkIcons: document.getElementById('admin-link-icon-count'),
   summaryUsers: document.getElementById('admin-summary-users'),
   summaryModeration: document.getElementById('admin-summary-moderation'),
 };
@@ -447,6 +450,13 @@ async function adminSystemRequest(body) {
   return data;
 }
 
+async function adminLinkIconRequest(formData) {
+  const resp = await fetch(appUrl('/api/admin_link_icons.php'), { method: 'POST', body: formData });
+  const data = await resp.json().catch(() => ({}));
+  if (!resp.ok || data.error) throw new Error(data.error || 'Link icon request failed');
+  return data;
+}
+
 async function loadAdminUsers() {
   if (!adminUsers) return;
   const data = await fetch(appUrl('/api/admin_users.php')).then(r => r.json());
@@ -498,6 +508,56 @@ async function loadAdminSettings() {
   const data = await fetch(appUrl('/api/admin_system.php?action=settings')).then(r => r.json());
   Object.entries(data.settings || {}).forEach(([key, value]) => {
     if (adminSettings.elements[key]) adminSettings.elements[key].value = value;
+  });
+}
+
+async function loadAdminLinkIcons() {
+  if (!adminLinkIcons) return;
+  const data = await fetch(appUrl('/api/admin_link_icons.php')).then(r => r.json());
+  adminLinkIcons.innerHTML = '';
+  setAdminCount(adminCounts.linkIcons, (data.icons || []).length);
+  if (!(data.icons || []).length) {
+    adminLinkIcons.innerHTML = '<div class="minor">No link icons available.</div>';
+    return;
+  }
+  (data.icons || []).forEach(icon => {
+    const row = document.createElement('form');
+    row.className = 'admin-link-icon-row';
+    row.innerHTML = `<img src="${esc(appUrl(icon.file_path))}" alt="">
+      <div><strong>${esc(icon.icon_name)}</strong><div class="minor">${icon.built_in ? 'Built-in' : 'Custom'}</div></div>
+      <input name="label" value="${esc(icon.label)}" required>
+      <button class="btn btn-primary" type="submit">Save</button>
+      <button class="btn btn-danger" type="button"${icon.built_in ? ' disabled' : ''}>Delete</button>
+      <div class="admin-row-status" aria-live="polite"></div>`;
+    row.addEventListener('submit', async e => {
+      e.preventDefault();
+      const fd = new FormData();
+      fd.append('action', 'update');
+      fd.append('icon_name', icon.icon_name);
+      fd.append('label', row.elements.label.value);
+      setAdminFormStatus(row, 'Saving...', 'working');
+      try {
+        await adminLinkIconRequest(fd);
+        setAdminFormStatus(row, 'Saved.', 'ok');
+        await loadAdminLogs();
+      } catch (err) {
+        setAdminFormStatus(row, err.message || 'Save failed.', 'error');
+      }
+    });
+    row.querySelector('.btn-danger')?.addEventListener('click', async () => {
+      if (!confirm(`Delete ${icon.label}? Existing pairs using it will switch to Plus.`)) return;
+      const fd = new FormData();
+      fd.append('action', 'delete');
+      fd.append('icon_name', icon.icon_name);
+      try {
+        await adminLinkIconRequest(fd);
+        await loadAdminLinkIcons();
+        await loadAdminLogs();
+      } catch (err) {
+        setAdminFormStatus(row, err.message || 'Delete failed.', 'error');
+      }
+    });
+    adminLinkIcons.appendChild(row);
   });
 }
 
@@ -590,6 +650,7 @@ async function loadAdminDashboard() {
     loadAdminBlocks(),
     loadAdminRoomEjections(),
     loadAdminCommunityEjections(),
+    loadAdminLinkIcons(),
   ]);
 }
 
@@ -671,4 +732,31 @@ adminDbRestore?.addEventListener('submit', async e => {
     return;
   }
   window.location.reload();
+});
+
+adminLinkIconCreate?.icon?.addEventListener('change', () => {
+  const file = adminLinkIconCreate.icon.files && adminLinkIconCreate.icon.files[0];
+  document.getElementById('admin-link-icon-file-name').textContent = file ? file.name : 'No file selected';
+});
+
+adminLinkIconCreate?.addEventListener('submit', async e => {
+  e.preventDefault();
+  const form = e.currentTarget;
+  const submit = form.querySelector('button[type="submit"]');
+  submit.disabled = true;
+  setAdminFormStatus(form, 'Adding icon...', 'working');
+  try {
+    const fd = new FormData(form);
+    fd.append('action', 'create');
+    await adminLinkIconRequest(fd);
+    form.reset();
+    document.getElementById('admin-link-icon-file-name').textContent = 'No file selected';
+    setAdminFormStatus(form, 'Icon added.', 'ok');
+    await loadAdminLinkIcons();
+    await loadAdminLogs();
+  } catch (err) {
+    setAdminFormStatus(form, err.message || 'Could not add icon.', 'error');
+  } finally {
+    submit.disabled = false;
+  }
 });

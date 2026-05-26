@@ -303,6 +303,7 @@ json_out([
     'communityMessages' => $communityMessages,
     'linkMessages' => $linkMessages,
     'linkIcons' => $linkIcons,
+    'linkIconCatalog' => link_icon_catalog($pdo),
     'dmMessages' => $dmMessages,
     'dmUsers' => $dmUsers,
     'lastCommunityEventId' => $lastCommunityEventId,

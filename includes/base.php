@@ -165,6 +165,8 @@ function mysqlize_schema(string $schema): string {
         'status' => 'VARCHAR(32)',
         'type' => 'VARCHAR(64)',
         'icon_name' => 'VARCHAR(64)',
+        'label' => 'VARCHAR(191)',
+        'file_path' => 'VARCHAR(512)',
         'link_key' => 'VARCHAR(191)',
         'scope' => 'VARCHAR(32)',
         'action' => 'VARCHAR(64)',
@@ -382,6 +384,15 @@ function migrate(PDO $pdo): void {
             FOREIGN KEY(session_id) REFERENCES room_sessions(id) ON DELETE CASCADE
         );
 
+        CREATE TABLE IF NOT EXISTS link_icon_catalog (
+            icon_name TEXT PRIMARY KEY,
+            label TEXT NOT NULL,
+            file_path TEXT NOT NULL,
+            built_in INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
+
         CREATE TABLE IF NOT EXISTS user_blocks (
             blocker_user_id INTEGER NOT NULL,
             blocked_user_id INTEGER NOT NULL,
@@ -539,6 +550,7 @@ function migrate(PDO $pdo): void {
 
     if (db_driver($pdo) !== 'sqlite') {
         seed_app_settings($pdo);
+        seed_link_icon_catalog($pdo);
         return;
     }
 
@@ -553,6 +565,7 @@ function migrate(PDO $pdo): void {
         $pdo->exec('ALTER TABLE app_settings RENAME COLUMN key TO setting_key');
     }
     seed_app_settings($pdo);
+    seed_link_icon_catalog($pdo);
 
     $cols = $pdo->query('PRAGMA table_info(rooms)')->fetchAll();
     $hasPublicId = false;
@@ -678,6 +691,57 @@ function migrate(PDO $pdo): void {
         $update = $pdo->prepare('UPDATE room_sessions SET public_id = ? WHERE id = ?');
         $update->execute([uuid_v4(), (int)$row['id']]);
     }
+}
+
+function default_link_icons(): array {
+    return [
+        'plus' => 'Plus',
+        'heart' => 'Heart',
+        'wedding-rings' => 'Wedding Rings',
+        'wedding-rings-lesbian' => 'Wedding Rings Lesbian',
+        'wedding-rings-gay' => 'Wedding Rings Gay',
+        'help' => 'Help',
+        'archer' => 'Archer',
+        'cross-swords' => 'Cross Swords',
+        'lips' => 'Lips',
+        'lotus' => 'Lotus',
+        'handcuffs' => 'Handcuffs',
+    ];
+}
+
+function seed_link_icon_catalog(PDO $pdo): void {
+    $stmt = $pdo->prepare(db_uses_mysql_syntax($pdo)
+        ? 'INSERT IGNORE INTO link_icon_catalog (icon_name, label, file_path, built_in) VALUES (?,?,?,1)'
+        : 'INSERT OR IGNORE INTO link_icon_catalog (icon_name, label, file_path, built_in) VALUES (?,?,?,1)'
+    );
+    foreach (default_link_icons() as $name => $label) {
+        $stmt->execute([$name, $label, '/assets/images/cs-icons/' . $name . '.png']);
+    }
+}
+
+function link_icon_catalog(PDO $pdo): array {
+    seed_link_icon_catalog($pdo);
+    $rows = $pdo->query('SELECT icon_name, label, file_path, built_in, created_at, updated_at FROM link_icon_catalog ORDER BY built_in DESC, label ASC')->fetchAll();
+    return array_map(fn(array $row): array => [
+        'icon_name' => $row['icon_name'],
+        'label' => $row['label'],
+        'file_path' => $row['file_path'],
+        'built_in' => !empty($row['built_in']),
+        'created_at' => $row['created_at'] ?? null,
+        'updated_at' => $row['updated_at'] ?? null,
+    ], $rows);
+}
+
+function allowed_link_icon_names(PDO $pdo): array {
+    return array_merge(['none'], array_map(fn(array $row): string => (string)$row['icon_name'], link_icon_catalog($pdo)));
+}
+
+function upsert_link_icon_catalog(PDO $pdo, string $iconName, string $label, string $filePath, bool $builtIn = false): void {
+    $stmt = $pdo->prepare(db_uses_mysql_syntax($pdo)
+        ? 'INSERT INTO link_icon_catalog (icon_name, label, file_path, built_in, updated_at) VALUES (?,?,?,?,CURRENT_TIMESTAMP) ON DUPLICATE KEY UPDATE label = VALUES(label), file_path = VALUES(file_path), built_in = VALUES(built_in), updated_at = CURRENT_TIMESTAMP'
+        : 'INSERT INTO link_icon_catalog (icon_name, label, file_path, built_in, updated_at) VALUES (?,?,?,?,CURRENT_TIMESTAMP) ON CONFLICT(icon_name) DO UPDATE SET label = excluded.label, file_path = excluded.file_path, built_in = excluded.built_in, updated_at = CURRENT_TIMESTAMP'
+    );
+    $stmt->execute([$iconName, $label, $filePath, $builtIn ? 1 : 0]);
 }
 
 function seed_app_settings(PDO $pdo): void {

@@ -2194,6 +2194,38 @@ textarea:focus { border-color: rgba(124,106,247,.8); box-shadow: 0 0 0 3px rgba(
   align-items: center;
   margin-bottom: 10px;
 }
+.admin-link-icon-create {
+  display: grid;
+  grid-template-columns: minmax(160px, .8fr) minmax(240px, 1.4fr) auto;
+  gap: 9px;
+  align-items: center;
+}
+.admin-link-icon-create .admin-form-status {
+  grid-column: 1 / -1;
+}
+.admin-link-icons {
+  display: grid;
+  gap: 8px;
+}
+.admin-link-icon-row {
+  display: grid;
+  grid-template-columns: 44px minmax(140px, .85fr) minmax(180px, 1fr) auto auto;
+  gap: 10px;
+  align-items: center;
+  padding: 10px;
+  border: 1px solid rgba(255,255,255,.075);
+  border-radius: 8px;
+  background: rgba(0,0,0,.2);
+}
+.admin-link-icon-row > img {
+  width: 34px;
+  height: 34px;
+  object-fit: contain;
+  justify-self: center;
+}
+.admin-link-icon-row .admin-row-status {
+  grid-column: 3 / -1;
+}
 .admin-user-row {
   grid-template-columns: minmax(180px, 1.45fr) minmax(110px, .75fr) minmax(140px, 1fr) auto auto;
   padding: 10px;
@@ -2293,6 +2325,8 @@ textarea:focus { border-color: rgba(124,106,247,.8); box-shadow: 0 0 0 3px rgba(
   .admin-main { padding: 22px; }
   .admin-create,
   .admin-user-row,
+  .admin-link-icon-create,
+  .admin-link-icon-row,
   .admin-settings,
   .admin-moderation-grid,
   .admin-summary-grid {
