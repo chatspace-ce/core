@@ -135,8 +135,10 @@ let activeRoomEffect = null;
 let activeMediaTab = 'gifs';
 let gesturePage = 1;
 let gestureHasMore = false;
+let gesturePaletteLoaded = false;
 let gestureSearchTimer = null;
 let activeGestureAudio = null;
+const mediaSearchValues = { gifs: '', gestures: '' };
 const EMOJI_OPTIONS = [
   '😀','😃','😄','😁','😂','🤣','😊','😌','😉','😏','😈','😍','🥰','😘','😇','🙂','🙃','😋','😜','🤭',
   '😭','🥺','😤','😡','😱','😳','🤔','🙄','😴','🤯','😎','🥳','🖤','🤍','❤️','🧡','💛','💚','💙','💜',
@@ -2637,6 +2639,7 @@ function openEmojiPicker() {
   closeGameStartMenu();
   closeAttachMenu();
   closeMediaPicker();
+  gesturePaletteLoaded = false;
   const btn = document.getElementById('emoji-btn');
   const r = btn.getBoundingClientRect();
   mediaPicker.hidden = false;
@@ -2769,6 +2772,9 @@ function renderEmojiGrid() {
 }
 
 function setMediaTab(tab) {
+  if (mediaSearchInput && activeMediaTab !== 'emojis') {
+    mediaSearchValues[activeMediaTab] = mediaSearchInput.value;
+  }
   activeMediaTab = tab;
   mediaPicker?.classList.remove('media-tab-gifs', 'media-tab-gestures', 'media-tab-emojis');
   mediaPicker?.classList.add(`media-tab-${tab}`);
@@ -2776,15 +2782,17 @@ function setMediaTab(tab) {
   mediaPicker?.querySelectorAll('.media-panel').forEach(panel => panel.classList.toggle('active', panel.id === `media-panel-${tab}`));
   if (mediaSearchInput) {
     mediaSearchInput.placeholder = tab === 'gifs' ? 'Search GIFs' : (tab === 'gestures' ? 'Search gesture text' : 'Search emojis');
-    mediaSearchInput.value = '';
+    mediaSearchInput.value = tab === 'emojis' ? '' : (mediaSearchValues[tab] || '');
     mediaSearchInput.style.display = tab === 'emojis' ? 'none' : '';
   }
   if (tab === 'gifs' && gifResults && !cfg?.gifPicker?.enabled) {
     gifResults.innerHTML = '<div class="minor">GIFs are not configured.</div>';
   }
   if (tab === 'gestures') {
-    gesturePage = 1;
-    loadGestures();
+    if (!gesturePaletteLoaded) {
+      gesturePage = 1;
+      loadGestures();
+    }
   }
   if (tab === 'emojis') renderEmojiGrid();
 }
@@ -2831,10 +2839,12 @@ async function searchGifs(query) {
 
 mediaSearchInput?.addEventListener('input', e => {
   if (activeMediaTab === 'gifs') {
+    mediaSearchValues.gifs = e.target.value;
     clearTimeout(gifSearchTimer);
     gifSearchTimer = setTimeout(() => searchGifs(e.target.value), 250);
   }
   if (activeMediaTab === 'gestures') {
+    mediaSearchValues.gestures = e.target.value;
     clearTimeout(gestureSearchTimer);
     gestureSearchTimer = setTimeout(() => {
       gesturePage = 1;
@@ -2889,6 +2899,7 @@ async function loadGestures() {
     if (gesturePrev) gesturePrev.disabled = gesturePage <= 1;
     if (gestureNext) gestureNext.disabled = !gestureHasMore;
     renderGestureGrid(data.gestures || []);
+    gesturePaletteLoaded = true;
   } catch (err) {
     gestureGrid.innerHTML = `<div class="minor">${esc(err.message || 'Gestures could not load.')}</div>`;
   }
