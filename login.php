@@ -35,9 +35,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       <label>Email or username<input name="login" required autocomplete="username"></label>
       <label>Password<input type="password" name="password" required autocomplete="current-password"></label>
       <button class="btn btn-primary" type="submit">Log In</button>
-      <p class="minor">New here? <a href="<?= e(app_url('/register.php')) ?>">Create an account</a></p>
-      <p class="minor"><a href="<?= e(app_url('/recover.php')) ?>">Recover Account</a></p>
-      <p class="minor auth-about-link"><a href="<?= e(app_url('/about.html')) ?>">About ChatSpace Community Edition</a></p>
+      <div class="auth-action-panel">
+        <span>New here?</span>
+        <a class="btn btn-primary auth-main-link" href="<?= e(app_url('/register.php')) ?>">Create an Account</a>
+      </div>
+      <div class="auth-utility-actions">
+        <a class="auth-utility-btn" href="<?= e(app_url('/recover.php')) ?>">Recover Account</a>
+        <a class="auth-utility-btn auth-about-btn" href="<?= e(app_url('/about.html')) ?>">About ChatSpace CE</a>
+      </div>
     </form>
     <?php if ($branding['has_custom_logo']): ?>
       <div class="powered-by auth-powered-by">

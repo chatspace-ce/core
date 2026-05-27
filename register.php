@@ -71,8 +71,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       <label class="check-label"><input type="checkbox" name="age_gate_confirm" value="1" required> I confirm that I am at least <?= e((string)$ageGateMinAge) ?>.</label>
       <?php endif; ?>
       <button class="btn btn-primary" type="submit">Sign Up</button>
-      <p class="minor">Already have an account? <a href="<?= e(app_url('/login.php')) ?>">Log in</a></p>
-      <p class="minor auth-about-link"><a href="<?= e(app_url('/about.html')) ?>">About ChatSpace Community Edition</a></p>
+      <div class="auth-action-panel">
+        <span>Already have an account?</span>
+        <a class="btn btn-primary auth-main-link" href="<?= e(app_url('/login.php')) ?>">Log In</a>
+      </div>
+      <div class="auth-utility-actions single">
+        <a class="auth-utility-btn auth-about-btn" href="<?= e(app_url('/about.html')) ?>">About ChatSpace CE</a>
+      </div>
     </form>
     <?php if ($branding['has_custom_logo']): ?>
       <div class="powered-by auth-powered-by">

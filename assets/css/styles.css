@@ -45,9 +45,54 @@ button, input, select { font: inherit; }
 .auth-logo-full.custom-brand-logo {
   max-height: 170px;
 }
-.auth-about-link {
-  margin-top: -4px;
+.auth-action-panel {
+  display: grid;
+  gap: 9px;
+  margin-top: 4px;
+  padding: 12px;
+  border: 1px solid rgba(255,255,255,.09);
+  border-radius: 8px;
+  background: linear-gradient(135deg, rgba(124,106,247,.10), rgba(255,255,255,.035));
+}
+.auth-action-panel span {
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+.auth-main-link {
+  width: 100%;
+  min-height: 42px;
+  font-weight: 900;
+}
+.auth-utility-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+.auth-utility-actions.single {
+  grid-template-columns: 1fr;
+}
+.auth-utility-btn {
+  min-height: 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 9px 12px;
+  border: 1px solid rgba(255,255,255,.12);
+  border-radius: 8px;
+  background: rgba(255,255,255,.055);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 850;
   text-align: center;
+  text-decoration: none;
+}
+.auth-utility-btn:hover {
+  background: rgba(255,255,255,.09);
+  border-color: rgba(124,106,247,.42);
+}
+.auth-about-btn {
+  background: linear-gradient(135deg, rgba(124,106,247,.14), rgba(39,211,195,.07));
 }
 .brand { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 22px; }
 .brand h1 { font-size: 24px; margin: 0; letter-spacing: 0; }
