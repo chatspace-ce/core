@@ -55,6 +55,11 @@ const gestureNext = document.getElementById('gesture-next');
 const emojiGrid = document.getElementById('emoji-grid');
 const attachMenu = document.getElementById('attach-menu');
 const chatFileInput = document.getElementById('chat-file-input');
+const voiceDeviceModal = document.getElementById('voice-device-modal');
+const voiceDeviceForm = document.getElementById('voice-device-form');
+const voiceInputDevice = document.getElementById('voice-input-device');
+const voiceOutputDevice = document.getElementById('voice-output-device');
+const voiceDeviceStatus = document.getElementById('voice-device-status');
 const voiceNoteModal = document.getElementById('voice-note-modal');
 const appVersionEl = document.getElementById('app-version');
 const latencyMonitorEl = document.getElementById('latency-monitor');
@@ -90,6 +95,7 @@ let voicePollTimer = null;
 let voiceMuted = false;
 let voiceDeafened = false;
 let voiceSpeaking = false;
+let selectedVoiceOutputDeviceId = '';
 let voiceAnalyserTimer = null;
 let voiceAudioContext = null;
 let voiceAnalyser = null;
@@ -4494,15 +4500,96 @@ function startVoiceAnalyser() {
   } catch {}
 }
 
+function setVoiceDeviceStatus(message, state = '') {
+  if (!voiceDeviceStatus) return;
+  voiceDeviceStatus.textContent = message || '';
+  voiceDeviceStatus.classList.remove('ok', 'error', 'working');
+  if (state) voiceDeviceStatus.classList.add(state);
+}
+
+function deviceOption(device, fallback) {
+  return `<option value="${esc(device.deviceId || '')}">${esc(device.label || fallback)}</option>`;
+}
+
+async function populateVoiceDevices() {
+  if (!voiceInputDevice || !voiceOutputDevice) return;
+  setVoiceDeviceStatus('Loading audio devices...', 'working');
+  if (!navigator.mediaDevices?.enumerateDevices) {
+    voiceInputDevice.innerHTML = '<option value="">Default microphone</option>';
+    voiceOutputDevice.innerHTML = '<option value="">Default speaker</option>';
+    voiceOutputDevice.disabled = true;
+    setVoiceDeviceStatus('Your browser does not expose selectable audio devices.', 'error');
+    return;
+  }
+  const previousInput = voiceInputDevice.value;
+  const previousOutput = voiceOutputDevice.value || selectedVoiceOutputDeviceId;
+  const devices = await navigator.mediaDevices.enumerateDevices();
+  const inputs = devices.filter(device => device.kind === 'audioinput');
+  const outputs = devices.filter(device => device.kind === 'audiooutput');
+  voiceInputDevice.innerHTML = [
+    '<option value="">Default microphone</option>',
+    ...inputs.map((device, index) => deviceOption(device, `Microphone ${index + 1}`)),
+  ].join('');
+  voiceOutputDevice.innerHTML = [
+    '<option value="">Default speaker</option>',
+    ...outputs.map((device, index) => deviceOption(device, `Speaker ${index + 1}`)),
+  ].join('');
+  if (previousInput && Array.from(voiceInputDevice.options).some(option => option.value === previousInput)) voiceInputDevice.value = previousInput;
+  if (previousOutput && Array.from(voiceOutputDevice.options).some(option => option.value === previousOutput)) voiceOutputDevice.value = previousOutput;
+  voiceOutputDevice.disabled = typeof HTMLMediaElement === 'undefined' || !('setSinkId' in HTMLMediaElement.prototype);
+  setVoiceDeviceStatus(voiceOutputDevice.disabled ? 'Speaker selection is not supported by this browser.' : '', voiceOutputDevice.disabled ? 'working' : '');
+}
+
+async function openVoiceDeviceModal() {
+  if (!voiceDeviceModal) {
+    await joinVoice();
+    return;
+  }
+  voiceDeviceModal.classList.add('open');
+  await populateVoiceDevices().catch(err => {
+    console.warn(err);
+    setVoiceDeviceStatus('Could not load audio devices. Default devices can still be used.', 'error');
+  });
+}
+
+function closeVoiceDeviceModal() {
+  voiceDeviceModal?.classList.remove('open');
+}
+
+async function applyAudioOutput(audio) {
+  if (!audio || typeof audio.setSinkId !== 'function') return;
+  try {
+    await audio.setSinkId(selectedVoiceOutputDeviceId || '');
+  } catch (err) {
+    console.warn(err);
+  }
+}
+
+function selectedVoiceAudioConstraints() {
+  const deviceId = voiceInputDevice?.value || '';
+  if (!deviceId) return true;
+  return { deviceId: { exact: deviceId } };
+}
+
 document.getElementById('voice-toggle').addEventListener('click', async () => {
   if (voiceJoined) await leaveVoice();
-  else await joinVoice();
+  else await openVoiceDeviceModal();
 });
+
+voiceDeviceForm?.addEventListener('submit', async e => {
+  e.preventDefault();
+  setVoiceDeviceStatus('Joining voice...', 'working');
+  await joinVoice();
+});
+
+document.getElementById('voice-device-close')?.addEventListener('click', closeVoiceDeviceModal);
+document.getElementById('voice-device-cancel')?.addEventListener('click', closeVoiceDeviceModal);
 
 async function joinVoice() {
   if (voiceJoined) return;
   try {
-    voiceStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+    selectedVoiceOutputDeviceId = voiceOutputDevice?.value || '';
+    voiceStream = await navigator.mediaDevices.getUserMedia({ audio: selectedVoiceAudioConstraints(), video: false });
     voiceMuted = false;
     voiceDeafened = false;
     voiceSpeaking = false;
@@ -4511,13 +4598,16 @@ async function joinVoice() {
     await apiPost('/api/voice_signal.php', { action: 'join', session_id: cfg.sessionId, participant_id: cfg.myParticipantId, join_token: cfg.myJoinToken });
     await syncVoiceStatus(true);
     startVoiceAnalyser();
+    document.querySelectorAll('audio[id^="voice-audio-"]').forEach(applyAudioOutput);
     restartVoicePoll(0);
+    closeVoiceDeviceModal();
+    populateVoiceDevices().catch(() => {});
   } catch (err) {
     voiceJoined = false;
     updateVoiceToggleButton();
     if (voiceStream) voiceStream.getTracks().forEach(t => t.stop());
     voiceStream = null;
-    alert(err.message || 'Could not join voice chat.');
+    setVoiceDeviceStatus(err.message || 'Could not join voice chat.', 'error');
   }
 }
 
@@ -4556,6 +4646,7 @@ async function getPeer(id, polite = false) {
     }
     audio.muted = voiceDeafened;
     audio.srcObject = e.streams[0];
+    applyAudioOutput(audio);
   };
   pc.onicecandidate = e => {
     if (e.candidate) sendSignal(id, 'ice', e.candidate);

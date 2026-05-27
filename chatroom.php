@@ -169,6 +169,28 @@ $linkIconCatalog = link_icon_catalog($pdo);
     </div>
   </aside>
 </div>
+<div class="modal" id="voice-device-modal">
+  <form class="modal-box voice-device-box" id="voice-device-form">
+    <div class="modal-head">
+      <strong>Join Voice</strong>
+      <button class="window-close" id="voice-device-close" type="button" aria-label="Close">×</button>
+    </div>
+    <div class="voice-device-grid">
+      <label>Microphone
+        <select id="voice-input-device"></select>
+      </label>
+      <label>Speaker
+        <select id="voice-output-device"></select>
+      </label>
+    </div>
+    <div class="minor" id="voice-device-note">Choose your audio devices before joining voice.</div>
+    <div class="voice-device-actions">
+      <button class="btn btn-primary" id="voice-device-join" type="submit">Join Voice</button>
+      <button class="btn" id="voice-device-cancel" type="button">Cancel</button>
+    </div>
+    <div class="admin-form-status" id="voice-device-status" aria-live="polite"></div>
+  </form>
+</div>
 <div class="modal" id="voice-note-modal">
   <div class="modal-box voice-note-box">
     <div class="modal-head">
