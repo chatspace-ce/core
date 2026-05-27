@@ -3749,8 +3749,10 @@ document.getElementById('horizontal-divider')?.addEventListener('pointerdown', e
 
 document.getElementById('vertical-divider')?.addEventListener('pointerdown', e => {
   e.preventDefault();
+  e.currentTarget.classList.add('dragging');
   const onMove = ev => applyVerticalDividerDrag(ev.clientX);
   const onUp = () => {
+    e.currentTarget.classList.remove('dragging');
     document.removeEventListener('pointermove', onMove);
     document.removeEventListener('pointerup', onUp);
   };

@@ -866,14 +866,19 @@ textarea:focus { border-color: rgba(124,106,247,.8); box-shadow: 0 0 0 3px rgba(
   flex: 0 0 6px;
   width: 6px;
   height: calc(100% - 20px);
-  margin: 10px 10px 10px 0;
+  margin: 10px 0;
   border-radius: 3px;
-  background: var(--border);
+  background: transparent;
   cursor: col-resize;
   z-index: 10;
-  transition: background .15s;
+  opacity: 0;
+  transition: background .15s, opacity .15s;
 }
-.vertical-divider:hover { background: var(--accent); }
+.vertical-divider:hover,
+.vertical-divider.dragging {
+  background: var(--accent);
+  opacity: 1;
+}
 .chat-pane {
   position: absolute;
   left: 10px;
@@ -1566,6 +1571,7 @@ textarea:focus { border-color: rgba(124,106,247,.8); box-shadow: 0 0 0 3px rgba(
   padding: 0 0 16px;
 }
 .side-section:last-child { border-bottom: none; }
+.side-section:has(.user-list) { border-bottom: none; }
 .sidebar-bottom-tools .side-section:last-child { padding-bottom: 0; }
 .room-title-row {
   display: flex;
