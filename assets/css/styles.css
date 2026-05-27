@@ -2815,10 +2815,7 @@ textarea:focus { border-color: rgba(124,106,247,.8); box-shadow: 0 0 0 3px rgba(
   cursor: pointer;
 }
 .admin-export-choice:nth-of-type(2n) {
-  background: linear-gradient(90deg, rgba(39,211,195,.07), rgba(255,255,255,.03));
-}
-.admin-export-choice:nth-of-type(3n) {
-  background: linear-gradient(90deg, rgba(255,95,122,.065), rgba(255,255,255,.03));
+  background: linear-gradient(90deg, rgba(255,255,255,.062), rgba(255,255,255,.032));
 }
 .admin-export-choice:hover {
   border-color: rgba(124,106,247,.34);
@@ -2848,9 +2845,63 @@ textarea:focus { border-color: rgba(124,106,247,.8); box-shadow: 0 0 0 3px rgba(
   width: auto;
 }
 .admin-settings {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  display: grid;
+  gap: 14px;
 }
-.admin-settings .btn { grid-column: 1 / -1; }
+.admin-settings-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+.admin-settings-group {
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid rgba(255,255,255,.085);
+  border-radius: 8px;
+  background:
+    linear-gradient(135deg, rgba(124,106,247,.075), rgba(255,255,255,.022)),
+    rgba(0,0,0,.16);
+}
+.admin-settings-group:nth-child(2n) {
+  background:
+    linear-gradient(135deg, rgba(255,255,255,.052), rgba(255,255,255,.018)),
+    rgba(0,0,0,.18);
+}
+.admin-settings-group h3 {
+  margin: 0 0 12px;
+  color: rgba(255,255,255,.88);
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+.admin-settings-group-wide {
+  grid-column: 1 / -1;
+}
+.admin-settings-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 11px;
+}
+.admin-settings-fields.three {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.admin-settings-registration {
+  align-items: end;
+}
+.admin-settings-registration .check-label {
+  min-height: 41px;
+  align-self: end;
+  padding: 10px 12px;
+  border: 1px solid rgba(255,255,255,.08);
+  border-radius: 7px;
+  background: rgba(255,255,255,.045);
+}
+.admin-settings-actions {
+  display: grid;
+  gap: 8px;
+}
+.admin-settings-actions .btn { width: 100%; }
 .admin-list {
   max-height: 360px;
   overflow: auto;
@@ -2907,7 +2958,9 @@ textarea:focus { border-color: rgba(124,106,247,.8); box-shadow: 0 0 0 3px rgba(
   .admin-user-row,
   .admin-link-icon-create,
   .admin-link-icon-row,
-  .admin-settings,
+  .admin-settings-grid,
+  .admin-settings-fields,
+  .admin-settings-fields.three,
   .admin-moderation-grid,
   .admin-summary-grid {
     grid-template-columns: 1fr;

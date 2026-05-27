@@ -344,26 +344,50 @@ $rooms = $roomsStmt->fetchAll();
           <div class="admin-section-sub">Tune chat speed, avatar movement, and media upload boundaries.</div>
           <div class="admin-panel">
             <form class="admin-settings" id="admin-settings">
-              <label>Chat posts per second <input name="chat_posts_per_second" type="number" min="0.2" max="30" step="0.1"></label>
-              <label>Room chat history posts <input name="room_chat_history_limit" type="number" min="1" max="1000" step="10"></label>
-              <label>Avatar movements per second <input name="avatar_movements_per_second" type="number" min="1" max="60" step="1"></label>
-              <label>Avatar max size MB <input name="avatar_max_size_mb" type="number" min="0.5" max="50" step="0.5"></label>
-              <label>Gestures per account <input name="gesture_upload_limit" type="number" min="0" max="1000" step="1"></label>
-              <label>Room image max size MB <input name="room_image_max_size_mb" type="number" min="1" max="100" step="1"></label>
-              <label>Room video max size MB <input name="room_video_max_size_mb" type="number" min="5" max="1000" step="5"></label>
-              <label>Idle removal minutes <input name="participant_idle_timeout_minutes" type="number" min="0.5" max="120" step="0.5"></label>
-              <label>GIPHY API key <input name="gif_giphy_api_key" type="password" autocomplete="off" placeholder="Optional"></label>
-              <label>Tenor API key <input name="gif_tenor_api_key" type="password" autocomplete="off" placeholder="Optional"></label>
-              <label class="check-label"><input name="age_gate_enabled" type="checkbox" value="1"> Enable registration age gate</label>
-              <label>Age gate minimum age <input name="age_gate_min_age" type="number" min="1" max="120" step="1"></label>
-              <label>Default GIF provider
-                <select name="gif_default_provider">
-                  <option value="giphy">GIPHY</option>
-                  <option value="tenor">Tenor</option>
-                </select>
-              </label>
-              <button class="btn btn-primary" type="submit">Save Settings</button>
-              <div class="admin-form-status" aria-live="polite"></div>
+              <div class="admin-settings-grid">
+                <section class="admin-settings-group">
+                  <h3>Chat & Presence</h3>
+                  <div class="admin-settings-fields">
+                    <label>Chat posts per second <input name="chat_posts_per_second" type="number" min="0.2" max="30" step="0.1"></label>
+                    <label>Room chat history posts <input name="room_chat_history_limit" type="number" min="1" max="1000" step="10"></label>
+                    <label>Avatar movements per second <input name="avatar_movements_per_second" type="number" min="1" max="60" step="1"></label>
+                    <label>Idle removal minutes <input name="participant_idle_timeout_minutes" type="number" min="0.5" max="120" step="0.5"></label>
+                  </div>
+                </section>
+                <section class="admin-settings-group">
+                  <h3>Media Limits</h3>
+                  <div class="admin-settings-fields">
+                    <label>Avatar max size MB <input name="avatar_max_size_mb" type="number" min="0.5" max="50" step="0.5"></label>
+                    <label>Gestures per account <input name="gesture_upload_limit" type="number" min="0" max="1000" step="1"></label>
+                    <label>Room image max size MB <input name="room_image_max_size_mb" type="number" min="1" max="100" step="1"></label>
+                    <label>Room video max size MB <input name="room_video_max_size_mb" type="number" min="5" max="1000" step="5"></label>
+                  </div>
+                </section>
+                <section class="admin-settings-group admin-settings-group-wide">
+                  <h3>GIF Selector</h3>
+                  <div class="admin-settings-fields three">
+                    <label>GIPHY API key <input name="gif_giphy_api_key" type="password" autocomplete="off" placeholder="Optional"></label>
+                    <label>Tenor API key <input name="gif_tenor_api_key" type="password" autocomplete="off" placeholder="Optional"></label>
+                    <label>Default GIF provider
+                      <select name="gif_default_provider">
+                        <option value="giphy">GIPHY</option>
+                        <option value="tenor">Tenor</option>
+                      </select>
+                    </label>
+                  </div>
+                </section>
+                <section class="admin-settings-group admin-settings-group-wide">
+                  <h3>Registration</h3>
+                  <div class="admin-settings-fields admin-settings-registration">
+                    <label class="check-label"><input name="age_gate_enabled" type="checkbox" value="1"> Enable registration age gate</label>
+                    <label>Age gate minimum age <input name="age_gate_min_age" type="number" min="1" max="120" step="1"></label>
+                  </div>
+                </section>
+              </div>
+              <div class="admin-settings-actions">
+                <button class="btn btn-primary" type="submit">Save Settings</button>
+                <div class="admin-form-status" aria-live="polite"></div>
+              </div>
             </form>
           </div>
         </section>
