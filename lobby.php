@@ -335,7 +335,7 @@ $rooms = $roomsStmt->fetchAll();
             </form>
           </div>
           <div class="admin-panel">
-            <div class="admin-users" id="admin-users"></div>
+            <div class="admin-users admin-scroll-list" id="admin-users"></div>
           </div>
         </section>
 
@@ -397,7 +397,7 @@ $rooms = $roomsStmt->fetchAll();
           <div class="admin-section-sub">Download full SQLite backups, or move users, rooms, settings, and files through a portable JSON bundle.</div>
           <div class="admin-panel">
             <div class="admin-actions">
-              <a class="btn" href="<?= e(app_url('/api/admin_database.php?action=download')) ?>">Full Backup</a>
+              <a class="btn btn-primary" href="<?= e(app_url('/api/admin_database.php?action=download')) ?>">Full Backup</a>
               <form id="admin-db-export" class="admin-export-options">
                 <div class="admin-import-note">
                   Select the portable data map to export. Files used by selected records are included in the JSON bundle.
@@ -443,7 +443,7 @@ $rooms = $roomsStmt->fetchAll();
             </form>
           </div>
           <div class="admin-panel">
-            <div class="admin-link-icons" id="admin-link-icons"></div>
+            <div class="admin-link-icons admin-scroll-list" id="admin-link-icons"></div>
           </div>
         </section>
 

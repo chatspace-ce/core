@@ -2540,9 +2540,9 @@ textarea:focus { border-color: rgba(124,106,247,.8); box-shadow: 0 0 0 3px rgba(
   position: relative;
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   width: 100%;
-  min-height: 40px;
+  min-height: 44px;
   padding: 9px 18px;
   border: 0;
   border-left: 2px solid transparent;
@@ -2565,20 +2565,20 @@ textarea:focus { border-color: rgba(124,106,247,.8); box-shadow: 0 0 0 3px rgba(
   background: linear-gradient(90deg, rgba(124,106,247,.2), rgba(124,106,247,.045));
 }
 .admin-nav-item img {
-  width: 18px;
-  height: 18px;
+  width: 24px;
+  height: 24px;
   object-fit: contain;
   flex: 0 0 auto;
 }
 .admin-nav-symbol {
-  width: 18px;
-  height: 18px;
+  width: 24px;
+  height: 24px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   text-align: center;
   color: rgba(255,255,255,.78);
-  font-size: 20px;
+  font-size: 24px;
   font-weight: 900;
   line-height: 1;
   transform: translateY(-.5px);
@@ -2705,6 +2705,27 @@ textarea:focus { border-color: rgba(124,106,247,.8); box-shadow: 0 0 0 3px rgba(
 .admin-link-icons {
   display: grid;
   gap: 8px;
+}
+.admin-scroll-list {
+  max-height: min(430px, calc(90vh - 350px));
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-right: 6px;
+}
+.admin-scroll-list::-webkit-scrollbar {
+  width: 6px;
+}
+.admin-scroll-list::-webkit-scrollbar-track {
+  background: rgba(255,255,255,.035);
+  border-radius: 999px;
+}
+.admin-scroll-list::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgba(124,106,247,.45);
+}
+.admin-scroll-list::-webkit-scrollbar-thumb:hover {
+  background: rgba(124,106,247,.62);
 }
 .admin-link-icon-row {
   display: grid;
