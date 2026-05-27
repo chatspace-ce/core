@@ -1,0 +1,610 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <title>Game Centre - Tetris Versus</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+:root{
+  --bg:#0f0f12; --card-bg:#17171c; --surface:#181b28;
+  --text:#ffffff; --muted:rgba(255,255,255,0.72);
+  --shadow:rgba(0,0,0,0.6); --edge:rgba(255,255,255,0.12);
+  --accent-1:#7b5cff; --accent-2:#39d0ff;
+  --c-I:#5ad0ff; --c-J:#6da0ff; --c-L:#ff9f50; --c-O:#ffd84d; --c-S:#6fe67f; --c-T:#b97bff; --c-Z:#ff6f7a;
+  --board-vignette: radial-gradient(140% 90% at 50% 50%, rgba(255,255,255,0.06) 0%, rgba(0,0,0,0.0) 60%, rgba(0,0,0,0.35) 100%);
+  --board-weave:
+    linear-gradient(45deg, rgba(255,255,255,0.03) 25%, transparent 25%) 0 0/12px 12px,
+    linear-gradient(45deg, transparent 75%, rgba(255,255,255,0.03) 75%) 0 0/12px 12px,
+    linear-gradient(-45deg, rgba(255,255,255,0.02) 25%, transparent 25%) 0 0/12px 12px,
+    linear-gradient(-45deg, transparent 75%, rgba(255,255,255,0.02) 75%) 0 0/12px 12px;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+
+body{
+  background:radial-gradient(1200px 600px at 30% -10%, #1b1730 0%, #0f0f12 60%) fixed;
+  color:var(--text);
+  font-family:"Segoe UI",system-ui,-apple-system,sans-serif;
+  display:flex;
+  justify-content:center;         /* center horizontally */
+  align-items:flex-start;          /* <— don’t stretch the card vertically */
+  padding:28px 18px 18px;          /* smaller bottom padding */
+}
+
+.card{
+  background:color-mix(in srgb, var(--card-bg) 92%, #000 8%);
+  border:1px solid rgba(255,255,255,0.08);
+  border-radius:14px;
+  box-shadow:0 14px 40px var(--shadow), inset 0 1px 0 rgba(255,255,255,0.04);
+  width:min(92vw,1080px);
+  overflow:hidden;
+  position:relative;
+  margin-bottom:0;
+  align-self:flex-start;           /* <— keep intrinsic height */
+}
+
+.card-header,.card-footer{
+  padding:16px 22px;
+  display:flex; justify-content:space-between; align-items:center;
+  background:linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.00));
+}
+.card-header{border-bottom:1px solid rgba(255,255,255,0.12); gap:12px;}
+.card-footer{border-top:1px solid rgba(255,255,255,0.12); margin-bottom:0;}
+.card-body{padding:18px 22px 22px; display:flex; flex-direction:column; gap:14px;}
+
+.info-label{font-size:14px; opacity:.95}
+.muted{color:var(--muted)}
+
+.versus{display:grid; grid-template-columns:1fr 1fr; gap:18px; align-items:start;}
+.side{
+  background:linear-gradient(180deg, rgba(255,255,255,0.08), rgba(255,255,255,0.02));
+  border:1px solid rgba(255,255,255,0.14);
+  border-radius:12px; padding:14px;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,0.14), 0 18px 40px rgba(0,0,0,0.45);
+}
+.player-label{font-size:16px; font-weight:800; letter-spacing:.2px; margin-bottom:8px; display:flex; justify-content:space-between;}
+
+.wrap{display:flex; gap:14px; align-items:flex-start;}
+.board{
+  display:grid; grid-template: repeat(20,28px) / repeat(10,28px);
+  border-radius:10px; overflow:hidden; border:1px solid rgba(255,255,255,0.15);
+  background-image: var(--board-weave), var(--board-vignette);
+  background-blend-mode: overlay, normal;
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,0.06), 0 18px 36px rgba(0,0,0,0.35);
+}
+.cell{width:28px; height:28px; position:relative; box-shadow:inset 0 0 0 1px rgba(255,255,255,0.02);}
+.ghost{outline:2px dashed rgba(255,255,255,0.25); outline-offset:-3px;}
+
+.tile{width:100%; height:100%; box-shadow:0 8px 14px rgba(0,0,0,0.5), 0 0 0 1px var(--edge), inset 0 0 10px rgba(255,255,255,0.18), inset 0 -10px 16px rgba(0,0,0,0.35);}
+.t1{background:color-mix(in srgb, var(--c-I) 78%, #fff 22%);}
+.t2{background:color-mix(in srgb, var(--c-J) 78%, #fff 22%);}
+.t3{background:color-mix(in srgb, var(--c-L) 78%, #fff 22%);}
+.t4{background:color-mix(in srgb, var(--c-O) 78%, #fff 22%);}
+.t5{background:color-mix(in srgb, var(--c-S) 78%, #fff 22%);}
+.t6{background:color-mix(in srgb, var(--c-T) 78%, #fff 22%);}
+.t7{background:color-mix(in srgb, var(--c-Z) 78%, #fff 22%);}
+
+.hud{display:flex; flex-direction:column; gap:10px;}
+.panel{min-width:160px; background:color-mix(in srgb, #1a1a1f 85%, #000 15%); border:1px solid rgba(255,255,255,0.15); border-radius:10px; padding:10px 12px; box-shadow:inset 0 1px 0 rgba(255,255,255,0.08);}
+.panel h4{font-size:13px; opacity:.9; margin-bottom:6px;}
+.kv{font-size:14px; display:flex; justify-content:space-between; margin:2px 0;}
+.nextbox{width:140px; height:140px; display:grid; grid-template: repeat(4,28px) / repeat(4,28px); border-radius:8px; overflow:hidden; border:1px solid rgba(255,255,255,0.12); background-image: var(--board-weave), var(--board-vignette);}
+
+.actions{display:flex; gap:10px; align-items:center;}
+button{
+  background:linear-gradient(180deg, rgba(255,255,255,0.14), rgba(255,255,255,0.04));
+  border:1px solid rgba(255,255,255,0.32);
+  border-radius:8px; color:var(--text); padding:10px 14px; font-weight:700; letter-spacing:.2px; cursor:pointer;
+  transition:transform .08s ease, box-shadow .2s ease, background .2s ease;
+  box-shadow:0 8px 18px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.12);
+}
+button:hover{transform:translateY(-1px); background:linear-gradient(180deg, rgba(255,255,255,0.22), rgba(255,255,255,0.06)); box-shadow:0 12px 28px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.18);}
+
+.waiting-cover{position:absolute; inset:0; display:flex; align-items:center; justify-content:center; background:rgba(0,0,0,0.55); backdrop-filter:blur(3px); z-index:6;}
+.waiting-panel{background:color-mix(in srgb, #1a1a1f 85%, #000 15%); border:1px solid rgba(255,255,255,0.15); border-radius:14px; padding:20px 22px; min-width:320px; max-width:min(92vw,560px); text-align:center; box-shadow:0 18px 40px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.08);}
+.spinner{width:18px; height:18px; border-radius:50%; border:2px solid rgba(255,255,255,0.25); border-top-color:rgba(255,255,255,0.9); animation:spin 1s linear infinite; display:inline-block; vertical-align:middle; margin-right:8px;}
+@keyframes spin{to{transform:rotate(360deg)}}
+.invite-row{margin-top:14px; padding-top:12px; border-top:1px dashed rgba(255,255,255,0.12);}
+.invite-title{font-size:13px; color:var(--muted); margin-bottom:8px; letter-spacing:.2px;}
+.invite-flex{display:grid; grid-template-columns:1fr auto; gap:10px; align-items:stretch;}
+.code-chip{display:inline-flex; align-items:center; justify-content:center; padding:10px 14px; border-radius:12px; font:700 14px/1.1 ui-sans-serif, system-ui, -apple-system; background:linear-gradient(180deg, rgba(255,255,255,0.08), rgba(255,255,255,0.02)); border:1px solid rgba(255,255,255,0.2); letter-spacing:.8px; user-select:all; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+.copy-btn{display:inline-flex; align-items:center; gap:8px; padding:10px 14px; border-radius:12px; border:1px solid rgba(255,255,255,0.28); background:linear-gradient(180deg, rgba(255,255,255,0.16), rgba(255,255,255,0.05)); font-weight:800; letter-spacing:.3px; cursor:pointer;}
+.copy-btn .ico{font-size:16px; line-height:1; display:inline-block; transform:translateY(-0.5px)}
+.copy-btn.success{outline:2px solid rgba(0,200,140,.55); transition:outline .2s ease;}
+body.embedded{
+  display:block;
+  padding:0;
+  overflow:hidden;
+  background:transparent;
+}
+body.embedded .card{
+  width:100%;
+  height:100vh;
+  border:0;
+  border-radius:0;
+  box-shadow:none;
+  background:transparent;
+}
+body.embedded .card-header,
+body.embedded .card-footer{
+  display:none;
+}
+body.embedded .card-body{
+  height:100%;
+  padding:12px;
+  justify-content:center;
+}
+body.embedded .versus{
+  max-width:100%;
+  overflow:auto;
+}
+body.embedded .waiting-cover{
+  border-radius:0;
+}
+  </style>
+</head>
+<body>
+  <div class="card" id="card">
+    <div class="card-header">
+      <span class="info-label" id="lobby-label">Lobby: …</span>
+      <div style="display:flex; gap:10px; align-items:center;">
+        <span class="info-label muted" id="user-label">User: …</span>
+        <button id="leave" title="Leave Session">Leave</button>
+      </div>
+    </div>
+
+    <div class="card-body">
+      <div class="versus">
+        <!-- PLAYER 1 -->
+        <div class="side" id="side1">
+          <div class="player-label"><span id="p1Name">Player 1</span><span class="muted" id="p1You"></span></div>
+          <div class="wrap">
+            <div class="board" id="board1"></div>
+            <div class="hud">
+              <div class="panel"><h4>Next</h4><div class="nextbox" id="next1"></div></div>
+              <div class="panel">
+                <h4>Stats</h4>
+                <div class="kv"><span>Score</span><strong id="score1">0</strong></div>
+                <div class="kv"><span>Lines</span><strong id="lines1">0</strong></div>
+                <div class="kv"><span>Level</span><strong id="level1">1</strong></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <!-- PLAYER 2 -->
+        <div class="side" id="side2">
+          <div class="player-label"><span id="p2Name">Player 2</span><span class="muted" id="p2You"></span></div>
+          <div class="wrap">
+            <div class="board" id="board2"></div>
+            <div class="hud">
+              <div class="panel"><h4>Next</h4><div class="nextbox" id="next2"></div></div>
+              <div class="panel">
+                <h4>Stats</h4>
+                <div class="kv"><span>Score</span><strong id="score2">0</strong></div>
+                <div class="kv"><span>Lines</span><strong id="lines2">0</strong></div>
+                <div class="kv"><span>Level</span><strong id="level2">1</strong></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card-footer">
+      <div class="actions">
+        <button id="btnPause">Pause (P)</button>
+        <button id="btnRestart">Restart</button>
+        <button id="btnResign">Resign</button>
+      </div>
+      <div id="status" class="info-label">Waiting for Opponent…</div>
+    </div>
+
+    <div class="waiting-cover" id="waitingCover">
+      <div class="waiting-panel">
+        <div>
+          <span class="spinner" id="waitingSpinner"></span>
+          <span class="info-label" id="waitingMsg">Waiting for Opponent…</span>
+        </div>
+        <div class="invite-row" id="inviteRow" aria-live="polite">
+          <div class="invite-title">Share this Lobby Code</div>
+          <div class="invite-flex">
+            <div class="code-chip" id="lobbyCodeText" title="Lobby Code">—</div>
+            <button class="copy-btn" id="copyCodeBtn" type="button" aria-label="Copy lobby code">
+              <span class="ico">📋</span> Copy
+            </button>
+          </div>
+        </div>
+        <div style="margin-top:12px;">
+          <button id="leave2">Leave</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+<script>
+/* ================= Params / Base Path ================= */
+const params = new URLSearchParams(location.search);
+const code   = params.get('code') || params.get('lobby') || 'demo';
+const player = parseInt(params.get('player')||'1',10);
+const user   = parseInt(params.get('user')||'1001',10);
+const gameId = parseInt(params.get('game')||'7',10);
+const embedded = params.get('embedded') === '1';
+if (embedded) document.body.classList.add('embedded');
+
+function computeBase(){
+  const path = location.pathname || '/';
+  const idx = path.indexOf('/games/');
+  return idx >= 0 ? path.slice(0, idx) : '';
+}
+const base = computeBase();
+const LIST_URL = `${base}/list_lobbies.php?game=${gameId}`;
+
+function leaveToParent(){
+  try { window.parent.postMessage({ type:'game_close', lobby: code }, window.location.origin); } catch {}
+  location.href = LIST_URL;
+}
+
+window.addEventListener('message', e=>{
+  if (e.origin !== window.location.origin || e.data?.type !== 'game_control') return;
+  if (e.data.action === 'rematch') el('btnRestart')?.click();
+  if (e.data.action === 'resign') el('btnResign')?.click();
+});
+
+/* ================= Elements ================= */
+const el = id=>document.getElementById(id);
+el('lobby-label').textContent = `Lobby: ${code}`;
+el('user-label').textContent  = `User: ${user}`;
+el('lobbyCodeText').textContent = code;
+const waitingCover = el('waitingCover');
+const waitingMsg   = el('waitingMsg');
+const inviteRow    = el('inviteRow');
+const copyCodeBtn  = el('copyCodeBtn');
+
+/* ================= Copy code ================= */
+let copyResetTimer=null; copyCodeBtn?.addEventListener('click', async ()=>{
+  try{
+    await navigator.clipboard.writeText(code);
+    copyCodeBtn.classList.add('success');
+    copyCodeBtn.innerHTML='<span class="ico">✅</span> Copied!';
+    if(copyResetTimer) clearTimeout(copyResetTimer);
+    copyResetTimer=setTimeout(()=>{
+      copyCodeBtn.classList.remove('success');
+      copyCodeBtn.innerHTML='<span class="ico">📋</span> Copy';
+    },1200);
+  }catch{}
+});
+
+/* ================= API helpers ================= */
+async function apiGet(p){
+  const u=(p.startsWith('/'))?`${base}${p}`:`${p}`;
+  const url=u+(u.includes('?')?'&':'?')+`user=${user}`;
+  const r=await fetch(url);
+  return r.ok? r.json():{};
+}
+async function apiPost(p,d){
+  const u=(p.startsWith('/'))?`${base}${p}`:`${p}`;
+  const r=await fetch(u,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(d)});
+  if(!r.ok) throw new Error('net'); return r.json();
+}
+async function sendMove(type, extra={}){ try{ await apiPost(`/api/moves.php`, { lobby_id: code, user_id: user, payload: {type, ...extra} }); }catch{} }
+
+/* ================= Tetris engine ================= */
+const ROWS=20, COLS=10;
+/* classic-ish speeds (ms per row) */
+const SPEEDS=[0,1200,1100,1000,900,820,760,700,650,610,580,550,520,490,460,430,400,380,360,340,320];
+
+function blankGrid(){ return Array.from({length:ROWS},()=>Array(COLS).fill(0)); }
+function mountBoard(domId){
+  const root=el(domId); root.innerHTML='';
+  const frag=document.createDocumentFragment();
+  for(let i=0;i<ROWS*COLS;i++){ const d=document.createElement('div'); d.className='cell'; frag.appendChild(d); }
+  root.appendChild(frag);
+  return root;
+}
+function drawBoard(root, board, ghost){
+  if(!root) return;
+  const cells=root.children;
+  let i=0;
+  for(let r=0;r<ROWS;r++){
+    for(let c=0;c<COLS;c++){
+      const v=board[r][c];
+      const d=cells[i++];
+      if(!d) continue;
+      d.className='cell';
+      d.textContent='';
+      if(v){ const t=document.createElement('div'); t.className='tile t'+v; d.appendChild(t); }
+    }
+  }
+  if(ghost){
+    for(const [gr,gc] of ghost){
+      const idx=gr*COLS+gc; const d=cells[idx]; if(d) d.classList.add('ghost');
+    }
+  }
+}
+function drawNext(boxId, id){
+  const root = el(boxId); if (!root) return;
+  root.innerHTML = '';
+  const frag = document.createDocumentFragment();
+  for (let i = 0; i < 16; i++) { const d = document.createElement('div'); d.className = 'cell'; frag.appendChild(d); }
+  root.appendChild(frag);
+
+  const pieceId = (id && SHAPES && SHAPES[id]) ? id : 4;
+  const shape = SHAPES && SHAPES[pieceId];
+  if (!shape || !shape.rot || !shape.rot[0]) return;
+
+  const cells = root.children;
+  const mat = shape.rot[0];
+  let k = 0;
+  for (let r = 0; r < 4; r++) for (let c = 0; c < 4; c++) {
+    const v = (mat[r] && mat[r][c]) ? mat[r][c] : 0;
+    const d = cells[k++];
+    if (v) { const t = document.createElement('div'); t.className = 'tile t' + pieceId; d.appendChild(t); }
+  }
+}
+
+const SHAPES={
+  1:{rot: [ [[0,0,0,0],[1,1,1,1],[0,0,0,0],[0,0,0,0]],
+            [[0,0,1,0],[0,0,1,0],[0,0,1,0],[0,0,1,0]],
+            [[0,0,0,0],[0,0,0,0],[1,1,1,1],[0,0,0,0]],
+            [[0,1,0,0],[0,1,0,0],[0,1,0,0],[0,1,0,0]] ]},
+  2:{rot: [ [[2,0,0],[2,2,2],[0,0,0]], [[0,2,2],[0,2,0],[0,2,0]], [[0,0,0],[2,2,2],[0,0,2]], [[0,2,0],[0,2,0],[2,2,0]] ]},
+  3:{rot: [ [[0,0,3],[3,3,3],[0,0,0]], [[0,3,0],[0,3,0],[0,3,3]], [[0,0,0],[3,3,3],[3,0,0]], [[3,3,0],[0,3,0],[0,3,0]] ]},
+  4:{rot: [ [[4,4],[4,4]], [[4,4],[4,4]], [[4,4],[4,4]], [[4,4],[4,4]] ]},
+  5:{rot: [ [[0,5,5],[5,5,0],[0,0,0]], [[0,5,0],[0,5,5],[0,0,5]], [[0,0,0],[0,5,5],[5,5,0]], [[5,0,0],[5,5,0],[0,5,0]] ]},
+  6:{rot: [ [[0,6,0],[6,6,6],[0,0,0]], [[0,6,0],[0,6,6],[0,6,0]], [[0,0,0],[6,6,6],[0,6,0]], [[0,6,0],[6,6,0],[0,6,0]] ]},
+  7:{rot: [ [[7,7,0],[0,7,7],[0,0,0]], [[0,0,7],[0,7,7],[0,7,0]], [[0,0,0],[7,7,0],[0,7,7]], [[0,7,0],[7,7,0],[7,0,0]] ]}
+};
+function newBag(){ const a=[1,2,3,4,5,6,7]; for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; } return a; }
+
+class Piece{ constructor(id){ this.id=id; this.r=0; this.row=0; this.col=3; } mat(){ return SHAPES[this.id].rot[this.r]; } }
+
+/* helper: merge a live piece onto a board clone */
+function withPiece(board, pid, r, c, rot){
+  const out = board.map(row=>row.slice());
+  if(!pid || !SHAPES[pid]) return out;
+  const m = SHAPES[pid].rot[rot||0];
+  for(let i=0;i<m.length;i++){
+    for(let j=0;j<m[i].length;j++){
+      if(!m[i][j]) continue;
+      const rr=(r||0)+i, cc=(c||0)+j;
+      if(rr>=0 && rr<ROWS && cc>=0 && cc<COLS) out[rr][cc]=pid;
+    }
+  }
+  return out;
+}
+
+class Game{
+  constructor(side){
+    this.side=side; this.board=blankGrid();
+    this.score=0; this.lines=0; this.level=1;
+    this.bag=[]; this.queue=[]; this.active=null; this.ghostCache=null;
+    this.alive=true; this.paused=false; this.dropTimer=0;
+    this.dropInterval=SPEEDS[this.level]||1200;
+    this._lastNet = { row:-1,col:-1,r:-1, id:-1, time:0 };
+    this._netInterval = 100; // ms
+  }
+  refill(){ while(this.queue.length<5){ if(this.bag.length===0) this.bag=newBag(); this.queue.push(this.bag.pop()); } }
+  spawn(){ this.refill(); const id=this.queue.shift(); this.active=new Piece(id); this.active.row=0; this.active.col=3; if(this.collides(0,0,this.active.r)) this.alive=false; this.ghostCache=null; this.updateGhost(); this.refill(); this.syncHUD(); this.sendState(true); }
+  rotate(dir){ if(!this.active) return; const r=(this.active.r+(dir>0?1:3))%4; if(!this.collides(0,0,r)){ this.active.r=r; this.updateGhost(); this.sendState(); } }
+  move(dx){ if(!this.active) return; if(!this.collides(0,dx,this.active.r)){ this.active.col+=dx; this.updateGhost(); this.sendState(); } }
+  softDrop(){ if(!this.active) return; if(!this.step()) this.lock(); else this.sendState(); }
+  hardDrop(){ if(!this.active) return; while(this.step()); this.lock(); }
+  step(){ if(this.collides(1,0,this.active.r)) return false; this.active.row++; return true; }
+  collides(dr,dc,rot){
+    const m=SHAPES[this.active.id].rot[rot];
+    const r0=this.active.row+dr, c0=this.active.col+dc;
+    for(let r=0;r<m.length;r++){
+      for(let c=0;c<m[r].length;c++){
+        if(!m[r][c]) continue;
+        const rr=r0+r, cc=c0+c;
+        if(rr<0||rr>=ROWS||cc<0||cc>=COLS) return true;
+        if(this.board[rr][cc]) return true;
+      }
+    }
+    return false;
+  }
+  lock(){
+    const m=this.active.mat(); const r0=this.active.row, c0=this.active.col;
+    for(let r=0;r<m.length;r++){ for(let c=0;c<m[r].length;c++){ if(m[r][c]){ const rr=r0+r, cc=c0+c; if(rr>=0&&rr<ROWS&&cc>=0&&cc<COLS) this.board[rr][cc]=this.active.id; } } }
+    let cleared=0;
+    for(let r=ROWS-1;r>=0;){ if(this.board[r].every(v=>v)){ this.board.splice(r,1); this.board.unshift(Array(COLS).fill(0)); cleared++; } else r--; }
+    if(cleared){
+      this.lines+=cleared;
+      const pts=[0,100,300,500,800][cleared]||0;
+      this.score+=pts*this.level;
+      this.level=Math.min(20,1+Math.floor(this.lines/10));
+      this.dropInterval=SPEEDS[this.level]||320;
+      this.syncHUD();
+    }
+    this.active=null;
+    this.spawn();
+    this.sendState(true);
+  }
+  ghost(){
+    if(!this.active) return [];
+    let r=this.active.row, c=this.active.col, rot=this.active.r;
+    while(!this.collides(r+1-this.active.row,c-this.active.col,rot)) r++;
+    const out=[]; const m=this.active.mat();
+    for(let i=0;i<m.length;i++) for(let j=0;j<m[i].length;j++) if(m[i][j]) out.push([r+i,c+j]);
+    return out;
+  }
+  updateGhost(){ this.ghostCache=this.ghost(); }
+  tick(dt){
+    if(this.paused||!this.alive) return;
+    this.dropTimer+=dt;
+    if(this.dropTimer>=this.dropInterval){
+      if(!this.step()) this.lock();
+      this.dropTimer=0;
+      this.sendState();
+    }
+  }
+  syncHUD(){ el('score'+this.side).textContent=this.score; el('lines'+this.side).textContent=this.lines; el('level'+this.side).textContent=this.level; drawNext('next'+this.side, this.queue[0]||4); }
+  render(){
+    const temp = this.active ? withPiece(this.board, this.active.id, this.active.row, this.active.col, this.active.r) : this.board;
+    drawBoard(this.side===1?boardEl1:boardEl2, temp, this.ghostCache);
+  }
+  async sendState(force=false){
+    try{
+      const now = performance.now();
+      const ap = this.active ? { id:this.active.id, row:this.active.row, col:this.active.col, r:this.active.r } : null;
+      const changed = ap && (ap.id!==this._lastNet.id || ap.row!==this._lastNet.row || ap.col!==this._lastNet.col || ap.r!==this._lastNet.r);
+      if(!force){
+        if(!changed) return;
+        if(now - this._lastNet.time < this._netInterval) return;
+      }
+      this._lastNet = { ...(ap||{id:-1,row:-1,col:-1,r:-1}), time: now };
+
+      const payload = {
+        code, player:this.side,
+        board:this.board, score:this.score, lines:this.lines, level:this.level,
+        next:this.queue[0]||0, active: ap
+      };
+      await apiPost(`/api/state.php`, { lobby_id: code, user_id: user, state: { [`p${this.side}`]: payload } });
+    }catch{}
+  }
+  topOut(){ this.alive=false; this.sendResult({topout:true}); }
+  async sendResult(extra={}){ try{ await apiPost(`/api/result.php`, { code, player:this.side, ...extra }); }catch{} }
+}
+
+/* ================= Globals (declared ONCE) ================= */
+let boardEl1, boardEl2, mySide, oppSide, myGame;
+let oppBoard=blankGrid();
+let oppActive=null; // {id,row,col,r}
+let oppStats={score:0,lines:0,level:1,next:4};
+let started=false, bothJoined=false, gameOver=false, winner=null;
+
+/* ================= Waiting/Join UX ================= */
+function setWaiting(mode){
+  if(mode){
+    waitingCover.style.display='flex';
+    if(mode==='waiting'){ waitingMsg.textContent='Waiting for Opponent…'; el('status').textContent='Waiting for Opponent…'; inviteRow.style.display='block'; }
+    else { waitingMsg.textContent='Opponent left — please Leave'; el('status').textContent='Opponent left'; inviteRow.style.display='none'; }
+  } else { waitingCover.style.display='none'; el('status').textContent='Game in progress'; inviteRow.style.display='none'; }
+}
+function ensureBothPresent(){ if(!bothJoined){ bothJoined=true; started=true; setWaiting(null); myGame?.sendState(true); sendMove('ready',{at:Date.now()}).catch(()=>{}); } }
+function onOpponentLeft(){ bothJoined=false; started=false; setWaiting('left'); }
+
+/* ================= Poll opponent via moves.php + lobby.php ================= */
+let lastSeq=0;
+async function seedMoves(){ try{ const mv=await apiGet(`/api/moves.php?lobby=${code}&lastSeq=0`); if(Array.isArray(mv)&&mv.length){ lastSeq=mv[mv.length-1].sequence||0; const anyOther = mv.some(m=>m.user_id!==user); if(anyOther) ensureBothPresent(); } }catch{} }
+async function pollMoves(){ try{ const mv=await apiGet(`/api/moves.php?lobby=${code}&lastSeq=${lastSeq}`); if(!Array.isArray(mv)) return; for(const m of mv){ lastSeq=m.sequence||lastSeq; const {payload,user_id}=m; if(!payload) continue; switch(payload.type){ case 'join': case 'ready': if(user_id!==user) ensureBothPresent(); break; case 'leave': if(user_id!==user) onOpponentLeft(); break; case 'topout': if(user_id!==user){ gameOver=true; winner=mySide; el('status').textContent='You win!'; } break; } } }catch{} }
+async function pollLobbyStatus(){ try{ const s=await apiGet(`/api/lobby.php?action=status&lobby_id=${code}`); const count=(s&&(s.players??s.players_count??s.active_players))||0; if(count>=2) ensureBothPresent(); if(count<2&&bothJoined) onOpponentLeft(); if(s&&typeof s.status==='string'){ const st=s.status.toLowerCase(); if(st==='ongoing'&&!bothJoined) ensureBothPresent(); if((st==='over'||st==='closed'||st==='ended')&&bothJoined) onOpponentLeft(); } }catch{} }
+
+/* ================= Mirror opponent via state.php ================= */
+/* IMPORTANT FIX: draw opponent on the OPPOSITE board */
+function renderOpponent(){
+  const target = (mySide===1 ? boardEl2 : boardEl1);
+  const temp = (oppActive && oppActive.id) ? withPiece(oppBoard, oppActive.id, oppActive.row, oppActive.col, oppActive.r) : oppBoard;
+  drawBoard(target, temp);
+}
+async function pollState(){
+  try{
+    const s=await apiGet(`/api/state.php?lobby=${code}`);
+    if(s&&s.state){
+      const mine=s.state[`p${mySide}`];
+      const opp=s.state[`p${oppSide}`];
+      if(opp){
+        oppBoard = opp.board || oppBoard;
+        oppStats.score=opp.score||0;
+        oppStats.lines=opp.lines||0;
+        oppStats.level=opp.level||1;
+        oppStats.next=opp.next||4;
+        oppActive = opp.active || null;
+        drawNext('next'+oppSide, oppStats.next);
+        el('score'+oppSide).textContent=oppStats.score;
+        el('lines'+oppSide).textContent=oppStats.lines;
+        el('level'+oppSide).textContent=oppStats.level;
+      }
+      if(mine && !started && bothJoined) started=true;
+    }
+  }catch{}
+}
+
+/* ================= Join/Leave ================= */
+el('leave').onclick=leaveFlow; el('leave2').onclick=leaveFlow;
+function leaveFlow(){ sendMove('leave',{}).catch(()=>{}); try{ apiPost(`/api/lobby.php`, { action:'close', lobby_id: code, user_id: user }); }catch{} leaveToParent(); }
+function beaconLeave(){ try{
+  const payload={ lobby_id: code, user_id: user, payload:{type:'leave'} };
+  const b=new Blob([JSON.stringify(payload)],{type:'application/json'});
+  navigator.sendBeacon?.(`${base}/api/moves.php`, b);
+  const b2=new Blob([JSON.stringify({ action:'close', lobby_id: code, user_id: user })],{type:'application/json'});
+  navigator.sendBeacon?.(`${base}/api/lobby.php`, b2);
+}catch{}}
+window.addEventListener('pagehide', beaconLeave);
+window.addEventListener('beforeunload', beaconLeave);
+
+/* ================= Controls / Input ================= */
+const Keys={Left:'ArrowLeft',Right:'ArrowRight',Down:'ArrowDown',Hard:' ',RotCW:'ArrowUp',RotCCW:'z',Pause:'p'};
+function bindControls(){
+  document.addEventListener('keydown', (e)=>{
+    if(gameOver||myGame?.paused||!started) return;
+    switch(e.key){
+      case Keys.Left:  myGame.move(-1); break;
+      case Keys.Right: myGame.move(1);  break;
+      case Keys.Down:  myGame.softDrop(); break;
+      case Keys.Hard:  e.preventDefault(); myGame.hardDrop(); break;
+      case Keys.RotCW: myGame.rotate(1); break;
+      case Keys.RotCCW:myGame.rotate(-1); break;
+    }
+  });
+  el('btnPause').onclick=()=>{ if(!myGame) return; myGame.paused=!myGame.paused; el('btnPause').textContent=myGame.paused?'Resume (P)':'Pause (P)'; };
+  el('btnRestart').onclick=()=>{ if(!myGame) return; if(!confirm('Restart your board?')) return;
+    Object.assign(myGame,{board:blankGrid(),score:0,lines:0,level:1,bag:[],queue:[],active:null,alive:true,paused:false});
+    myGame.dropInterval=SPEEDS[1]; myGame.spawn(); myGame.sendState(true);
+  };
+  el('btnResign').onclick=()=>{ if(!myGame) return; if(confirm('Resign the game?')) myGame.sendResult({resign:true}); };
+  addEventListener('keydown',e=>{ if(e.key.toLowerCase()===Keys.Pause) el('btnPause').click(); });
+}
+
+/* ================= Loop ================= */
+let last=performance.now();
+function loop(ts){
+  const dt=ts-last; last=ts;
+  if(!gameOver&&started&&myGame){
+    myGame.tick(dt);
+    myGame.render();       // draw my board (left if P1, right if P2)
+    renderOpponent();      // draw opponent on the opposite board
+  }
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+
+/* ================= Init ================= */
+(async ()=>{
+  setWaiting('waiting');
+  el('p1You').textContent = (player===1? '(You)':'');
+  el('p2You').textContent = (player===2? '(You)':'');
+
+  try{ await apiPost(`/api/lobby.php`, { action:'join', lobby_id: code, user_id: user }); sendMove('join',{at:Date.now()}); }catch{}
+
+  boardEl1=mountBoard('board1');
+  boardEl2=mountBoard('board2');
+  mySide=player; oppSide=(player===1?2:1);
+
+  myGame=new Game(mySide);
+  myGame.spawn(); myGame.syncHUD();
+  bindControls();
+
+  await seedMoves();
+  await pollLobbyStatus();
+  setTimeout(pollLobbyStatus, 350);
+  setInterval(pollMoves, 900);
+  setInterval(pollLobbyStatus, 1000);
+  setInterval(pollState, 120); // ~8 Hz
+})();
+
+/* Detect topout on failed spawn */
+const _spawnOrig=Game.prototype.spawn;
+Game.prototype.spawn=function(){
+  _spawnOrig.call(this);
+  if(!this.alive && !gameOver){
+    gameOver=true;
+    this.sendResult({topout:true});
+    sendMove('topout',{});
+    el('status').textContent='You lose…';
+    setWaiting('left');
+  }
+};
+</script>
+</body>
+</html>

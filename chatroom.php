@@ -137,6 +137,20 @@ $linkIconCatalog = link_icon_catalog($pdo);
       </div>
       <div class="minor">Created by <?= e($room['owner_name']) ?></div>
     </section>
+    <section class="side-section games-side-section">
+      <div class="side-title">Games</div>
+      <div class="game-start-wrap">
+        <button class="btn icon-label game-start-btn" id="game-start-btn" type="button"><img src="<?= e(app_url('/assets/images/games-icon.png')) ?>" alt="">Start a Game</button>
+        <div class="game-start-menu" id="game-start-menu" hidden>
+          <button data-game="chess" type="button"><img src="<?= e(app_url('/assets/images/chess-icon.png')) ?>" alt="">Chess</button>
+          <button data-game="checkers" type="button"><img src="<?= e(app_url('/assets/images/checkers-icon.png')) ?>" alt="">Checkers</button>
+          <button data-game="backgammon" type="button"><img src="<?= e(app_url('/assets/images/backgammon-icon.png')) ?>" alt="">Backgammon</button>
+          <button data-game="spaceinvasion" type="button"><img src="<?= e(app_url('/assets/images/spaceinvasion-icon.png')) ?>" alt="">Space Invasion</button>
+          <button data-game="tetris" type="button"><img src="<?= e(app_url('/assets/images/tetris-icon.png')) ?>" alt="">Tetris Versus</button>
+        </div>
+      </div>
+      <div class="game-list" id="active-games"></div>
+    </section>
     <section class="side-section">
       <div class="side-title">Chatting <span id="participant-count-label">(0)</span></div>
       <div class="user-list" id="user-list"></div>
@@ -146,14 +160,6 @@ $linkIconCatalog = link_icon_catalog($pdo);
         <div class="side-title">Voice Chat</div>
         <div class="voice-list" id="voice-list"></div>
         <button class="btn btn-voice" id="voice-toggle" style="width:100%;margin-top:8px;">Join Voice</button>
-      </section>
-      <section class="side-section">
-        <div class="side-title">Games</div>
-        <div class="game-list" id="active-games"></div>
-        <div class="game-picker" style="margin-top:8px;">
-          <button class="game-btn" data-game="chess" type="button"><img src="<?= e(app_url('/assets/images/chess-icon.png')) ?>" alt="">Chess</button>
-          <button class="game-btn" data-game="checkers" type="button"><img src="<?= e(app_url('/assets/images/checkers-icon.png')) ?>" alt="">Checkers</button>
-        </div>
       </section>
       <section class="side-section">
         <button class="btn icon-label" id="locate-btn" style="width:100%;"><img src="<?= e(app_url('/assets/images/locate.png')) ?>" alt="">Locate Friends</button>

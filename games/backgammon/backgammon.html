@@ -1,0 +1,769 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<title>Game Centre - Backgammon</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<style>
+:root{
+  --bg:#0f0f12; --card-bg:#17171c; --surface:#181b28;
+  --text:#ffffff; --muted:rgba(255,255,255,0.72);
+  --shadow:rgba(0,0,0,0.6); --edge:rgba(255,255,255,0.12);
+  --accent-1:#7b5cff; --accent-2:#39d0ff; --gold:#ffd700;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{
+  background:radial-gradient(1200px 600px at 30% -10%, #1b1730 0%, #0f0f12 60%) fixed;
+  color:var(--text);
+  font-family:"Segoe UI",system-ui,-apple-system,sans-serif;
+  display:flex; align-items:flex-start; justify-content:center;
+  padding:28px 20px 60px; gap:20px;
+}
+.card{
+  background:color-mix(in srgb, var(--card-bg) 92%, #000 8%);
+  border:1px solid rgba(255,255,255,0.08);
+  border-radius:14px;
+  box-shadow:0 14px 40px var(--shadow), inset 0 1px 0 rgba(255,255,255,0.04);
+  overflow:hidden; width:min(92vw, 1080px); position:relative;
+}
+.card-header,.card-footer{
+  padding:16px 22px; display:flex; justify-content:space-between; align-items:center;
+  background:linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.00));
+}
+.card-header{border-bottom:1px solid rgba(255,255,255,0.12); gap:12px;}
+.card-footer{border-top:1px solid rgba(255,255,255,0.12);}
+.card-body{padding:18px 22px 22px; display:flex; flex-direction:column; gap:14px;}
+.info-label{font-size:14px; opacity:.95}
+.muted{color:var(--muted)}
+.actions{display:flex; gap:10px; align-items:center;}
+button{
+  background:linear-gradient(180deg, rgba(255,255,255,0.14), rgba(255,255,255,0.04));
+  border:1px solid rgba(255,255,255,0.32);
+  border-radius:8px; color:var(--text); padding:10px 14px; font-weight:700; letter-spacing:.2px; cursor:pointer;
+  transition:transform .08s ease, box-shadow .2s ease, background .2s ease;
+  box-shadow:0 8px 18px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.12);
+}
+button:hover{ transform:translateY(-1px); background:linear-gradient(180deg, rgba(255,255,255,0.22), rgba(255,255,255,0.06)); box-shadow:0 12px 28px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.18);}
+
+/* Waiting overlay */
+.waiting-cover{position:absolute; inset:0; display:flex; align-items:center; justify-content:center; background:rgba(0,0,0,0.55); backdrop-filter:blur(3px); z-index:6;}
+.waiting-panel{background:color-mix(in srgb, #1a1a1f 85%, #000 15%); border:1px solid rgba(255,255,255,0.15); border-radius:14px; padding:20px 22px; min-width:320px; max-width:min(92vw,560px); text-align:center; box-shadow:0 18px 40px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.08);}
+.spinner{width:18px; height:18px; border-radius:50%; border:2px solid rgba(255,255,255,0.25); border-top-color:rgba(255,255,255,0.9); animation:spin 1s linear infinite; display:inline-block; vertical-align:middle; margin-right:8px;}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* Board */
+.board-wrap{ display:flex; align-items:center; justify-content:center; }
+.board{
+  width:1040px; height:540px; position:relative; background:#335533;
+  border:10px solid #000; border-radius:12px; box-shadow:inset 0 0 0 1px rgba(255,255,255,0.06);
+  display:grid; grid-template-columns:100px 1fr 20px 1fr 100px; gap:10px; padding:10px;
+}
+.side{ display:grid; grid-template-rows:1fr 1fr; gap:10px; }
+.row{ display:flex; justify-content:space-between; align-items:stretch; position:relative; padding:0 10px; }
+.tri{ position:relative; width:40px; height:240px; }
+.t-up,.t-down{ position:absolute; left:0; width:0; height:0; border-left:20px solid transparent; border-right:20px solid transparent; }
+.t-up{ bottom:0; border-bottom:240px solid #0a4; }
+.t-down{ top:0; border-top:240px solid #0a4; }
+.tri:nth-child(odd) .t-up{ border-bottom-color:#044; }
+.tri:nth-child(even) .t-down{ border-top-color:#044; }
+
+.middle{ display:flex; flex-direction:column; align-items:center; justify-content:space-between; }
+
+/* BAR + trays */
+.bar{
+  width:100%; height:250px; background:#111; border-radius:8px;
+  display:flex; flex-direction:column; justify-content:center; align-items:center; gap:10px; color:#fff; position:relative;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,0.06);
+}
+.bar .badge{
+  position:absolute; top:8px; left:50%; transform:translateX(-50%);
+  font-weight:900; letter-spacing:.25em; font-size:12px;
+  background:linear-gradient(180deg, rgba(255,255,255,0.18), rgba(255,255,255,0.06));
+  border:1px solid rgba(255,255,255,0.28); border-radius:999px;
+  padding:6px 12px; color:#e7f1ff; text-shadow:0 1px 1px rgba(0,0,0,.4);
+  box-shadow:0 6px 12px rgba(0,0,0,.45), inset 0 1px 0 rgba(255,255,255,.15);
+}
+.bar .count{ font-weight:800; font-size:18px; padding-top:10px; }
+.tray{
+  width:100%; height:250px; background:#111; border-radius:8px;
+  display:flex; flex-wrap:wrap; align-items:flex-start; justify-content:center; padding:6px; gap:6px;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,0.06);
+}
+
+.checker{
+  width:32px; height:32px; border-radius:50%; border:2px solid rgba(0,0,0,0.5); position:absolute; left:50%; transform:translateX(-50%); cursor:pointer; z-index:2;
+}
+.white{ background:#fff; border-color:#ddd; }
+.black{ background:#000; border-color:#333; }
+
+.hl{
+  position:absolute; inset:0; z-index:1; pointer-events:none; border-radius:4px;
+  box-shadow:0 0 0 0 rgba(64,160,255,0.0); animation:hl 1.2s ease-in-out infinite;
+}
+@keyframes hl{ 0%{box-shadow:0 0 0 0 rgba(64,160,255,0.8)} 70%{box-shadow:0 0 0 9px rgba(64,160,255,0)} 100%{box-shadow:0 0 0 0 rgba(64,160,255,0)} }
+
+.notice{font-size:14px; opacity:.85}
+.small{font-size:12px; opacity:.7}
+.tray-label{
+  font-size:12px; color:#cfe7ff; text-align:center; margin-bottom:4px;
+  letter-spacing:.12em; font-weight:800;
+}
+body.embedded{
+  display:block;
+  padding:0;
+  overflow:hidden;
+  background:transparent;
+}
+body.embedded .card{
+  width:100%;
+  height:100vh;
+  border:0;
+  border-radius:0;
+  box-shadow:none;
+  background:transparent;
+}
+body.embedded .card-header,
+body.embedded .card-footer{
+  display:none;
+}
+body.embedded .card-body{
+  height:100%;
+  padding:12px;
+  justify-content:center;
+}
+body.embedded .board-wrap{
+  min-height:0;
+  overflow:auto;
+}
+body.embedded .notice{
+  display:none;
+}
+body.embedded .waiting-cover{
+  border-radius:0;
+}
+</style>
+</head>
+<body>
+  <div class="card">
+    <div class="card-header">
+      <span class="info-label" id="lobby-label">Lobby: …</span>
+      <div style="display:flex; gap:10px; align-items:center;">
+        <span class="info-label muted" id="user-label">User: …</span>
+        <button id="leave">Leave</button>
+      </div>
+    </div>
+
+    <div class="card-body">
+      <div style="display:flex; justify-content:space-between; align-items:center; gap:16px; flex-wrap:wrap">
+        <div>
+          <div class="info-label" id="status">Waiting for Opponent…</div>
+          <div class="small" id="diceText">Dice: —</div>
+          <div class="small" id="turnText">Turn: —</div>
+        </div>
+        <div class="actions">
+          <button id="btnRoll">🎲 Roll</button>
+          <button id="btnEndTurn">End Turn</button>
+          <button id="btnRestart">Restart</button>
+          <button id="btnResign">Resign</button>
+        </div>
+      </div>
+
+      <div class="board-wrap">
+        <div class="board" id="board">
+          <!-- Left dock/tray for Black -->
+          <div class="tray" id="offBlack" title="Black Off"></div>
+
+          <!-- Left points -->
+          <div class="side">
+            <div class="row" id="rowTopL"></div>
+            <div class="row" id="rowBotL"></div>
+          </div>
+
+          <!-- Middle: bar + spacer (we keep single bar UI here) -->
+          <div class="middle">
+            <div class="bar" id="barBlack" title="Black Bar (click to enter when you have pieces)">
+              <div class="badge">BAR</div>
+              <div class="count" id="barBlackCount">0</div>
+            </div>
+          </div>
+
+          <!-- Right points -->
+          <div class="side">
+            <div class="row" id="rowTopR"></div>
+            <div class="row" id="rowBotR"></div>
+          </div>
+
+          <!-- Right dock/tray for White -->
+          <div class="tray" id="offWhite" title="White Off"></div>
+        </div>
+      </div>
+      <div class="notice">White = Player 1 (moves ➡️), Black = Player 2 (moves ⬅️). Click a point (or your BAR) then a destination.</div>
+    </div>
+
+    <div class="card-footer">
+      <div class="small">Backgammon (Netplay)</div>
+      <div class="small" id="footInfo">—</div>
+    </div>
+
+    <!-- Waiting overlay -->
+    <div class="waiting-cover" id="waitingCover">
+      <div class="waiting-panel">
+        <div>
+          <span class="spinner"></span>
+          <span class="info-label" id="waitingMsg">Waiting for Opponent…</span>
+        </div>
+        <div style="margin-top:12px;">
+          <button id="leave2">Leave</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+<script>
+/* =================== Params / Base Path =================== */
+const params = new URLSearchParams(location.search);
+const code   = params.get('code') || params.get('lobby') || 'demo';
+const player = Math.max(1, Math.min(2, parseInt(params.get('player')||'1',10)));
+const user   = parseInt(params.get('user')||'1001',10);
+const gameId = parseInt(params.get('game')||'5',10);
+const embedded = params.get('embedded') === '1';
+if (embedded) document.body.classList.add('embedded');
+
+function computeBase(){
+  const path = location.pathname || '/';
+  const idx = path.indexOf('/games/');
+  return idx >= 0 ? path.slice(0, idx) : '';
+}
+const base = computeBase();
+const LIST_URL = `${base}/list_lobbies.php?game=${gameId}`;
+
+function leaveToParent(){
+  try { window.parent.postMessage({ type:'game_close', lobby: code }, window.location.origin); } catch {}
+  location.href = LIST_URL;
+}
+
+window.addEventListener('message', e=>{
+  if (e.origin !== window.location.origin || e.data?.type !== 'game_control') return;
+  if (e.data.action === 'rematch') el('btnRestart')?.click();
+  if (e.data.action === 'resign') el('btnResign')?.click();
+});
+
+/* =================== Elements =================== */
+const el = id=>document.getElementById(id);
+el('lobby-label').textContent = `Lobby: ${code}`;
+el('user-label').textContent  = `User: ${user}`;
+const statusEl = el('status');
+const diceEl   = el('diceText');
+const turnEl   = el('turnText');
+const waitingCover = el('waitingCover');
+const waitingMsg   = el('waitingMsg');
+
+/* =================== API helpers =================== */
+async function apiGet(p){
+  try{
+    const u=(p.startsWith('/'))?`${base}${p}`:`${p}`;
+    const r=await fetch(u);
+    if(!r.ok){ const t=await r.text().catch(()=> ''); console.warn('GET failed', r.status, t); return {}; }
+    return r.json();
+  }catch(e){ console.warn('GET error', e); return {}; }
+}
+async function apiPost(p,d){
+  const u=(p.startsWith('/'))?`${base}${p}`:`${p}`;
+  try{
+    const r=await fetch(u,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(d)});
+    if(!r.ok){ const t=await r.text().catch(()=> ''); throw new Error(`POST ${u} failed ${r.status}: ${t}`); }
+    return r.json();
+  }catch(e){ console.warn('POST error', e); throw e; }
+}
+
+/* =================== Networking (moves.php) =================== */
+let lastSeq = 0;
+async function fetchEvents(){
+  try{
+    const arr = await apiGet(`/api/moves.php?lobby=${encodeURIComponent(code)}&lastSeq=${lastSeq}`);
+    if(Array.isArray(arr)){
+      for(const m of arr){
+        lastSeq = Math.max(lastSeq, m.sequence||0);
+        const p = m.payload || {};
+        applyMove(m.user_id||0, p);
+      }
+    }
+  }catch(e){ console.warn('moves poll failed', e); }
+}
+async function postMove(payload){
+  try{
+    await apiPost(`/api/moves.php`, { lobby_id: code, user_id: user, payload });
+  }catch(e){}
+}
+
+/* Lobby ops */
+async function joinLobby(){
+  try{ await apiPost(`/api/lobby.php`, { action:'join', lobby: code, user_id: user }); }
+  catch(e){ console.warn('joinLobby error', e); }
+}
+async function lobbyStatus(){
+  try{ return await apiPost(`/api/lobby.php`, { action:'status', lobby: code }); }
+  catch(e){ return {}; }
+}
+
+/* Restart / Result */
+async function restartGameServer(){ try{ await apiPost(`/api/restart.php`, { lobby: code, user_id: user }); }catch(e){} }
+async function sendResult(result, reason=''){ try{ await apiPost(`/api/result.php`, { lobby: code, user_id: user, result, reason }); }catch(e){} }
+
+/* =================== Board Model =================== */
+const P_WHITE=1, P_BLACK=2;
+const COLOR = {1:'white', 2:'black'};
+const FROM_BAR_WHITE = -1;
+const FROM_BAR_BLACK = 24;
+
+function initialBoard(){
+  const b = Array(24).fill(null);
+  // White (P1)
+  b[0]  = {color:'white',checkers:2};
+  b[5]  = {color:'white',checkers:5};
+  b[7]  = {color:'white',checkers:3};
+  b[11] = {color:'white',checkers:5};
+  // Black (P2)
+  b[23] = {color:'black',checkers:2};
+  b[18] = {color:'black',checkers:5};
+  b[16] = {color:'black',checkers:3};
+  b[12] = {color:'black',checkers:5};
+  return b;
+}
+
+const state = {
+  board: initialBoard(),
+  barWhite:0, barBlack:0,
+  offWhite:0, offBlack:0,
+  current: P_WHITE,
+  dice: [],
+  selected: null,
+  started:false,
+  over:false,
+};
+
+/* =================== UI Build =================== */
+function tri(i, dir){
+  const d = document.createElement('div'); d.className='tri'; d.dataset.point=i;
+  const t = document.createElement('div'); t.className = (dir==='up'?'t-up':'t-down'); d.appendChild(t);
+  d.addEventListener('click', ()=> onPointClick(i));
+  return d;
+}
+function buildBoard(){
+  const rowTopL = el('rowTopL');
+  const rowBotL = el('rowBotL');
+  const rowTopR = el('rowTopR');
+  const rowBotR = el('rowBotR');
+  [rowTopL,rowBotL,rowTopR,rowBotR].forEach(r=>r.innerHTML='');
+
+  [0,1,2,3,4,5].forEach(i=> rowTopL.appendChild(tri(i,'down')));
+  [12,13,14,15,16,17].forEach(i=> rowBotL.appendChild(tri(i,'up')));
+  [11,10,9,8,7,6].forEach(i=> rowTopR.appendChild(tri(i,'down')));
+  [23,22,21,20,19,18].forEach(i=> rowBotR.appendChild(tri(i,'up')));
+
+  el('barBlack').addEventListener('click', ()=> onBarClick(P_BLACK));
+  render();
+}
+function clearCheckers(){
+  document.querySelectorAll('.checker').forEach(n=>n.remove());
+  document.querySelectorAll('.hl').forEach(n=>n.remove());
+}
+function placeChecker(pt, idx, color){
+  const triEl = document.querySelector(`.tri[data-point="${pt}"]`);
+  if(!triEl) return;
+  const up = !!triEl.querySelector('.t-up');
+  const c = document.createElement('div');
+  c.className = `checker ${color}`;
+  if(up){ c.style.bottom = `${6 + idx*14}px`; }
+  else { c.style.top = `${6 + idx*14}px`; }
+  c.addEventListener('click', (e)=>{ e.stopPropagation(); onPointClick(pt); });
+  triEl.appendChild(c);
+}
+
+/* Pretty turn label */
+function turnText(){
+  const isYou = (state.current === player);
+  const colorName = state.current===P_WHITE ? 'White' : 'Black';
+  return `Turn: ${colorName} ${isYou ? '(You)' : '(Opponent)'}`;
+}
+
+/* Master render */
+function render(){
+  clearCheckers();
+  state.board.forEach((cell,pt)=>{
+    if(!cell) return;
+    for(let i=0;i<cell.checkers;i++) placeChecker(pt,i,cell.color);
+  });
+
+  // Bar + trays
+  el('barBlackCount').textContent = state.barBlack;
+
+  const offWhite = el('offWhite'); offWhite.innerHTML='';
+  for(let i=0;i<state.offWhite;i++){
+    const c = document.createElement('div'); c.className='checker white'; c.style.position='relative';
+    offWhite.appendChild(c);
+  }
+  const offBlack = el('offBlack'); offBlack.innerHTML='';
+  for(let i=0;i<state.offBlack;i++){
+    const c = document.createElement('div'); c.className='checker black'; c.style.position='relative';
+    offBlack.appendChild(c);
+  }
+
+  diceEl.textContent = state.dice.length ? `Dice: ${state.dice.join(', ')}` : 'Dice: —';
+  turnEl.textContent = turnText();
+  statusEl.textContent = state.over ? 'Game Over' : (state.started ? 'Game on' : 'Waiting…');
+
+  // Buttons
+  el('btnRoll').disabled = !(state.started && !state.over && state.current===player && state.dice.length===0);
+  // Enable End Turn if either dice are gone OR no legal moves remain
+  el('btnEndTurn').disabled = !(state.started && !state.over && state.current===player && (state.dice.length===0 || !hasAnyValidMove()));
+}
+
+function highlight(toPts){
+  toPts.forEach(pt=>{
+    const triEl = document.querySelector(`.tri[data-point="${pt}"]`);
+    if(!triEl) return;
+    const h = document.createElement('div'); h.className='hl';
+    triEl.appendChild(h);
+  });
+}
+
+/* =================== Turn / Dice =================== */
+/* IMPORTANT: We don't set state.dice locally; we post the roll and wait for the
+   incoming {type:'roll'} event to set dice on both clients. This avoids the
+   “duplicated dice in label” you saw. */
+function rollLocal(){
+  const d1 = 1+Math.floor(Math.random()*6);
+  const d2 = 1+Math.floor(Math.random()*6);
+  const dice = (d1===d2)? [d1,d1,d1,d1] : [d1,d2];
+  // optimistic UI: disable roll button immediately
+  el('btnRoll').disabled = true;
+  postMove({type:'roll', dice});
+}
+function endTurnLocal(){
+  state.current = (state.current===P_WHITE) ? P_BLACK : P_WHITE;
+  state.dice = [];
+  state.selected = null;
+  postMove({type:'end_turn', current: state.current});
+  render();
+}
+
+/* =================== Rules =================== */
+function colorOfPlayer(p){ return p===P_WHITE?'white':'black'; }
+function dirFor(color){ return color==='white' ? +1 : -1; }
+function entryPointFromBar(color, die){ return color==='white' ? die-1 : 24-die; }
+function bearingOffAllowed(color){
+  if(color==='white'){
+    for(let i=0;i<18;i++){ const c=state.board[i]; if(c && c.color==='white') return false; }
+    return true;
+  }else{
+    for(let i=6;i<24;i++){ const c=state.board[i]; if(c && c.color==='black') return false; }
+    return true;
+  }
+}
+function pointBlockedFor(color, pt){
+  const cell = state.board[pt];
+  if(!cell) return false;
+  if(cell.color===color) return false;
+  return cell.checkers>=2;
+}
+function possibleDestinations(from){
+  const meColor = colorOfPlayer(state.current);
+  const dir = dirFor(meColor);
+  const ds = [];
+
+  // Must enter from bar first
+  if(meColor==='white' && state.barWhite>0 && from!==FROM_BAR_WHITE) return [];
+  if(meColor==='black' && state.barBlack>0 && from!==FROM_BAR_BLACK) return [];
+
+  // Consider each remaining die (doubles are four entries in state.dice)
+  for(const d of state.dice){
+    if(from===FROM_BAR_WHITE || from===FROM_BAR_BLACK){
+      const to = entryPointFromBar(meColor, d);
+      if(!pointBlockedFor(meColor, to)) ds.push(to);
+      continue;
+    }
+    let to = from + dir*d;
+
+    if(meColor==='white' && to>23){
+      if(bearingOffAllowed('white')){
+        const exact = (to===24);
+        const anyHigher = state.board.slice(18,24).some((c,idx)=> c && c.color==='white' && (from<18+idx));
+        if(exact || !anyHigher) ds.push(24);
+      }
+      continue;
+    }
+    if(meColor==='black' && to<0){
+      if(bearingOffAllowed('black')){
+        const exact = (to===-1);
+        const anyLower = state.board.slice(0,6).some((c,idx)=> c && c.color==='black' && (from>idx));
+        if(exact || !anyLower) ds.push(-1);
+      }
+      continue;
+    }
+
+    if(to>=0 && to<24 && !pointBlockedFor(meColor, to)) ds.push(to);
+  }
+
+  // De-dup destinations (the *count* of dice is enforced by consumeDie, not here)
+  return [...new Set(ds)];
+}
+function hasAnyValidMove(){
+  const meColor = colorOfPlayer(state.current);
+  const hasBar = meColor==='white' ? state.barWhite>0 : state.barBlack>0;
+  if(hasBar){
+    return state.dice.some(d=> !pointBlockedFor(meColor, entryPointFromBar(meColor,d)));
+  }
+  for(let p=0;p<24;p++){
+    const c = state.board[p];
+    if(c && c.color===meColor && c.checkers>0){
+      if(possibleDestinations(p).length>0) return true;
+    }
+  }
+  return false;
+}
+function consumeDie(from, to){
+  const meColor = colorOfPlayer(state.current);
+  let dist;
+  if(from===FROM_BAR_WHITE || from===FROM_BAR_BLACK){
+    dist = meColor==='white' ? (to+1) : (24-to);
+  }else if(to===24 || to===-1){
+    dist = meColor==='white' ? (24 - from) : (from + 1);
+    if(!state.dice.includes(dist)){
+      const sorted = [...state.dice].sort((a,b)=>b-a);
+      for(const d of sorted){
+        if(d>dist){
+          const ok = meColor==='white'
+            ? !state.board.slice(from+1,24).some(c=>c && c.color==='white')
+            : !state.board.slice(0,from).some(c=>c && c.color==='black');
+          if(ok){ dist = d; break; }
+        }
+      }
+    }
+  }else{
+    dist = Math.abs(to - from);
+  }
+  const i = state.dice.indexOf(dist);
+  if(i>-1) state.dice.splice(i,1);
+  else {
+    const larger = state.dice.findIndex(d=>d>dist);
+    if(larger>-1) state.dice.splice(larger,1);
+  }
+}
+function hitIfNeeded(to, meColor){
+  const cell = state.board[to];
+  if(cell && cell.color !== meColor && cell.checkers===1){
+    if(cell.color==='white'){ state.barWhite++; }
+    else { state.barBlack++; }
+    state.board[to] = null;
+  }
+}
+function moveLocal(from, to){
+  if(state.over) return;
+  const meColor = colorOfPlayer(state.current);
+  if(meColor==='white' && state.barWhite>0 && from!==FROM_BAR_WHITE) return;
+  if(meColor==='black' && state.barBlack>0 && from!==FROM_BAR_BLACK) return;
+
+  const legal = possibleDestinations(from);
+  if(!legal.includes(to)) return;
+
+  if(from===FROM_BAR_WHITE){ state.barWhite--; }
+  else if(from===FROM_BAR_BLACK){ state.barBlack--; }
+  else{
+    const cell = state.board[from];
+    if(!cell || cell.color!==meColor || cell.checkers===0) return;
+    cell.checkers--;
+    if(cell.checkers===0) state.board[from]=null;
+  }
+
+  if(to===24){ state.offWhite++; }
+  else if(to===-1){ state.offBlack++; }
+  else{
+    hitIfNeeded(to, meColor);
+    if(!state.board[to]) state.board[to] = {color:meColor, checkers:0};
+    state.board[to].color = meColor;
+    state.board[to].checkers++;
+  }
+
+  consumeDie(from, to);
+  postMove({type:'move', from, to});
+
+  // Auto end-turn once dice are exhausted OR no legal moves left
+  if(state.dice.length===0 || !hasAnyValidMove()){
+    endTurnLocal(); // will post end_turn and swap current
+  }else{
+    render();
+  }
+
+  // Win check after state changes
+  if(state.offWhite===15 || state.offBlack===15){
+    state.over=true;
+    statusEl.textContent='Game Over';
+    postMove({type:'game_over', winner: state.offWhite===15 ? P_WHITE : P_BLACK});
+    render();
+  }
+}
+
+/* =================== Interaction =================== */
+function onPointClick(pt){
+  if(!state.started || state.over) return;
+  if(state.current !== player) return;
+  if(state.dice.length===0) return;
+
+  const meColor = colorOfPlayer(state.current);
+  const barNeeded = (meColor==='white' ? state.barWhite>0 : state.barBlack>0);
+
+  if(state.selected===null){
+    if(barNeeded){ return; }
+    const c = state.board[pt];
+    if(!c || c.color!==meColor || c.checkers===0) return;
+    state.selected = pt;
+    highlight(possibleDestinations(pt));
+    return;
+  }
+
+  if(pt===state.selected){ state.selected=null; render(); return; }
+  const legal = possibleDestinations(state.selected);
+  if(legal.includes(pt)){ moveLocal(state.selected, pt); state.selected=null; }
+  else { state.selected=null; render(); }
+}
+function onBarClick(barFor){
+  if(!state.started || state.over) return;
+  if(state.current !== player) return;
+  if(state.dice.length===0) return;
+
+  const meColor = colorOfPlayer(state.current);
+  if((barFor===P_BLACK && meColor!=='black') || (barFor===P_WHITE && meColor!=='white')) return;
+  const has = meColor==='white' ? state.barWhite>0 : state.barBlack>0;
+  if(!has) return;
+
+  state.selected = (meColor==='white') ? FROM_BAR_WHITE : FROM_BAR_BLACK;
+  highlight(possibleDestinations(state.selected));
+}
+
+el('btnRoll').addEventListener('click', ()=>{
+  if(el('btnRoll').disabled) return;
+  rollLocal();
+});
+el('btnEndTurn').addEventListener('click', ()=>{
+  if(el('btnEndTurn').disabled) return;
+  endTurnLocal();
+});
+el('btnRestart').addEventListener('click', async ()=>{ await restartGameServer(); });
+el('btnResign').addEventListener('click', async ()=>{
+  state.over=true; render();
+  await sendResult('loss','Resigned');
+  await postMove({type:'game_over', winner: (player===1?2:1), reason:'Resigned'});
+});
+el('leave').addEventListener('click', leaveToParent);
+el('leave2').addEventListener('click', leaveToParent);
+
+/* =================== Apply remote payloads =================== */
+function applyMove(sender, p){
+  switch(p.type){
+    case 'start': {
+      const startMs = (typeof p.startAt === 'number' && p.startAt > 10_000)
+        ? p.startAt
+        : (typeof p.at === 'number' ? p.at*1000 : Date.now()+600);
+      if (!state.started){
+        state.started = true;
+        state.startAt = startMs;
+        state.current = P_WHITE;              // White starts
+        waitingCover.style.display = 'none';
+        statusEl.textContent = 'Game on';
+        render();
+      }
+      break;
+    }
+    case 'restart': {
+      Object.assign(state, {
+        board: initialBoard(),
+        barWhite:0, barBlack:0,
+        offWhite:0, offBlack:0,
+        current: P_WHITE,
+        dice:[], selected:null, started:true, over:false
+      });
+      waitingCover.style.display='none';
+      render();
+      break;
+    }
+    case 'roll': {
+      // authoritative dice set from server; overwrite local
+      state.dice = Array.isArray(p.dice) ? [...p.dice] : [];
+      render();
+      break;
+    }
+    case 'move': {
+      const moverColor = colorOfPlayer(state.current);
+      const from = p.from, to = p.to;
+
+      if(from===FROM_BAR_WHITE){ state.barWhite--; }
+      else if(from===FROM_BAR_BLACK){ state.barBlack--; }
+      else{
+        const cell = state.board[from]; if(cell){ cell.checkers--; if(cell.checkers===0) state.board[from]=null; }
+      }
+      if(to===24){ state.offWhite++; }
+      else if(to===-1){ state.offBlack++; }
+      else{
+        hitIfNeeded(to, moverColor);
+        if(!state.board[to]) state.board[to] = {color:moverColor,checkers:0};
+        state.board[to].color=moverColor;
+        state.board[to].checkers++;
+      }
+      consumeDie(from,to);
+
+      // If mover's dice are gone or mover stuck, swap turns
+      if(state.dice.length===0 || !hasAnyValidMove()){
+        state.current = (state.current===P_WHITE) ? P_BLACK : P_WHITE;
+        state.selected=null;
+        postMove({type:'end_turn', current: state.current}); // keep both sides aligned
+      }
+      render();
+      break;
+    }
+    case 'end_turn': {
+      state.current = p.current===P_BLACK?P_BLACK:P_WHITE;
+      state.dice = []; state.selected=null;
+      render();
+      break;
+    }
+    case 'game_over': {
+      state.over=true;
+      statusEl.textContent = 'Game Over';
+      render();
+      break;
+    }
+  }
+}
+
+/* =================== Kickoff / Polling =================== */
+let pollTimer=null, statusTimer=null;
+let hostStartPosted = false; // prevents duplicate 'start'
+
+async function checkLobby(){
+  const s = await lobbyStatus().catch(()=>null);
+  const ready = !!(s && (s.player_count >= 2 || s.opponent_joined || (s.players && s.players.length >= 2)));
+
+  if (!state.started) {
+    if (ready && player === 1 && !hostStartPosted) {
+      hostStartPosted = true;
+      await postMove({ type:'start', at: Math.floor(Date.now()/1000) + 1 });
+    }
+    waitingCover.style.display = 'flex';
+    waitingMsg.textContent = ready ? 'Starting…' : 'Waiting for Opponent…';
+  }
+}
+
+async function kickoff(){
+  await joinLobby().catch(()=>{});
+  pollTimer   = setInterval(fetchEvents, 500);
+  statusTimer = setInterval(checkLobby, 800);
+  waitingCover.style.display = 'flex';
+  render();
+}
+buildBoard();
+kickoff();
+</script>
+</body>
+</html>

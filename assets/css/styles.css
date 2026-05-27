@@ -1421,6 +1421,66 @@ textarea:focus { border-color: rgba(124,106,247,.8); box-shadow: 0 0 0 3px rgba(
   gap: 7px;
 }
 .friend-list, .game-list, .voice-list { display: grid; gap: 7px; }
+.games-side-section {
+  overflow: visible;
+}
+.game-start-wrap {
+  position: relative;
+}
+.game-start-btn {
+  width: 100%;
+  justify-content: center;
+  min-height: 42px;
+  background: rgba(255,255,255,.055);
+  border: 1px solid var(--border);
+}
+.game-start-btn:hover {
+  background: var(--surface-hover);
+}
+.game-start-btn img {
+  width: 18px;
+  height: 18px;
+  object-fit: contain;
+}
+.game-start-menu {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(100% + 6px);
+  z-index: 10010;
+  display: grid;
+  gap: 4px;
+  padding: 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: rgba(20,20,30,.98);
+  box-shadow: 0 14px 34px rgba(0,0,0,.45);
+}
+.game-start-menu[hidden] {
+  display: none;
+}
+.game-start-menu button {
+  min-height: 38px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 10px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  font-weight: 800;
+  text-align: left;
+}
+.game-start-menu button:hover {
+  background: var(--surface-hover);
+}
+.game-start-menu img {
+  width: 19px;
+  height: 19px;
+  object-fit: contain;
+}
 .person-row, .game-row {
   display: grid;
   grid-template-columns: 36px 1fr auto;
@@ -1789,14 +1849,22 @@ textarea:focus { border-color: rgba(124,106,247,.8); box-shadow: 0 0 0 3px rgba(
 .chat-bubble.bl::before { top: -16px; right: 12px; border-bottom-color: rgba(255,255,255,0.12); }
 .chat-bubble.tr::before { bottom: -16px; left: 12px; border-top-color: rgba(255,255,255,0.12); }
 .chat-bubble.tl::before { bottom: -16px; right: 12px; border-top-color: rgba(255,255,255,0.12); }
-.game-picker { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
+.game-list {
+  margin-top: 9px;
+}
+.game-list[hidden] {
+  display: none;
+}
 .game-row {
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
+  margin-bottom: 0;
+  background: linear-gradient(135deg, rgba(27,22,48,.88), rgba(19,17,32,.94));
+  border-color: rgba(124,106,247,.42);
 }
 .game-row.active {
   border-color: rgba(124,106,247,.55);
-  background: rgba(124,106,247,.13);
+  background: linear-gradient(135deg, rgba(33,25,64,.95), rgba(20,17,38,.96));
 }
 .game-row-main {
   min-width: 0;

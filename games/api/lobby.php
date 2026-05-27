@@ -56,6 +56,10 @@ if ($action === 'join') {
 if ($action === 'close') {
     $pdo->prepare('UPDATE game_lobbies SET status = "ended", updated_at = CURRENT_TIMESTAMP WHERE lobby_code = ?')->execute([$lobby]);
     $pdo->prepare('UPDATE game_sessions SET ended_at = CURRENT_TIMESTAMP WHERE lobby_code = ?')->execute([$lobby]);
+    $pdo->prepare('DELETE FROM game_moves WHERE lobby_code = ?')->execute([$lobby]);
+    $pdo->prepare('DELETE FROM game_state WHERE lobby_code = ?')->execute([$lobby]);
+    $pdo->prepare('DELETE FROM game_chat_messages WHERE lobby_code = ?')->execute([$lobby]);
+    $pdo->prepare('DELETE FROM game_chat_typing WHERE lobby_code = ?')->execute([$lobby]);
     $stmt = $pdo->prepare('SELECT room_session_id FROM game_sessions WHERE lobby_code = ? LIMIT 1');
     $stmt->execute([$lobby]);
     $sessionId = (int)($stmt->fetchColumn() ?: 0);

@@ -1,0 +1,686 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<title>Game Centre - Space Invasion</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<style>
+:root{
+  --bg:#0f0f12; --card-bg:#17171c; --surface:#181b28;
+  --text:#ffffff; --muted:rgba(255,255,255,0.72);
+  --shadow:rgba(0,0,0,0.6); --edge:rgba(255,255,255,0.12);
+  --accent-1:#7b5cff; --accent-2:#39d0ff; --gold:#ffd700;
+  --board-vignette: radial-gradient(140% 90% at 50% 50%, rgba(255,255,255,0.06) 0%, rgba(0,0,0,0.0) 60%, rgba(0,0,0,0.35) 100%);
+  --board-weave:
+    linear-gradient(45deg, rgba(255,255,255,0.03) 25%, transparent 25%) 0 0/12px 12px,
+    linear-gradient(45deg, transparent 75%, rgba(255,255,255,0.03) 75%) 0 0/12px 12px,
+    linear-gradient(-45deg, rgba(255,255,255,0.02) 25%, transparent 25%) 0 0/12px 12px,
+    linear-gradient(-45deg, transparent 75%, rgba(255,255,255,0.02) 75%) 0 0/12px 12px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{
+  background:radial-gradient(1200px 600px at 30% -10%, #1b1730 0%, #0f0f12 60%) fixed;
+  color:var(--text);
+  font-family:"Segoe UI",system-ui,-apple-system,sans-serif;
+  display:flex; align-items:flex-start; justify-content:center;
+  padding:28px 20px 60px; gap:20px;
+}
+
+/* Card shell */
+.card{
+  background:color-mix(in srgb, var(--card-bg) 92%, #000 8%);
+  border:1px solid rgba(255,255,255,0.08);
+  border-radius:14px;
+  box-shadow:0 14px 40px var(--shadow), inset 0 1px 0 rgba(255,255,255,0.04);
+  overflow:hidden; width:min(92vw, 1080px); position:relative;
+}
+.card-header,.card-footer{
+  padding:16px 22px; display:flex; justify-content:space-between; align-items:center;
+  background:linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.00));
+}
+.card-header{border-bottom:1px solid rgba(255,255,255,0.12); gap:12px;}
+.card-footer{border-top:1px solid rgba(255,255,255,0.12);}
+.card-body{padding:18px 22px 22px; display:flex; flex-direction:column; gap:14px;}
+.info-label{font-size:14px; opacity:.95}
+.muted{color:var(--muted)}
+
+.canvas-wrap{
+  padding:14px; border-radius:12px;
+  background:linear-gradient(180deg, rgba(255,255,255,0.08), rgba(255,255,255,0.02)),
+             radial-gradient(120% 140% at 50% -20%, rgba(255,255,255,0.08), rgba(255,255,255,0) 60%);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,0.14), inset 0 -1px 0 rgba(255,255,255,0.03),
+             0 18px 40px rgba(0,0,0,0.45);
+  border:1px solid rgba(255,255,255,0.14);
+  position:relative;
+}
+.canvas-back{
+  position:relative; border-radius:8px; overflow:hidden;
+  border:1px solid rgba(255,255,255,0.15);
+  background-image:var(--board-weave), var(--board-vignette);
+  background-blend-mode:overlay, normal;
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,0.06), 0 20px 40px rgba(0,0,0,0.35);
+}
+#game{
+  display:block; width:100%; height:auto; background:#0c0f17; image-rendering:optimizeQuality; touch-action:none;
+}
+
+/* HUD overlays */
+.hud{
+  position:absolute; inset:0; pointer-events:none; font-weight:800; letter-spacing:.3px;
+}
+.score{ position:absolute; top:10px; font-size:16px; text-shadow:0 2px 8px rgba(0,0,0,.65) }
+.score.left{ left:14px }
+.score.right{ right:14px; text-align:right }
+.centerTip{
+  position:absolute; top:10px; left:50%; transform:translateX(-50%);
+  font-size:14px; opacity:.85;
+}
+.ship-label{
+  position:absolute; font-size:13px; text-shadow:0 2px 8px rgba(0,0,0,.65);
+  transform:translate(-50%, 0); white-space:nowrap; pointer-events:none; font-weight:800;
+}
+
+/* Actions */
+.actions{display:flex; gap:10px; align-items:center;}
+button{
+  background:linear-gradient(180deg, rgba(255,255,255,0.14), rgba(255,255,255,0.04));
+  border:1px solid rgba(255,255,255,0.32);
+  border-radius:8px; color:var(--text); padding:10px 14px; font-weight:700; letter-spacing:.2px; cursor:pointer;
+  transition:transform .08s ease, box-shadow .2s ease, background .2s ease;
+  box-shadow:0 8px 18px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.12);
+}
+button:hover{ transform:translateY(-1px); background:linear-gradient(180deg, rgba(255,255,255,0.22), rgba(255,255,255,0.06)); box-shadow:0 12px 28px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.18);}
+
+/* Waiting overlay with copy row */
+.waiting-cover{position:absolute; inset:0; display:flex; align-items:center; justify-content:center; background:rgba(0,0,0,0.55); backdrop-filter:blur(3px); z-index:6;}
+.waiting-panel{background:color-mix(in srgb, #1a1a1f 85%, #000 15%); border:1px solid rgba(255,255,255,0.15); border-radius:14px; padding:20px 22px; min-width:320px; max-width:min(92vw,560px); text-align:center; box-shadow:0 18px 40px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.08);}
+.spinner{width:18px; height:18px; border-radius:50%; border:2px solid rgba(255,255,255,0.25); border-top-color:rgba(255,255,255,0.9); animation:spin 1s linear infinite; display:inline-block; vertical-align:middle; margin-right:8px;}
+@keyframes spin{to{transform:rotate(360deg)}}
+.invite-row{margin-top:14px; padding-top:12px; border-top:1px dashed rgba(255,255,255,0.12);}
+.invite-title{font-size:13px; color:var(--muted); margin-bottom:8px; letter-spacing:.2px;}
+.invite-flex{display:grid; grid-template-columns:1fr auto; gap:10px; align-items:stretch;}
+.code-chip{display:inline-flex; align-items:center; justify-content:center; padding:10px 14px; border-radius:12px; font:700 14px/1.1 ui-sans-serif, system-ui, -apple-system; background:linear-gradient(180deg, rgba(255,255,255,0.08), rgba(255,255,255,0.02)); border:1px solid rgba(255,255,255,0.2); letter-spacing:.8px; user-select:all; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+.copy-btn{display:inline-flex; align-items:center; gap:8px; padding:10px 14px; border-radius:12px; border:1px solid rgba(255,255,255,0.28); background:linear-gradient(180deg, rgba(255,255,255,0.16), rgba(255,255,255,0.05)); font-weight:800; letter-spacing:.3px; cursor:pointer;}
+.copy-btn .ico{font-size:16px; line-height:1; display:inline-block; transform:translateY(-0.5px)}
+.copy-btn.success{outline:2px solid rgba(0,200,140,.55); transition:outline .2s ease;}
+body.embedded{
+  display:block;
+  padding:0;
+  overflow:hidden;
+  background:transparent;
+}
+body.embedded .card{
+  width:100%;
+  height:100vh;
+  border:0;
+  border-radius:0;
+  box-shadow:none;
+  background:transparent;
+}
+body.embedded .card-header,
+body.embedded .card-footer{
+  display:none;
+}
+body.embedded .card-body{
+  height:100%;
+  padding:12px;
+  justify-content:center;
+}
+body.embedded .canvas-wrap{
+  min-height:0;
+}
+body.embedded .waiting-cover{
+  border-radius:0;
+}
+</style>
+</head>
+<body>
+  <div class="card" id="card">
+    <div class="card-header">
+      <span class="info-label" id="lobby-label">Lobby: …</span>
+      <div style="display:flex; gap:10px; align-items:center;">
+        <span class="info-label muted" id="user-label">User: …</span>
+        <button id="leave" title="Leave Session">Leave</button>
+      </div>
+    </div>
+
+    <div class="card-body">
+      <div class="canvas-wrap">
+        <div class="canvas-back">
+          <canvas id="game" width="960" height="640" aria-label="Space Invaders game board"></canvas>
+          <div class="hud" aria-hidden="true">
+            <div class="score left" id="scoreL">P1: 0</div>
+            <div class="centerTip" id="tip">A/D or ←/→ to move, Space or ↑ to fire</div>
+            <div class="score right" id="scoreR">P2: 0</div>
+            <div class="ship-label" id="labelP1">Player 1 (You)</div>
+            <div class="ship-label" id="labelP2">Player 2</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card-footer">
+      <div class="actions">
+        <button id="btnRestart">Restart</button>
+        <button id="btnResign">Resign</button>
+      </div>
+      <div id="status" class="info-label">Waiting for Opponent…</div>
+    </div>
+
+    <!-- Waiting overlay -->
+    <div class="waiting-cover" id="waitingCover">
+      <div class="waiting-panel">
+        <div>
+          <span class="spinner" id="waitingSpinner"></span>
+          <span class="info-label" id="waitingMsg">Waiting for Opponent…</span>
+        </div>
+        <div class="invite-row" id="inviteRow" aria-live="polite">
+          <div class="invite-title">Share this Lobby Code</div>
+          <div class="invite-flex">
+            <div class="code-chip" id="lobbyCodeText" title="Lobby Code">—</div>
+            <button class="copy-btn" id="copyCodeBtn" type="button" aria-label="Copy lobby code">
+              <span class="ico">📋</span> Copy
+            </button>
+          </div>
+        </div>
+        <div style="margin-top:12px;">
+          <button id="leave2">Leave</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+<script>
+/* ================= Params / Base Path ================= */
+const params = new URLSearchParams(location.search);
+const code   = params.get('code') || params.get('lobby') || 'demo';
+const player = Math.max(1, Math.min(2, parseInt(params.get('player')||'1',10)));
+const user   = parseInt(params.get('user')||'1001',10);
+const gameId = parseInt(params.get('game')||'6',10);
+const embedded = params.get('embedded') === '1';
+if (embedded) document.body.classList.add('embedded');
+
+function computeBase(){
+  const path = location.pathname || '/';
+  const idx = path.indexOf('/games/');
+  return idx >= 0 ? path.slice(0, idx) : '';
+}
+const base = computeBase();
+const LIST_URL = `${base}/list_lobbies.php?game=${gameId}`;
+
+function leaveToParent(){
+  try { window.parent.postMessage({ type:'game_close', lobby: code }, window.location.origin); } catch {}
+  location.href = LIST_URL;
+}
+
+window.addEventListener('message', e=>{
+  if (e.origin !== window.location.origin || e.data?.type !== 'game_control') return;
+  if (e.data.action === 'rematch') el('btnRestart')?.click();
+  if (e.data.action === 'resign') el('btnResign')?.click();
+});
+
+/* ================= Elements ================= */
+const el = id=>document.getElementById(id);
+el('lobby-label').textContent = `Lobby: ${code}`;
+el('user-label').textContent  = `User: ${user}`;
+el('lobbyCodeText').textContent = code;
+const waitingCover = el('waitingCover');
+const waitingMsg   = el('waitingMsg');
+const inviteRow    = el('inviteRow');
+const copyCodeBtn  = el('copyCodeBtn');
+const statusEl     = el('status');
+
+/* Copy button feedback */
+let copyResetTimer=null; copyCodeBtn?.addEventListener('click', async ()=>{
+  try{
+    await navigator.clipboard.writeText(code);
+    copyCodeBtn.classList.add('success');
+    copyCodeBtn.innerHTML='<span class="ico">✅</span> Copied!';
+    if(copyResetTimer) clearTimeout(copyResetTimer);
+    copyResetTimer=setTimeout(()=>{
+      copyCodeBtn.classList.remove('success');
+      copyCodeBtn.innerHTML='<span class="ico">📋</span> Copy';
+    },1200);
+  }catch{}
+});
+
+/* ================= API helpers ================= */
+async function apiGet(p){
+  try{
+    const u=(p.startsWith('/'))?`${base}${p}`:`${p}`;
+    const r=await fetch(u);
+    if(!r.ok){ const t=await r.text().catch(()=> ''); console.warn('GET failed', r.status, t); return {}; }
+    return r.json();
+  }catch(e){ console.warn('GET error', e); return {}; }
+}
+async function apiPost(p,d){
+  const u=(p.startsWith('/'))?`${base}${p}`:`${p}`;
+  try{
+    const r=await fetch(u,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(d)});
+    if(!r.ok){ const t=await r.text().catch(()=> ''); throw new Error(`POST ${u} failed ${r.status}: ${t}`); }
+    return r.json();
+  }catch(e){ console.warn('POST error', e); throw e; }
+}
+
+/* ================= Networking - moves only (no state.php poll) ================= */
+let lastSeq = 0; // sequence from game_moves
+
+async function fetchEvents(){
+  // moves.php GET returns [{sequence,user_id,payload,created_at}]
+  try{
+    const arr = await apiGet(`/api/moves.php?lobby=${encodeURIComponent(code)}&lastSeq=${lastSeq}`);
+    if(Array.isArray(arr)){
+      for(const m of arr){
+        lastSeq = Math.max(lastSeq, m.sequence||0);
+        const p = m.payload || {};
+        applyMove(m.user_id||0, p);
+      }
+    }
+  }catch(e){
+    console.warn('moves poll failed', e);
+  }
+}
+
+async function postMove(type, extra={}){ 
+  try{
+    await apiPost(`/api/moves.php`, { lobby_id: code, user_id: user, payload: {type, ...extra} });
+  }catch(e){ /* already logged */ }
+}
+
+/* Lobby ops - POST as your lobby.php prefers JSON action */
+async function joinLobby(){
+  try{
+    await apiPost(`/api/lobby.php`, { action:'join', lobby: code, user_id: user });
+  }catch(e){ console.warn('joinLobby error', e); }
+}
+async function getLobbyStatus(){
+  try{
+    return await apiPost(`/api/lobby.php`, { action:'status', lobby: code });
+  }catch(e){ return {}; }
+}
+
+/* Restart and results */
+async function restartGame(){
+  try{
+    await apiPost(`/api/restart.php`, { lobby: code, user_id: user });
+    // server will broadcast {type:'restart'}
+  }catch(e){ console.warn('restart error', e); }
+}
+async function sendResult(result, reason=''){
+  try{
+    await apiPost(`/api/result.php`, { lobby: code, user_id: user, result, reason, score: myScore() });
+  }catch(e){ console.warn('result error', e); }
+  // also push an explicit control move so peer sees it even if result.php broadcast changes later
+  await postMove('game_over', { reason });
+}
+
+/* ================= Game constants ================= */
+const cvs = el('game');
+const ctx = cvs.getContext('2d');
+const W = cvs.width, H = cvs.height;
+
+const SHIP_Y = H - 70;
+const SHIP_W = 64, SHIP_H = 48;
+const SHIP_SPEED = 380; // px/s
+const FIRE_COOLDOWN = 280; // ms
+
+const ORB_R = 8;
+const ORB_SPEED = 520; // px/s
+const ORB_COLORS = {1:'#49b3ff', 2:'#ff5a6b'}; // P1 blue, P2 red
+
+/* Aliens pattern */
+const GRID_COLS = 11, GRID_ROWS = 5;
+const ALIEN_W = 44, ALIEN_H = 32;
+const ALIEN_PAD_X = 18, ALIEN_PAD_Y = 16;
+const ALIEN_START_X = 80, ALIEN_START_Y = 80;
+const STEP_MS = 480;
+const DROP_Y = 16;
+const RANGE_LEFT = 40, RANGE_RIGHT = W - 40;
+
+/* Stars */
+const STARS = []; const STAR_COUNT = 120;
+
+/* Assets */
+const imgEnemy = new Image(); imgEnemy.src = 'enemy.png';
+const imgP1    = new Image(); imgP1.src = 'player1.png';
+const imgP2    = new Image(); imgP2.src = 'player2.png';
+let enemyTinted = null;
+
+/* Shared state */
+const state = {
+  startAt:null,
+  over:false,
+  reason:'',
+  p1:{ x: W*0.28, score:0, lastFire:0 },
+  p2:{ x: W*0.72, score:0, lastFire:0 },
+  kills: new Set(),
+  orbs:[],
+  lastFrame: performance.now(),
+  started:false
+};
+
+function myScore(){ return (player===1?state.p1.score:state.p2.score)|0; }
+function orb(by, x, y){ return { x, y, vy: -ORB_SPEED, by }; }
+
+/* ========== Alien math ========== */
+function rangeSteps(){
+  const gridWidth = GRID_COLS*ALIEN_W + (GRID_COLS-1)*ALIEN_PAD_X;
+  const travel = Math.max(0, (RANGE_RIGHT - RANGE_LEFT) - gridWidth);
+  const step = Math.max(10, ALIEN_W);
+  return Math.max(1, Math.floor(travel/step));
+}
+const RS = rangeSteps();
+function alienOffsetAt(tMs){
+  const n = Math.floor(tMs / STEP_MS);
+  const cycles = Math.floor(n / RS);
+  const phase = n % RS;
+  const dir = (cycles % 2 === 0) ? 1 : -1;
+  const step = Math.max(10, ALIEN_W);
+  const xOffset = dir > 0 ? phase*step : (RS-1-phase)*step;
+  const yOffset = Math.floor(n / RS) * DROP_Y;
+  return { xOffset, yOffset };
+}
+function alienPos(r, c, tMs){
+  const { xOffset, yOffset } = alienOffsetAt(tMs);
+  const x = ALIEN_START_X + c*(ALIEN_W+ALIEN_PAD_X) + xOffset;
+  const y = ALIEN_START_Y + r*(ALIEN_H+ALIEN_PAD_Y) + yOffset;
+  return {x,y};
+}
+
+/* ========== Tint enemy.png ========= */
+function buildTintedEnemy(){
+  if(!imgEnemy.complete || imgEnemy.naturalWidth===0) return;
+  const w = imgEnemy.naturalWidth, h = imgEnemy.naturalHeight;
+  const off = document.createElement('canvas'); off.width = w; off.height = h;
+  const octx = off.getContext('2d');
+  octx.drawImage(imgEnemy, 0, 0, w, h);
+  octx.globalCompositeOperation = 'source-atop';
+  const g = octx.createLinearGradient(0, 0, 0, h);
+  g.addColorStop(0, '#00ffb0'); g.addColorStop(0.5, '#00cf68'); g.addColorStop(1, '#0b8f45');
+  octx.fillStyle = g; octx.fillRect(0,0,w,h);
+  octx.globalCompositeOperation = 'lighter';
+  octx.globalAlpha = 0.12;
+  octx.fillStyle = '#ffffff';
+  octx.fillRect(0,0,w,h*0.35);
+  enemyTinted = off;
+}
+imgEnemy.onload = buildTintedEnemy;
+
+/* ========== Stars ========== */
+function initStars(){
+  STARS.length = 0;
+  for(let i=0;i<STAR_COUNT;i++){
+    STARS.push({ x: Math.random()*W, y: Math.random()*H, z: 0.3 + Math.random()*0.7, s: 0.6 + Math.random()*1.6 });
+  }
+}
+function drawStars(dt){
+  for(const s of STARS){
+    s.y += 18*s.z*(dt/1000);
+    if(s.y > H) s.y -= H;
+    ctx.globalAlpha = 0.4 + 0.6*s.z;
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(s.x, s.y, s.s, s.s);
+  }
+  ctx.globalAlpha = 1;
+}
+
+/* ========== Input ========== */
+const input = { left:false, right:false, fire:false };
+function bindKeys(){
+  window.addEventListener('keydown', e=>{
+    if(player===1){
+      if(e.key==='a'||e.key==='A'||e.key==='ArrowLeft') input.left=true;
+      if(e.key==='d'||e.key==='D'||e.key==='ArrowRight') input.right=true;
+      if(e.code==='Space' || e.key==='w' || e.key==='W' || e.key==='ArrowUp' || e.key==='Enter') input.fire=true;
+    }else{
+      if(e.key==='ArrowLeft'||e.key==='a'||e.key==='A') input.left=true;
+      if(e.key==='ArrowRight'||e.key==='d'||e.key==='D') input.right=true;
+      if(e.key==='ArrowUp'||e.code==='Space'||e.key==='Enter') input.fire=true;
+    }
+  });
+  window.addEventListener('keyup', e=>{
+    if(['a','A','ArrowLeft'].includes(e.key)) input.left=false;
+    if(['d','D','ArrowRight'].includes(e.key)) input.right=false;
+    if(['w','W','ArrowUp','Enter'].includes(e.key) || e.code==='Space') input.fire=false;
+  });
+}
+
+/* ========== Networking / Handshake ========== */
+let pollTimer=null, statusTimer=null, sawOtherJoin=false;
+
+/* Join lobby - server will broadcast {type:'join'} and may broadcast {type:'start'} if status becomes ongoing */
+async function joinAndBegin(){
+  await joinLobby();
+  // start periodic polls
+  pollTimer   = setInterval(fetchEvents, 500);
+  statusTimer = setInterval(async ()=>{
+    const s = await getLobbyStatus();
+    const isOngoing = s && (s.status === 'ongoing');
+    inviteRow.style.display = isOngoing ? 'none' : 'block';
+    waitingMsg.textContent = isOngoing ? (state.started ? 'Game on' : 'Starting…') : 'Waiting for Opponent…';
+  }, 800);
+}
+
+/* ================= Game loop ================= */
+function clamp(x,a,b){ return Math.min(b, Math.max(a,x)); }
+function nowMs(){ return Date.now(); }
+
+function tick(ts){
+  const dt = ts - state.lastFrame; state.lastFrame = ts;
+  if(!state.startAt){ requestAnimationFrame(tick); return; }
+  const elapsed = Math.max(0, nowMs() - state.startAt);
+
+  const me = player===1 ? state.p1 : state.p2;
+  const dx = (input.right?1:0) - (input.left?1:0);
+  if(dx!==0){
+    me.x = clamp(me.x + dx*SHIP_SPEED*(dt/1000), 30, W-30);
+    throttleMoveBroadcast(me.x);
+  }
+  if(input.fire){
+    const sinceFire = nowMs() - me.lastFire;
+    if(sinceFire > FIRE_COOLDOWN){
+      me.lastFire = nowMs();
+      const x = me.x, y = SHIP_Y-20;
+      state.orbs.push(orb(player, x, y));
+      postMove('fire', { player, x, y });
+    }
+  }
+
+  for(const b of state.orbs){ b.y += b.vy*(dt/1000); }
+  for(let i=state.orbs.length-1;i>=0;i--){ if(state.orbs[i].y < -20) state.orbs.splice(i,1); }
+
+  const toKill = [];
+  for(let r=0;r<GRID_ROWS;r++){
+    for(let c=0;c<GRID_COLS;c++){
+      const key = `${r},${c}`; if(state.kills.has(key)) continue;
+      const pos = alienPos(r,c, elapsed);
+      const ax=pos.x, ay=pos.y, aw=ALIEN_W, ah=ALIEN_H;
+      if(ay+ah >= SHIP_Y-8 && !state.over){
+        state.over = true; state.reason = 'Invaded';
+        postMove('game_over', { reason:'Invaded' });
+      }
+      for(const b of state.orbs){
+        if(b.y < ay+ah && b.y > ay && b.x > ax && b.x < ax+aw){
+          toKill.push({r,c,by:b.by});
+          b.y = -9999;
+        }
+      }
+    }
+  }
+  if(toKill.length){
+    for(const k of toKill){
+      const key = `${k.r},${k.c}`;
+      if(!state.kills.has(key)){
+        state.kills.add(key);
+        if(k.by===1) state.p1.score += 10;
+        if(k.by===2) state.p2.score += 10;
+        postMove('kill', { r:k.r, c:k.c, by:k.by });
+      }
+    }
+  }
+
+  if(!state.over){
+    let remaining = GRID_ROWS*GRID_COLS - state.kills.size;
+    if(remaining<=0){
+      state.over = true; state.reason = 'Cleared';
+      postMove('game_over', { reason:'Cleared' });
+    }
+  }
+
+  draw(elapsed, dt);
+  if(!state.over){ requestAnimationFrame(tick); }
+}
+
+let _lastMoveSend = 0;
+function throttleMoveBroadcast(x){
+  const t = nowMs();
+  if(t - _lastMoveSend > 80){
+    _lastMoveSend = t;
+    postMove('move', { player, x: Math.round(x*100)/100 });
+  }
+}
+
+/* ================= Apply remote moves ================= */
+function applyMove(sender, p){
+  switch(p.type){
+    case 'join':
+      if(sender !== user){ sawOtherJoin = true; }
+      break;
+    case 'start': {
+      // accept either p.startAt (ms) or p.at (seconds)
+      const startMs = (typeof p.startAt === 'number' && p.startAt > 10_000) ? p.startAt
+                     : (typeof p.at === 'number' ? p.at*1000 : Date.now()+600);
+      if(!state.startAt){
+        state.startAt = startMs;
+        state.started = true;
+        waitingCover.style.display='none';
+        statusEl.textContent = 'Game on';
+        initStars(); bindKeys();
+        state.lastFrame = performance.now();
+        requestAnimationFrame(tick);
+      }
+      break;
+    }
+    case 'move':
+      if(p.player===1) state.p1.x = p.x;
+      if(p.player===2) state.p2.x = p.x;
+      break;
+    case 'fire':
+      state.orbs.push(orb(p.player, p.x, p.y));
+      break;
+    case 'kill':
+      state.kills.add(`${p.r},${p.c}`);
+      if(p.by===1) state.p1.score += 10;
+      if(p.by===2) state.p2.score += 10;
+      break;
+    case 'game_over':
+      state.over = true; state.reason = p.reason||'';
+      statusEl.textContent = 'Game over';
+      break;
+    case 'restart':
+      softRestart();
+      break;
+  }
+}
+
+/* ================= Drawing ================= */
+function draw(elapsed, dt){
+  ctx.clearRect(0,0,W,H);
+  drawStars(dt);
+
+  if(enemyTinted){
+    for(let r=0;r<GRID_ROWS;r++){
+      for(let c=0;c<GRID_COLS;c++){
+        if(state.kills.has(`${r},${c}`)) continue;
+        const {x,y} = alienPos(r,c, elapsed);
+        ctx.drawImage(enemyTinted, x, y, ALIEN_W, ALIEN_H);
+      }
+    }
+  }else{
+    for(let r=0;r<GRID_ROWS;r++){
+      for(let c=0;c<GRID_COLS;c++){
+        if(state.kills.has(`${r},${c}`)) continue;
+        const {x,y} = alienPos(r,c, elapsed);
+        const g = ctx.createLinearGradient(0,y,0,y+ALIEN_H);
+        g.addColorStop(0,'#00ffb0'); g.addColorStop(1,'#0b8f45');
+        ctx.fillStyle=g; ctx.fillRect(x,y,ALIEN_W,ALIEN_H);
+      }
+    }
+  }
+
+  for(const b of state.orbs){
+    const rg = ctx.createRadialGradient(b.x, b.y, 1, b.x, b.y, ORB_R);
+    const c1 = ORB_COLORS[b.by] || '#fff';
+    rg.addColorStop(0, c1);
+    rg.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = rg;
+    ctx.beginPath(); ctx.arc(b.x, b.y, ORB_R, 0, Math.PI*2); ctx.fill();
+  }
+
+  const p1 = state.p1, p2 = state.p2;
+  if(imgP1.complete && imgP1.naturalWidth) ctx.drawImage(imgP1, p1.x - SHIP_W/2, SHIP_Y - SHIP_H/2, SHIP_W, SHIP_H);
+  if(imgP2.complete && imgP2.naturalWidth) ctx.drawImage(imgP2, p2.x - SHIP_W/2, SHIP_Y - SHIP_H/2, SHIP_W, SHIP_H);
+
+  positionShipLabel('labelP1', p1.x, SHIP_Y + 18, player===1 ? 'Player 1 (You)' : 'Player 1');
+  positionShipLabel('labelP2', p2.x, SHIP_Y + 18, player===2 ? 'Player 2 (You)' : 'Player 2');
+
+  el('scoreL').textContent = `P1: ${state.p1.score}`;
+  el('scoreR').textContent = `P2: ${state.p2.score}`;
+
+  el('tip').style.opacity = Math.max(0, 1 - Math.min(1, elapsed/5000));
+}
+
+function positionShipLabel(id, x, y, text){
+  const d = el(id); d.textContent = text;
+  const rect = cvs.getBoundingClientRect();
+  const scaleX = rect.width / W, scaleY = rect.height / H;
+  d.style.left = (rect.left + window.scrollX + x*scaleX) + 'px';
+  d.style.top  = (rect.top  + window.scrollY + y*scaleY) + 'px';
+}
+
+/* ================= Controls ================= */
+el('btnRestart').addEventListener('click', ()=> restartGame());
+el('btnResign').addEventListener('click', async ()=>{
+  await sendResult('loss','Resigned');
+});
+el('leave').addEventListener('click', leaveToParent);
+el('leave2').addEventListener('click', leaveToParent);
+
+/* Restart soft reset */
+function softRestart(){
+  state.over=false; state.reason='';
+  state.p1.x = W*0.28; state.p2.x = W*0.72;
+  state.p1.score=0; state.p2.score=0; state.kills.clear(); state.orbs.length=0;
+  state.startAt = Date.now()+800;
+  state.started = true;
+  statusEl.textContent = 'Game on';
+  state.lastFrame = performance.now();
+  requestAnimationFrame(tick);
+}
+
+/* ================= Kickoff ================= */
+async function kickoff(){
+  waitingCover.style.display = 'flex';
+  inviteRow.style.display = 'block';
+  statusEl.textContent = 'Waiting for Opponent';
+
+  // 1) Register
+  await joinAndBegin();
+
+  // 2) Do not send our own join move - server lobby.php join already broadcasts it
+
+  // Start render loop idle - gameplay begins after we receive {type:'start'}
+  state.lastFrame = performance.now();
+  requestAnimationFrame(tick);
+}
+kickoff();
+
+/* Reposition labels on resize */
+window.addEventListener('resize', ()=>{
+  positionShipLabel('labelP1', state.p1.x, SHIP_Y + 18, player===1 ? 'Player 1 (You)' : 'Player 1');
+  positionShipLabel('labelP2', state.p2.x, SHIP_Y + 18, player===2 ? 'Player 2 (You)' : 'Player 2');
+});
+</script>
+</body>
+</html>

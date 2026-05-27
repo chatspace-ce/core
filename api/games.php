@@ -2,6 +2,16 @@
 require_once __DIR__ . '/../includes/base.php';
 $pdo = db();
 
+function game_catalog(): array {
+    return [
+        'chess' => 2,
+        'checkers' => 3,
+        'backgammon' => 5,
+        'spaceinvasion' => 6,
+        'tetris' => 7,
+    ];
+}
+
 function game_auth(PDO $pdo, int $sessionId, int $participantId, string $token): array {
     $p = auth_participant($pdo, $sessionId, $token);
     if ((int)$p['id'] !== $participantId) json_out(['error' => 'Unauthorized'], 403);
@@ -52,7 +62,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     game_auth($pdo, $sessionId, $participantId, (string)($body['join_token'] ?? ''));
     if ($action === 'start') {
         $type = preg_replace('/[^a-z_]/', '', (string)($body['game_type'] ?? ''));
-        $allowed = ['chess' => 2, 'checkers' => 3];
+        $allowed = game_catalog();
         if (!isset($allowed[$type])) json_out(['error' => 'Unknown game'], 400);
         $lobby = uuid_v4();
         $pdo->prepare('INSERT INTO game_sessions (room_session_id, game_type, lobby_code, started_by_participant_id) VALUES (?,?,?,?)')->execute([$sessionId, $type, $lobby, $participantId]);
@@ -84,6 +94,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (!$stmt->fetchColumn()) json_out(['error' => 'Game not found'], 404);
         $pdo->prepare('UPDATE game_lobbies SET status = "ended", updated_at = CURRENT_TIMESTAMP WHERE lobby_code = ?')->execute([$lobby]);
         $pdo->prepare('UPDATE game_sessions SET ended_at = CURRENT_TIMESTAMP WHERE room_session_id = ? AND lobby_code = ?')->execute([$sessionId, $lobby]);
+        $pdo->prepare('DELETE FROM game_moves WHERE lobby_code = ?')->execute([$lobby]);
+        $pdo->prepare('DELETE FROM game_state WHERE lobby_code = ?')->execute([$lobby]);
+        $pdo->prepare('DELETE FROM game_chat_messages WHERE lobby_code = ?')->execute([$lobby]);
+        $pdo->prepare('DELETE FROM game_chat_typing WHERE lobby_code = ?')->execute([$lobby]);
         emit_event($pdo, $sessionId, 'game_end', ['lobby_code' => $lobby]);
         json_out(['ok' => true]);
     }

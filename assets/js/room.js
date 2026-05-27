@@ -28,6 +28,7 @@ const messagesEl = document.getElementById('messages');
 const userListEl = document.getElementById('user-list');
 const friendListEl = document.getElementById('friend-results');
 const gameListEl = document.getElementById('active-games');
+const gameStartMenu = document.getElementById('game-start-menu');
 const voiceListEl = document.getElementById('voice-list');
 const ctxMenu = document.getElementById('ctx-menu');
 const textCtxMenu = document.getElementById('text-ctx-menu');
@@ -117,6 +118,14 @@ const seenRoomHistoryClears = new Set();
 let gameChatPollTimer = null;
 let gameTypingActive = false;
 let gameTypingStopTimer = null;
+
+const GAME_CATALOG = {
+  chess: { name: 'Chess', path: 'chess', entry: 'index.html', icon: 'chess', gameId: 2, seats: ['White', 'Black'] },
+  checkers: { name: 'Checkers', path: 'checkers', entry: 'index.html', icon: 'checkers', gameId: 3, seats: ['Red', 'White'] },
+  backgammon: { name: 'Backgammon', path: 'backgammon', entry: 'backgammon.html', icon: 'backgammon', gameId: 5, seats: ['White', 'Black'] },
+  spaceinvasion: { name: 'Space Invasion', path: 'spaceinvasion', entry: 'spaceinvasion.html', icon: 'spaceinvasion', gameId: 6, seats: ['Player 1', 'Player 2'] },
+  tetris: { name: 'Tetris Versus', path: 'tetris-versus', entry: 'tetris-versus.html', icon: 'tetris', gameId: 7, seats: ['Player 1', 'Player 2'] },
+};
 let gifSearchTimer = null;
 const gifDurationCache = new Map();
 let messagesPinnedToBottom = true;
@@ -1193,7 +1202,7 @@ function renderPeople() {
   const gameForParticipant = p => [...activeGames.values()].find(game => (game.players || []).some(player => Number(player.participant_id) === Number(p.id)));
   const makePersonBits = p => {
     const game = gameForParticipant(p);
-    const gameBadge = game ? `<span class="user-game-badge" title="${esc(gameName(game.game_type))}"><img src="${esc(appUrl(`/assets/images/${gamePath(game.game_type)}-icon.png`))}" alt=""></span>` : '';
+    const gameBadge = game ? `<span class="user-game-badge" title="${esc(gameName(game.game_type))}"><img src="${esc(gameIconUrl(game.game_type))}" alt=""></span>` : '';
     const nameIcon = game ? `<img class="person-game-name-icon" src="${esc(gameIconUrl(game.game_type))}" alt="" title="${esc(gameName(game.game_type))}">` : '';
     return `<span class="user-avatar-wrap"><img src="${esc(avatarUrl(p))}" alt=""><span class="status-dot ${p.online ? 'on' : ''}"></span>${gameBadge}</span><div><strong class="person-name-line">${nameIcon}<span>${esc(displayNameFor(p))}</span></strong><div class="minor">${p.id === cfg.myParticipantId ? 'You' : (p.online ? 'Online' : 'Away')}</div></div>`;
   };
@@ -2615,12 +2624,17 @@ function closeAttachMenu() {
   attachMenu.hidden = true;
 }
 
+function closeGameStartMenu() {
+  if (gameStartMenu) gameStartMenu.hidden = true;
+}
+
 function openEmojiPicker() {
   closeContextMenu();
   closeTextContextMenu();
   closeTabContextMenu();
   closeRoomMenu();
   closeRoomActionMenu();
+  closeGameStartMenu();
   closeAttachMenu();
   closeMediaPicker();
   const btn = document.getElementById('emoji-btn');
@@ -2639,6 +2653,7 @@ function openRoomMenu() {
   closeTextContextMenu();
   closeTabContextMenu();
   closeRoomActionMenu();
+  closeGameStartMenu();
   closeAttachMenu();
   closeMediaPicker();
   const btn = document.getElementById('room-menu-btn');
@@ -2655,6 +2670,7 @@ function openRoomActionMenu() {
   closeTextContextMenu();
   closeTabContextMenu();
   closeRoomMenu();
+  closeGameStartMenu();
   closeAttachMenu();
   closeMediaPicker();
   const btn = document.getElementById('room-action-btn');
@@ -2700,9 +2716,22 @@ document.getElementById('attach-btn').addEventListener('click', e => {
   closeTabContextMenu();
   closeRoomMenu();
   closeRoomActionMenu();
+  closeGameStartMenu();
   closeEmojiPicker();
   closeMediaPicker();
   attachMenu.hidden = !attachMenu.hidden;
+});
+
+document.getElementById('game-start-btn')?.addEventListener('click', e => {
+  e.stopPropagation();
+  closeContextMenu();
+  closeTextContextMenu();
+  closeTabContextMenu();
+  closeRoomMenu();
+  closeRoomActionMenu();
+  closeMediaPicker();
+  closeAttachMenu();
+  if (gameStartMenu) gameStartMenu.hidden = !gameStartMenu.hidden;
 });
 
 document.getElementById('attach-file-btn').addEventListener('click', () => {
@@ -3043,6 +3072,7 @@ document.addEventListener('click', e => {
   if (tabCtxMenu && !tabCtxMenu.contains(e.target)) closeTabContextMenu();
   if (!roomMenu.contains(e.target) && !e.target.closest('#room-menu-btn')) closeRoomMenu();
   if (roomActionMenu && !roomActionMenu.contains(e.target) && !e.target.closest('#room-action-btn')) closeRoomActionMenu();
+  if (gameStartMenu && !gameStartMenu.contains(e.target) && !e.target.closest('#game-start-btn')) closeGameStartMenu();
   if (mediaPicker && !mediaPicker.contains(e.target) && !e.target.closest('#emoji-btn')) closeMediaPicker();
   if (!attachMenu.contains(e.target) && !e.target.closest('#attach-btn')) closeAttachMenu();
 });
@@ -3496,6 +3526,7 @@ async function loadGames() {
   const data = await fetch(appUrl('/api/games.php?' + qs)).then(r => r.json()).catch(() => ({ games: [] }));
   gameListEl.innerHTML = '';
   activeGames.clear();
+  gameListEl.hidden = !(data.games || []).length;
   (data.games || []).forEach(a => {
     activeGames.set(a.lobby_code, a);
     const row = document.createElement('div');
@@ -3520,21 +3551,31 @@ async function loadGames() {
 }
 
 function gameName(type) {
-  return ({ chess: 'Chess', checkers: 'Checkers' })[type] || type;
+  return GAME_CATALOG[type]?.name || type;
 }
 
 function gamePath(type) {
-  return ({ chess: 'chess', checkers: 'checkers' })[type] || type;
+  return GAME_CATALOG[type]?.path || type;
 }
 
 function gameIconUrl(type) {
-  return appUrl(`/assets/images/${gamePath(type)}-icon.png`);
+  return appUrl(`/assets/images/${GAME_CATALOG[type]?.icon || gamePath(type)}-icon.png`);
+}
+
+function gameFrameUrl(game) {
+  const meta = GAME_CATALOG[game.game_type] || { path: game.game_type, entry: 'index.html', gameId: 0 };
+  const qs = new URLSearchParams({
+    lobby: game.lobby_code,
+    user: String(cfg.myParticipantId),
+    game: String(meta.gameId || 0),
+    embedded: '1',
+  });
+  return appUrl(`/games/${meta.path}/${meta.entry}?${qs}`);
 }
 
 function gameSeatRole(type, seat) {
-  if (type === 'chess') return Number(seat) === 1 ? 'White' : 'Black';
-  if (type === 'checkers') return Number(seat) === 1 ? 'Red' : 'White';
-  return `Player ${seat}`;
+  const labels = GAME_CATALOG[type]?.seats || [];
+  return labels[Number(seat) - 1] || `Player ${seat}`;
 }
 
 function setGameLayerVisibility() {
@@ -3563,7 +3604,7 @@ async function openGame(a) {
     stageIcon.src = gameIconUrl(activeGame.game_type);
     stageIcon.hidden = false;
   }
-  gameFrame.src = appUrl(`/games/${gamePath(activeGame.game_type)}/index.html?lobby=${encodeURIComponent(activeGame.lobby_code)}&user=${cfg.myParticipantId}`);
+  gameFrame.src = gameFrameUrl(activeGame);
   updateGameStagePlayers();
   renderLinkTabs();
   switchChat(`game:${activeGame.lobby_code}`);
@@ -4015,6 +4056,7 @@ document.getElementById('host-notice-understand')?.addEventListener('click', e =
 
 document.querySelectorAll('[data-game]').forEach(btn => {
   btn.addEventListener('click', async () => {
+    closeGameStartMenu();
     const data = await apiPost('/api/games.php', { action: 'start', session_id: cfg.sessionId, participant_id: cfg.myParticipantId, join_token: cfg.myJoinToken, game_type: btn.dataset.game });
     await loadGames();
     openGame({ game_type: btn.dataset.game, lobby_code: data.lobby_code, started_by_name: 'You' });
