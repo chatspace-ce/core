@@ -2,7 +2,8 @@
 // Copy to includes/config.php or let setup.php generate it.
 
 const CHATSPACE_DB_DRIVER = 'sqlite';
-const CHATSPACE_SQLITE_PATH = __DIR__ . '/../db/chatspace.sqlite';
+// setup.php generates a unique filename, for example:
+const CHATSPACE_SQLITE_PATH = __DIR__ . '/../db/chatspace-00000000-0000-4000-8000-000000000000.sqlite';
 
 // MySQL / MariaDB example:
 // const CHATSPACE_DB_DRIVER = 'mysql';
