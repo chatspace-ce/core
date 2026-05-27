@@ -94,7 +94,7 @@ $rooms = $roomsStmt->fetchAll();
         <button id="admin-open" type="button"><img src="<?= e(app_url('/assets/images/lobby.png')) ?>" alt="">Admin</button>
         <?php endif; ?>
         <button id="password-open" type="button"><img src="<?= e(app_url('/assets/images/secure.png')) ?>" alt="">Update Password</button>
-        <button id="recovery-open" type="button"><img src="<?= e(app_url('/assets/images/secure.png')) ?>" alt="">Account Recovery</button>
+        <button id="recovery-open" type="button"><img src="<?= e(app_url('/assets/images/account-recovery.png')) ?>" alt="">Account Recovery</button>
         <a href="<?= e(app_url('/logout.php')) ?>"><img src="<?= e(app_url('/assets/images/logout.png')) ?>" alt="">Log Out</a>
       </div>
     </div>
@@ -269,10 +269,10 @@ $rooms = $roomsStmt->fetchAll();
         </button>
         <div class="admin-nav-label">System</div>
         <button class="admin-nav-item" data-admin-section="settings" type="button">
-          <span class="admin-nav-symbol">⚙</span> Limits
+          <img src="<?= e(app_url('/assets/images/limits.png')) ?>" alt=""> Limits
         </button>
         <button class="admin-nav-item" data-admin-section="database" type="button">
-          <img src="<?= e(app_url('/assets/images/secure.png')) ?>" alt=""> Database
+          <img src="<?= e(app_url('/assets/images/sql-server.png')) ?>" alt=""> Database
         </button>
         <button class="admin-nav-item" data-admin-section="link-icons" type="button">
           <img src="<?= e(app_url('/assets/images/cs-icons/plus.png')) ?>" alt=""> Link Icons
@@ -284,7 +284,7 @@ $rooms = $roomsStmt->fetchAll();
           <span class="admin-nav-count" id="admin-moderation-count">0</span>
         </button>
         <button class="admin-nav-item" data-admin-section="logs" type="button">
-          <img src="<?= e(app_url('/assets/images/chat-pane-bubble.png')) ?>" alt=""> Tool Logs
+          <img src="<?= e(app_url('/assets/images/log-file.png')) ?>" alt=""> Tool Logs
           <span class="admin-nav-count" id="admin-log-count">0</span>
         </button>
       </nav>
