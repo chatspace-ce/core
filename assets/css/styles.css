@@ -2799,29 +2799,53 @@ textarea:focus { border-color: rgba(124,106,247,.8); box-shadow: 0 0 0 3px rgba(
 }
 .admin-export-choice {
   min-height: 42px;
-  display: flex;
+  width: 100%;
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
   align-items: center;
-  gap: 10px;
-  padding: 9px 10px;
+  justify-content: start;
+  gap: 12px;
+  padding: 10px 12px;
   border: 1px solid rgba(255,255,255,.08);
   border-radius: 7px;
-  background: rgba(255,255,255,.045);
+  background: linear-gradient(90deg, rgba(124,106,247,.095), rgba(255,255,255,.035));
   color: var(--text);
   font-weight: 850;
+  line-height: 1.2;
+  cursor: pointer;
+}
+.admin-export-choice:nth-of-type(2n) {
+  background: linear-gradient(90deg, rgba(39,211,195,.07), rgba(255,255,255,.03));
+}
+.admin-export-choice:nth-of-type(3n) {
+  background: linear-gradient(90deg, rgba(255,95,122,.065), rgba(255,255,255,.03));
 }
 .admin-export-choice:hover {
-  background: rgba(255,255,255,.07);
+  border-color: rgba(124,106,247,.34);
+  filter: brightness(1.08);
 }
 .admin-export-choice input {
-  width: auto;
-  flex: 0 0 auto;
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  justify-self: start;
+  align-self: center;
+}
+.admin-export-choice span {
+  min-width: 0;
+  justify-self: start;
 }
 .admin-export-subchoice {
+  width: calc(100% - 22px);
   margin-left: 22px;
   color: rgba(255,255,255,.84);
 }
 .admin-export-subchoice:has(input:disabled) {
   opacity: .45;
+}
+.admin-export-options .btn {
+  justify-self: end;
+  width: auto;
 }
 .admin-settings {
   grid-template-columns: repeat(2, minmax(0, 1fr));
