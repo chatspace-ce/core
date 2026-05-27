@@ -51,6 +51,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
     $page = max(1, (int)($_GET['page'] ?? 1));
     $perPage = 20;
     $offset = ($page - 1) * $perPage;
+    $ownedStmt = $pdo->prepare('SELECT COUNT(*) FROM gestures WHERE owner_user_id = ? AND deleted_at IS NULL');
+    $ownedStmt->execute([$userId]);
+    $ownedCount = (int)$ownedStmt->fetchColumn();
+    $ownedLimit = max(0, (int)app_setting($pdo, 'gesture_upload_limit', '50'));
     $params = [$userId];
     $where = 'deleted_at IS NULL AND (owner_user_id = ? OR is_public = 1)';
     if ($q !== '') {
@@ -76,6 +80,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
         'page' => $page,
         'per_page' => $perPage,
         'total' => $total,
+        'owned_count' => $ownedCount,
+        'owned_limit' => $ownedLimit,
         'has_more' => ($offset + $perPage) < $total,
     ]);
 }
@@ -121,6 +127,13 @@ if ($size <= 0) json_out(['error' => 'Gesture file was empty'], 400);
 if ($size > 30 * 1024 * 1024) json_out(['error' => 'Gesture file is too large'], 400);
 if (strtolower(pathinfo($name, PATHINFO_EXTENSION)) !== 'agst') {
     json_out(['error' => 'Upload a .agst gesture file'], 400);
+}
+
+$ownedLimit = max(0, (int)app_setting($pdo, 'gesture_upload_limit', '50'));
+$ownedStmt = $pdo->prepare('SELECT COUNT(*) FROM gestures WHERE owner_user_id = ? AND deleted_at IS NULL');
+$ownedStmt->execute([$userId]);
+if ((int)$ownedStmt->fetchColumn() >= $ownedLimit) {
+    json_out(['error' => 'Gesture limit reached. Remove some gestures to make room.'], 400);
 }
 
 $zip = new ZipArchive();

@@ -750,6 +750,7 @@ function seed_app_settings(PDO $pdo): void {
         'room_chat_history_limit' => '100',
         'avatar_movements_per_second' => '12',
         'avatar_max_size_mb' => '5',
+        'gesture_upload_limit' => '50',
         'room_image_max_size_mb' => '10',
         'room_video_max_size_mb' => '200',
         'participant_idle_timeout_minutes' => '2',

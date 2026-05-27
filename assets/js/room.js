@@ -138,6 +138,8 @@ let activeMediaTab = 'gifs';
 let gesturePage = 1;
 let gestureHasMore = false;
 let gesturePaletteLoaded = false;
+let gestureOwnedCount = 0;
+let gestureOwnedLimit = 50;
 let gestureSearchTimer = null;
 let activeGestureAudio = null;
 const mediaSearchValues = { gifs: '', gestures: '' };
@@ -2897,6 +2899,8 @@ async function loadGestures() {
     const data = await fetch(appUrl(`/api/gestures.php?${qs}`)).then(r => r.json());
     if (data.error) throw new Error(data.error);
     gestureHasMore = Boolean(data.has_more);
+    gestureOwnedCount = Number(data.owned_count || 0);
+    gestureOwnedLimit = Number(data.owned_limit ?? 50);
     if (gesturePageLabel) gesturePageLabel.textContent = `Page ${data.page || gesturePage}`;
     if (gesturePrev) gesturePrev.disabled = gesturePage <= 1;
     if (gestureNext) gestureNext.disabled = !gestureHasMore;
@@ -2916,8 +2920,14 @@ function renderGestureGrid(gestures) {
   const uploadTile = document.createElement('button');
   uploadTile.className = 'gesture-upload-tile';
   uploadTile.type = 'button';
-  uploadTile.innerHTML = '<span>+</span><small>Upload .agst</small><div class="gesture-upload-progress"><i></i></div>';
-  uploadTile.addEventListener('click', () => gestureFileInput?.click());
+  const limitReached = gestureOwnedCount >= gestureOwnedLimit;
+  uploadTile.disabled = limitReached;
+  uploadTile.title = limitReached ? 'Remove some gestures to make room.' : 'Upload .agst';
+  uploadTile.innerHTML = `<span>+</span><small>Upload .agst</small><em>${gestureOwnedCount}/${gestureOwnedLimit}</em><div class="gesture-upload-progress"><i></i></div>`;
+  uploadTile.addEventListener('click', () => {
+    if (limitReached) return;
+    gestureFileInput?.click();
+  });
   gestureGrid.appendChild(uploadTile);
 
   if (!gestures.length) {
@@ -2967,6 +2977,10 @@ function renderGestureGrid(gestures) {
 }
 
 async function uploadGesture(file) {
+  if (gestureOwnedCount >= gestureOwnedLimit) {
+    alert('Gesture limit reached. Remove some gestures to make room.');
+    return;
+  }
   const uploadTile = gestureGrid?.querySelector('.gesture-upload-tile');
   const bar = uploadTile?.querySelector('.gesture-upload-progress i');
   if (uploadTile) uploadTile.classList.add('uploading');

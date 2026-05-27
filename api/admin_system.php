@@ -119,6 +119,7 @@ if ($action === 'save_settings') {
         'room_chat_history_limit' => [1, 1000],
         'avatar_movements_per_second' => [1, 60],
         'avatar_max_size_mb' => [0.5, 50],
+        'gesture_upload_limit' => [0, 1000],
         'room_image_max_size_mb' => [1, 100],
         'room_video_max_size_mb' => [5, 1000],
         'participant_idle_timeout_minutes' => [0.5, 120],

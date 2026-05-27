@@ -330,6 +330,7 @@ $rooms = $roomsStmt->fetchAll();
               <label>Room chat history posts <input name="room_chat_history_limit" type="number" min="1" max="1000" step="10"></label>
               <label>Avatar movements per second <input name="avatar_movements_per_second" type="number" min="1" max="60" step="1"></label>
               <label>Avatar max size MB <input name="avatar_max_size_mb" type="number" min="0.5" max="50" step="0.5"></label>
+              <label>Gestures per account <input name="gesture_upload_limit" type="number" min="0" max="1000" step="1"></label>
               <label>Room image max size MB <input name="room_image_max_size_mb" type="number" min="1" max="100" step="1"></label>
               <label>Room video max size MB <input name="room_video_max_size_mb" type="number" min="5" max="1000" step="5"></label>
               <label>Idle removal minutes <input name="participant_idle_timeout_minutes" type="number" min="0.5" max="120" step="0.5"></label>

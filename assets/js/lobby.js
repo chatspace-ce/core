@@ -58,6 +58,37 @@ function esc(s) {
   return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
 }
 
+function parseServerDate(value) {
+  if (!value) return null;
+  const date = new Date(String(value).replace(' ', 'T') + 'Z');
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function relativeTimeLabel(date) {
+  if (!date) return '';
+  const seconds = Math.round((date.getTime() - Date.now()) / 1000);
+  const units = [
+    ['year', 31536000],
+    ['month', 2592000],
+    ['week', 604800],
+    ['day', 86400],
+    ['hour', 3600],
+    ['minute', 60],
+  ];
+  const formatter = new Intl.RelativeTimeFormat([], { numeric: 'auto' });
+  for (const [unit, size] of units) {
+    if (Math.abs(seconds) >= size) return formatter.format(Math.round(seconds / size), unit);
+  }
+  return formatter.format(seconds, 'second');
+}
+
+function adminCreatedOn(value) {
+  const date = parseServerDate(value);
+  if (!date) return 'Unknown';
+  const absolute = date.toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' });
+  return `${absolute} <span>${esc(relativeTimeLabel(date))}</span>`;
+}
+
 function setLobbyRoomPreview(path, mime = '') {
   if (!lobbyRoomEditPreview) return;
   const safePath = path ? esc(path) : '';
@@ -509,7 +540,7 @@ async function loadAdminUsers() {
   (data.users || []).forEach(user => {
     const row = document.createElement('form');
     row.className = 'admin-user-row';
-    row.innerHTML = `<div><strong>${user.display_name}</strong><div class="minor">${user.email}</div></div>
+    row.innerHTML = `<div><strong>${esc(user.display_name)}</strong><div class="minor">${esc(user.email)}</div><div class="admin-created-meta"><span>Created On</span><strong>${adminCreatedOn(user.created_at)}</strong></div></div>
       <select name="role">
         <option value="user">User</option>
         <option value="guide">Guide</option>
@@ -746,6 +777,7 @@ adminSettings?.addEventListener('submit', async e => {
       room_chat_history_limit: form.elements.room_chat_history_limit.value,
       avatar_movements_per_second: form.elements.avatar_movements_per_second.value,
       avatar_max_size_mb: form.elements.avatar_max_size_mb.value,
+      gesture_upload_limit: form.elements.gesture_upload_limit.value,
       room_image_max_size_mb: form.elements.room_image_max_size_mb.value,
       room_video_max_size_mb: form.elements.room_video_max_size_mb.value,
       participant_idle_timeout_minutes: form.elements.participant_idle_timeout_minutes.value,
