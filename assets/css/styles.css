@@ -1058,14 +1058,14 @@ textarea:focus { border-color: rgba(124,106,247,.8); box-shadow: 0 0 0 3px rgba(
   height: auto;
   max-width: none;
 }
-.chat-attachment-image.chat-gif {
-  width: min(366px, 100%);
-  max-width: min(366px, 100%);
+.chat-attachment-image.chat-gif:not(.chat-gesture-gif) {
+  width: min(256px, 100%);
+  max-width: min(256px, 100%);
 }
-.chat-attachment-image.chat-gif img {
+.chat-attachment-image.chat-gif:not(.chat-gesture-gif) img {
   width: 100%;
   height: auto;
-  max-height: 289px;
+  max-height: 202px;
   object-fit: contain;
 }
 .chat-gesture {
