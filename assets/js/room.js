@@ -80,6 +80,7 @@ let pendingDeleteMessageId = null;
 let pendingDeleteChatKey = null;
 let webcamStream = null;
 let webcamTimer = null;
+const AVATAR_STAGE_SIZE = 150;
 let voiceStream = null;
 let voiceJoined = false;
 let voicePollTimer = null;
@@ -343,6 +344,35 @@ function avatarUrl(p) {
   if (p.avatar_url) return p.avatar_url;
   if (p.avatar_path?.startsWith('preset:')) return cfg.avatarPresets[p.avatar_path.slice(7)] || cfg.avatarPresets.Default;
   return mediaUrl(p.avatar_path || cfg.avatarPresets.Default);
+}
+
+function isWebcamAssetUrl(url) {
+  return String(url || '').includes('/assets/uploads/webcam/');
+}
+
+function setAvatarImageSource(img, nextSrc, flip = false) {
+  if (!img || !nextSrc) return;
+  if (!flip) {
+    img.src = nextSrc;
+    return;
+  }
+  img.classList.remove('avatar-flipping');
+  void img.offsetWidth;
+  img.classList.add('avatar-flipping');
+  window.setTimeout(() => {
+    img.src = nextSrc;
+  }, 145);
+  window.setTimeout(() => {
+    img.classList.remove('avatar-flipping');
+  }, 330);
+}
+
+function applyWebcamPath(participantId, webcamPath) {
+  const person = participants.get(Number(participantId));
+  if (!person) return;
+  const next = Object.assign({}, person, { webcam_path: webcamPath || null });
+  if (!next.webcam_path && isWebcamAssetUrl(next.avatar_url)) next.avatar_url = null;
+  renderParticipant(next);
 }
 
 function messageAvatarUrl(msg, participant = null) {
@@ -721,7 +751,10 @@ async function renderParticipantWhenReady(p, options = {}) {
 function renderParticipant(p, options = {}) {
   if (roomExitInProgress && Number(p.id) === Number(cfg?.myParticipantId)) return;
   const existing = participants.get(p.id) || {};
+  const hadImage = Boolean(existing.avatarEl);
+  const wasWebcam = Boolean(existing.webcam_path);
   const merged = Object.assign(existing, p);
+  if (!merged.webcam_path && isWebcamAssetUrl(merged.avatar_url)) merged.avatar_url = null;
   participants.set(p.id, merged);
 
   let img = merged.avatarEl;
@@ -746,7 +779,8 @@ function renderParticipant(p, options = {}) {
       openAvatarContextMenu(e.clientX, e.clientY, current);
     });
   }
-  img.src = avatarUrl(merged);
+  const nowWebcam = Boolean(merged.webcam_path);
+  setAvatarImageSource(img, avatarUrl(merged), hadImage && wasWebcam !== nowWebcam);
   refreshLinkClasses();
   img.classList.toggle('webcam', Boolean(merged.webcam_path));
   label.textContent = displayNameFor(merged);
@@ -826,8 +860,8 @@ function positionAvatar(p) {
   if (!img || !label) return;
   const w = roomStage.clientWidth;
   const h = roomStage.clientHeight;
-  const aw = img.classList.contains('webcam') ? 190 : 150;
-  const ah = 150;
+  const aw = AVATAR_STAGE_SIZE;
+  const ah = AVATAR_STAGE_SIZE;
   const x = Math.max(0, Math.min(w - aw, p.position_x * w));
   const y = Math.max(0, Math.min(h - ah, p.position_y * h));
   img.style.left = `${x}px`;
@@ -964,8 +998,8 @@ function dmFlightPointForUser(userId) {
     || stagePointFromElement([...roomStage.querySelectorAll('.avatar')].find(el => Number(el.dataset.participantId) === Number(person?.id)));
   if (elementPoint) return elementPoint;
   if (person && Number.isFinite(Number(person.position_x)) && Number.isFinite(Number(person.position_y))) {
-    const avatarWidth = person.webcam_path ? 190 : 150;
-    const avatarHeight = 150;
+    const avatarWidth = AVATAR_STAGE_SIZE;
+    const avatarHeight = AVATAR_STAGE_SIZE;
     return {
       x: Math.max(0, Math.min(roomStage.clientWidth, Number(person.position_x) * roomStage.clientWidth + avatarWidth / 2)),
       y: Math.max(0, Math.min(roomStage.clientHeight, Number(person.position_y) * roomStage.clientHeight + avatarHeight / 2)),
@@ -1997,12 +2031,7 @@ async function poll() {
         }
       }
       if (ev.type === 'webcam') {
-        const person = participants.get(p.participant_id);
-        if (person) {
-          person.webcam_path = p.webcam_path;
-          person.avatar_url = p.webcam_path || person.avatar_url;
-          renderParticipant(person);
-        }
+        applyWebcamPath(p.participant_id, p.webcam_path || null);
       }
       if (ev.type === 'avatar') {
         const person = participants.get(p.participant_id);
@@ -2572,8 +2601,7 @@ async function refreshPresence() {
       const existing = participants.get(p.id);
       if (existing) {
         existing.online = p.online;
-        existing.webcam_path = p.webcam_path;
-        if (p.online) renderParticipant(existing);
+        if (p.online) applyWebcamPath(existing.id, p.webcam_path || null);
         else if (existing.avatarEl) removeParticipant(existing.id, { keepRecord: true });
       }
     });
@@ -3572,6 +3600,7 @@ ctxToggleWebcam.addEventListener('click', async () => {
     webcamStream = null;
     clearInterval(webcamTimer);
     await apiPost('/api/webcam_frame.php', { action: 'off', session_id: cfg.sessionId, join_token: cfg.myJoinToken });
+    applyWebcamPath(cfg.myParticipantId, null);
     return;
   }
   webcamStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
@@ -3580,13 +3609,24 @@ ctxToggleWebcam.addEventListener('click', async () => {
   video.muted = true;
   await video.play();
   const canvas = document.createElement('canvas');
-  canvas.width = 360;
-  canvas.height = 270;
+  canvas.width = 250;
+  canvas.height = 250;
   const ctx = canvas.getContext('2d');
+  function drawWebcamCover() {
+    const vw = video.videoWidth || canvas.width;
+    const vh = video.videoHeight || canvas.height;
+    const scale = Math.max(canvas.width / vw, canvas.height / vh);
+    const sw = canvas.width / scale;
+    const sh = canvas.height / scale;
+    const sx = Math.max(0, (vw - sw) / 2);
+    const sy = Math.max(0, (vh - sh) / 2);
+    ctx.drawImage(video, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
+  }
   async function sendFrame() {
-    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    drawWebcamCover();
     const image = canvas.toDataURL('image/jpeg', .72);
-    await apiPost('/api/webcam_frame.php', { action: 'frame', session_id: cfg.sessionId, join_token: cfg.myJoinToken, image }).catch(() => {});
+    const data = await apiPost('/api/webcam_frame.php', { action: 'frame', session_id: cfg.sessionId, join_token: cfg.myJoinToken, image }).catch(() => null);
+    if (data?.webcam_path) applyWebcamPath(cfg.myParticipantId, data.webcam_path);
   }
   await sendFrame();
   webcamTimer = setInterval(sendFrame, 2600);

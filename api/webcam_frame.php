@@ -9,8 +9,13 @@ $action = $body['action'] ?? 'frame';
 
 if ($action === 'off') {
     $pdo->prepare('UPDATE participants SET webcam_path = NULL WHERE id = ?')->execute([(int)$p['id']]);
-    emit_event($pdo, $sessionId, 'webcam', ['participant_id' => (int)$p['id'], 'webcam_path' => null]);
-    json_out(['ok' => true]);
+    emit_event($pdo, $sessionId, 'webcam', [
+        'participant_id' => (int)$p['id'],
+        'webcam_path' => null,
+        'avatar_path' => $p['avatar_path'],
+        'avatar_url' => resolve_avatar($p['avatar_path']),
+    ]);
+    json_out(['ok' => true, 'webcam_path' => null, 'avatar_path' => $p['avatar_path'], 'avatar_url' => resolve_avatar($p['avatar_path'])]);
 }
 
 $image = (string)($body['image'] ?? '');

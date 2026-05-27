@@ -1733,6 +1733,12 @@ textarea:focus { border-color: rgba(124,106,247,.8); box-shadow: 0 0 0 3px rgba(
   z-index: 2;
 }
 .avatar:active { cursor: grabbing; }
+.avatar.avatar-flipping {
+  animation: avatarHorizontalFlip .32s cubic-bezier(.4,0,.2,1);
+  transform-origin: center;
+  backface-visibility: hidden;
+  pointer-events: none;
+}
 .avatar.avatar-materialize {
   animation: avatarMaterializeReveal .88s cubic-bezier(.18,.82,.28,1) both;
   pointer-events: none;
@@ -1789,6 +1795,24 @@ textarea:focus { border-color: rgba(124,106,247,.8); box-shadow: 0 0 0 3px rgba(
     filter: brightness(.6) saturate(.6);
   }
 }
+@keyframes avatarHorizontalFlip {
+  0% {
+    transform: perspective(720px) rotateY(0deg);
+    filter: brightness(1);
+  }
+  48% {
+    transform: perspective(720px) rotateY(88deg);
+    filter: brightness(1.24) saturate(1.1);
+  }
+  52% {
+    transform: perspective(720px) rotateY(88deg);
+    filter: brightness(1.24) saturate(1.1);
+  }
+  100% {
+    transform: perspective(720px) rotateY(0deg);
+    filter: brightness(1);
+  }
+}
 @keyframes avatarPixelBuild {
   0% {
     opacity: 0;
@@ -1831,7 +1855,7 @@ textarea:focus { border-color: rgba(124,106,247,.8); box-shadow: 0 0 0 3px rgba(
   opacity: 1;
 }
 .avatar-name.avatar-name-hidden { opacity: 0 !important; }
-.avatar.webcam { border-radius: 4px; width: 190px; height: 150px; }
+.avatar.webcam { border-radius: 4px; width: 150px; height: 150px; object-fit: cover; }
 .avatar.avatar-pulse {
   animation: avatarPulse 1.45s ease-out;
 }
