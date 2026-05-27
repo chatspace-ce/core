@@ -157,10 +157,10 @@ $linkIconCatalog = link_icon_catalog($pdo);
       <div class="user-list" id="user-list"></div>
     </section>
     <div class="sidebar-bottom-tools">
-      <section class="side-section voice-side-section" id="voice-side-section" hidden>
-        <div class="side-title">Voice Chat <span id="voice-count-label"></span></div>
-        <div class="voice-list" id="voice-list"></div>
-        <button class="btn btn-voice" id="voice-toggle" type="button" style="width:100%;margin-top:8px;">Join Voice</button>
+      <section class="side-section voice-side-section" id="voice-side-section">
+        <div class="side-title" id="voice-title" hidden>Voice Chat <span id="voice-count-label"></span></div>
+        <div class="voice-list" id="voice-list" hidden></div>
+        <button class="btn btn-voice" id="voice-toggle" type="button">Join Voice</button>
       </section>
       <section class="side-section">
         <button class="btn icon-label" id="locate-btn" style="width:100%;"><img src="<?= e(app_url('/assets/images/locate.png')) ?>" alt="">Locate Friends</button>

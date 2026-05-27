@@ -32,6 +32,7 @@ const friendListEl = document.getElementById('friend-results');
 const gameListEl = document.getElementById('active-games');
 const gameStartMenu = document.getElementById('game-start-menu');
 const voiceSideSection = document.getElementById('voice-side-section');
+const voiceTitleEl = document.getElementById('voice-title');
 const voiceListEl = document.getElementById('voice-list');
 const voiceCountLabel = document.getElementById('voice-count-label');
 const ctxMenu = document.getElementById('ctx-menu');
@@ -3700,12 +3701,14 @@ function setSidebarWidth(px) {
 
 function applyVerticalDividerDrag(clientX) {
   const layoutRect = roomLayout.getBoundingClientRect();
-  const dividerWidth = document.getElementById('vertical-divider')?.getBoundingClientRect().width || 6;
+  const dividerEl = document.getElementById('vertical-divider');
+  const dividerWidth = dividerEl?.getBoundingClientRect().width || 6;
+  const dividerMarginRight = dividerEl ? parseFloat(getComputedStyle(dividerEl).marginRight) || 0 : 0;
   const rightGutter = 10;
   const minMainWidth = 620;
   const minSidebarWidth = 300;
-  const maxSidebarWidth = Math.max(minSidebarWidth, Math.min(560, layoutRect.width - dividerWidth - rightGutter - minMainWidth));
-  let width = layoutRect.right - clientX - dividerWidth - rightGutter;
+  const maxSidebarWidth = Math.max(minSidebarWidth, Math.min(560, layoutRect.width - dividerWidth - dividerMarginRight - rightGutter - minMainWidth));
+  let width = layoutRect.right - clientX - (dividerWidth / 2) - dividerMarginRight - rightGutter;
   width = Math.max(minSidebarWidth, Math.min(maxSidebarWidth, width));
   setSidebarWidth(width);
   participants.forEach(positionAvatar);
@@ -4591,7 +4594,9 @@ async function pollVoice() {
 
 function renderVoiceList(list) {
   latestVoiceParticipants = Array.isArray(list) ? list : [];
-  if (voiceSideSection) voiceSideSection.hidden = latestVoiceParticipants.length === 0;
+  if (voiceSideSection) voiceSideSection.classList.toggle('has-voice', latestVoiceParticipants.length > 0);
+  if (voiceTitleEl) voiceTitleEl.hidden = latestVoiceParticipants.length === 0;
+  if (voiceListEl) voiceListEl.hidden = latestVoiceParticipants.length === 0;
   if (voiceCountLabel) voiceCountLabel.textContent = latestVoiceParticipants.length ? `(${latestVoiceParticipants.length})` : '';
   voiceListEl.innerHTML = '';
   latestVoiceParticipants.forEach(v => {

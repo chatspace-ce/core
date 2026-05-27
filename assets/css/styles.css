@@ -858,7 +858,7 @@ textarea:focus { border-color: rgba(124,106,247,.8); box-shadow: 0 0 0 3px rgba(
   flex: 0 0 6px;
   width: 6px;
   height: calc(100% - 20px);
-  margin: 10px 0;
+  margin: 10px 10px 10px 0;
   border-radius: 3px;
   background: var(--border);
   cursor: col-resize;
@@ -1662,6 +1662,13 @@ textarea:focus { border-color: rgba(124,106,247,.8); box-shadow: 0 0 0 3px rgba(
   gap: 7px;
 }
 .friend-list, .game-list, .voice-list { display: grid; gap: 7px; }
+.voice-side-section .btn-voice {
+  width: 100%;
+  margin-top: 0;
+}
+.voice-side-section.has-voice .btn-voice {
+  margin-top: 8px;
+}
 .voice-side-section[hidden] { display: none; }
 .voice-list:empty { display: none; }
 .voice-card {
