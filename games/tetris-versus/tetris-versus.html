@@ -131,11 +131,12 @@ body.embedded .card-footer{
 }
 body.embedded .card-body{
   height:100%;
-  padding:12px;
-  justify-content:center;
+  padding:4px 8px 8px;
+  justify-content:flex-start;
 }
 body.embedded .versus{
   max-width:100%;
+  height:100%;
   overflow:auto;
 }
 body.embedded .waiting-cover{
@@ -238,7 +239,10 @@ function computeBase(){
   return idx >= 0 ? path.slice(0, idx) : '';
 }
 const base = computeBase();
-const LIST_URL = `${base}/list_lobbies.php?game=${gameId}`;
+const LIST_URL = `${base}/games/list_lobbies.php?game=${gameId}`;
+function gameApiPath(path){
+  return path.startsWith('/api/') ? `/games${path}` : path;
+}
 
 function leaveToParent(){
   try { window.parent.postMessage({ type:'game_close', lobby: code }, window.location.origin); } catch {}
@@ -277,12 +281,14 @@ let copyResetTimer=null; copyCodeBtn?.addEventListener('click', async ()=>{
 
 /* ================= API helpers ================= */
 async function apiGet(p){
+  p = gameApiPath(p);
   const u=(p.startsWith('/'))?`${base}${p}`:`${p}`;
   const url=u+(u.includes('?')?'&':'?')+`user=${user}`;
   const r=await fetch(url);
   return r.ok? r.json():{};
 }
 async function apiPost(p,d){
+  p = gameApiPath(p);
   const u=(p.startsWith('/'))?`${base}${p}`:`${p}`;
   const r=await fetch(u,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(d)});
   if(!r.ok) throw new Error('net'); return r.json();
@@ -491,9 +497,10 @@ function onOpponentLeft(){ bothJoined=false; started=true; setWaiting('left'); }
 
 /* ================= Poll opponent via moves.php + lobby.php ================= */
 let lastSeq=0;
-async function seedMoves(){ try{ const mv=await apiGet(`/api/moves.php?lobby=${code}&lastSeq=0`); if(Array.isArray(mv)&&mv.length){ lastSeq=mv[mv.length-1].sequence||0; const anyOther = mv.some(m=>m.user_id!==user); if(anyOther) ensureBothPresent(); } }catch{} }
-async function pollMoves(){ try{ const mv=await apiGet(`/api/moves.php?lobby=${code}&lastSeq=${lastSeq}`); if(!Array.isArray(mv)) return; for(const m of mv){ lastSeq=m.sequence||lastSeq; const {payload,user_id}=m; if(!payload) continue; switch(payload.type){ case 'join': case 'ready': if(user_id!==user) ensureBothPresent(); break; case 'leave': if(user_id!==user) onOpponentLeft(); break; case 'topout': if(user_id!==user){ gameOver=true; winner=mySide; el('status').textContent='You win!'; } break; } } }catch{} }
-async function pollLobbyStatus(){ try{ const s=await apiGet(`/api/lobby.php?action=status&lobby_id=${code}`); const count=(s&&(s.players??s.players_count??s.active_players))||0; if(count>=2) ensureBothPresent(); if(count<2&&bothJoined) onOpponentLeft(); if(s&&typeof s.status==='string'){ const st=s.status.toLowerCase(); if(st==='ongoing'&&!bothJoined) ensureBothPresent(); if((st==='over'||st==='closed'||st==='ended')&&bothJoined) onOpponentLeft(); } }catch{} }
+function moveList(data){ return Array.isArray(data) ? data : (Array.isArray(data?.moves) ? data.moves : []); }
+async function seedMoves(){ try{ const mv=moveList(await apiGet(`/api/moves.php?lobby=${code}&lastSeq=0`)); if(mv.length){ lastSeq=mv[mv.length-1].sequence||0; const anyOther = mv.some(m=>Number(m.user_id)!==Number(user)); if(anyOther) ensureBothPresent(); } }catch{} }
+async function pollMoves(){ try{ const mv=moveList(await apiGet(`/api/moves.php?lobby=${code}&lastSeq=${lastSeq}`)); for(const m of mv){ lastSeq=m.sequence||lastSeq; const {payload,user_id}=m; if(!payload || Number(user_id)===Number(user)) continue; switch(payload.type){ case 'join': case 'ready': ensureBothPresent(); break; case 'leave': onOpponentLeft(); break; case 'topout': gameOver=true; winner=mySide; el('status').textContent='You win!'; break; } } }catch{} }
+async function pollLobbyStatus(){ try{ const s=await apiGet(`/api/lobby.php?action=status&lobby_id=${code}`); const count=(s&&(s.players??s.players_count??s.active_players))||((s?.user1_id?1:0)+(s?.user2_id?1:0)); if(count>=2) ensureBothPresent(); if(count<2&&bothJoined) onOpponentLeft(); if(s&&typeof s.status==='string'){ const st=s.status.toLowerCase(); if((st==='ongoing'||st==='active')&&!bothJoined) ensureBothPresent(); if((st==='over'||st==='closed'||st==='ended')&&bothJoined) onOpponentLeft(); } }catch{} }
 
 /* ================= Mirror opponent via state.php ================= */
 /* IMPORTANT FIX: draw opponent on the OPPOSITE board */
@@ -531,9 +538,9 @@ function leaveFlow(){ sendMove('leave',{}).catch(()=>{}); try{ apiPost(`/api/lob
 function beaconLeave(){ try{
   const payload={ lobby_id: code, user_id: user, payload:{type:'leave'} };
   const b=new Blob([JSON.stringify(payload)],{type:'application/json'});
-  navigator.sendBeacon?.(`${base}/api/moves.php`, b);
+  navigator.sendBeacon?.(`${base}/games/api/moves.php`, b);
   const b2=new Blob([JSON.stringify({ action:'close', lobby_id: code, user_id: user })],{type:'application/json'});
-  navigator.sendBeacon?.(`${base}/api/lobby.php`, b2);
+  navigator.sendBeacon?.(`${base}/games/api/lobby.php`, b2);
 }catch{}}
 window.addEventListener('pagehide', beaconLeave);
 window.addEventListener('beforeunload', beaconLeave);

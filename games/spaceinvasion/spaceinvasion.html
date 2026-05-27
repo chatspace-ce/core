@@ -124,11 +124,24 @@ body.embedded .card-footer{
 }
 body.embedded .card-body{
   height:100%;
-  padding:12px;
-  justify-content:center;
+  padding:2px 10px 8px;
+  justify-content:flex-start;
+  align-items:center;
 }
 body.embedded .canvas-wrap{
+  width:min(100%, calc((100vh - 20px) * 1.5));
   min-height:0;
+  padding:10px;
+  box-sizing:border-box;
+}
+body.embedded .canvas-back{
+  aspect-ratio:3 / 2;
+  width:100%;
+  height:min(calc(100vh - 30px), calc((100vw - 40px) * .6667));
+}
+body.embedded #game{
+  width:100%;
+  height:100%;
 }
 body.embedded .waiting-cover{
   display:none !important;
@@ -208,7 +221,10 @@ function computeBase(){
   return idx >= 0 ? path.slice(0, idx) : '';
 }
 const base = computeBase();
-const LIST_URL = `${base}/list_lobbies.php?game=${gameId}`;
+const LIST_URL = `${base}/games/list_lobbies.php?game=${gameId}`;
+function gameApiPath(path){
+  return path.startsWith('/api/') ? `/games${path}` : path;
+}
 
 function leaveToParent(){
   try { window.parent.postMessage({ type:'game_close', lobby: code }, window.location.origin); } catch {}
@@ -249,6 +265,7 @@ let copyResetTimer=null; copyCodeBtn?.addEventListener('click', async ()=>{
 /* ================= API helpers ================= */
 async function apiGet(p){
   try{
+    p = gameApiPath(p);
     const u=(p.startsWith('/'))?`${base}${p}`:`${p}`;
     const r=await fetch(u);
     if(!r.ok){ const t=await r.text().catch(()=> ''); console.warn('GET failed', r.status, t); return {}; }
@@ -256,6 +273,7 @@ async function apiGet(p){
   }catch(e){ console.warn('GET error', e); return {}; }
 }
 async function apiPost(p,d){
+  p = gameApiPath(p);
   const u=(p.startsWith('/'))?`${base}${p}`:`${p}`;
   try{
     const r=await fetch(u,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(d)});
@@ -270,10 +288,12 @@ let lastSeq = 0; // sequence from game_moves
 async function fetchEvents(){
   // moves.php GET returns [{sequence,user_id,payload,created_at}]
   try{
-    const arr = await apiGet(`/api/moves.php?lobby=${encodeURIComponent(code)}&lastSeq=${lastSeq}`);
-    if(Array.isArray(arr)){
-      for(const m of arr){
+    const data = await apiGet(`/api/moves.php?lobby=${encodeURIComponent(code)}&lastSeq=${lastSeq}`);
+    const moves = Array.isArray(data) ? data : (Array.isArray(data.moves) ? data.moves : []);
+    if(moves.length){
+      for(const m of moves){
         lastSeq = Math.max(lastSeq, m.sequence||0);
+        if(Number(m.user_id || 0) === Number(user)) continue;
         const p = m.payload || {};
         applyMove(m.user_id||0, p);
       }
@@ -285,8 +305,9 @@ async function fetchEvents(){
 
 async function postMove(type, extra={}){ 
   try{
-    await apiPost(`/api/moves.php`, { lobby_id: code, user_id: user, payload: {type, ...extra} });
+    return await apiPost(`/api/moves.php`, { lobby_id: code, user_id: user, payload: {type, ...extra} });
   }catch(e){ /* already logged */ }
+  return {};
 }
 
 /* Lobby ops - POST as your lobby.php prefers JSON action */
@@ -297,16 +318,16 @@ async function joinLobby(){
 }
 async function getLobbyStatus(){
   try{
-    return await apiPost(`/api/lobby.php`, { action:'status', lobby: code });
+    return await apiGet(`/api/lobby.php?action=status&lobby_id=${encodeURIComponent(code)}`);
   }catch(e){ return {}; }
 }
 
 /* Restart and results */
 async function restartGame(){
-  try{
-    await apiPost(`/api/restart.php`, { lobby: code, user_id: user });
-    // server will broadcast {type:'restart'}
-  }catch(e){ console.warn('restart error', e); }
+  const startAt = Date.now()+650;
+  softRestart(startAt);
+  const response = await postMove('restart', { startAt });
+  if(response?.sequence) lastSeq = Math.max(lastSeq, response.sequence);
 }
 async function sendResult(result, reason=''){
   try{
@@ -351,6 +372,8 @@ let enemyTinted = null;
 /* Shared state */
 const state = {
   startAt:null,
+  levelStartAt:null,
+  level:1,
   over:false,
   reason:'',
   p1:{ x: W*0.28, score:0, lastFire:0 },
@@ -360,6 +383,7 @@ const state = {
   lastFrame: performance.now(),
   started:false
 };
+let hasSecondPlayer = player === 2;
 
 function myScore(){ return (player===1?state.p1.score:state.p2.score)|0; }
 function orb(by, x, y){ return { x, y, vy: -ORB_SPEED, by }; }
@@ -372,20 +396,35 @@ function rangeSteps(){
   return Math.max(1, Math.floor(travel/step));
 }
 const RS = rangeSteps();
+function levelRows(){
+  return Math.min(7, GRID_ROWS + Math.floor((state.level - 1) / 2));
+}
+function totalAliens(){
+  return GRID_COLS * levelRows();
+}
+function stepMsForLevel(){
+  return Math.max(150, STEP_MS - (state.level - 1) * 42);
+}
+function dropYForLevel(){
+  return DROP_Y + Math.min(14, (state.level - 1) * 2);
+}
+function alienStartYForLevel(){
+  return Math.max(48, ALIEN_START_Y - Math.min(22, (state.level - 1) * 4));
+}
 function alienOffsetAt(tMs){
-  const n = Math.floor(tMs / STEP_MS);
+  const n = Math.floor(tMs / stepMsForLevel());
   const cycles = Math.floor(n / RS);
   const phase = n % RS;
   const dir = (cycles % 2 === 0) ? 1 : -1;
   const step = Math.max(10, ALIEN_W);
   const xOffset = dir > 0 ? phase*step : (RS-1-phase)*step;
-  const yOffset = Math.floor(n / RS) * DROP_Y;
+  const yOffset = Math.floor(n / RS) * dropYForLevel();
   return { xOffset, yOffset };
 }
 function alienPos(r, c, tMs){
   const { xOffset, yOffset } = alienOffsetAt(tMs);
   const x = ALIEN_START_X + c*(ALIEN_W+ALIEN_PAD_X) + xOffset;
-  const y = ALIEN_START_Y + r*(ALIEN_H+ALIEN_PAD_Y) + yOffset;
+  const y = alienStartYForLevel() + r*(ALIEN_H+ALIEN_PAD_Y) + yOffset;
   return {x,y};
 }
 
@@ -453,11 +492,14 @@ let pollTimer=null, statusTimer=null, sawOtherJoin=false;
 /* Join lobby - server will broadcast {type:'join'} and may broadcast {type:'start'} if status becomes ongoing */
 async function joinAndBegin(){
   await joinLobby();
+  const response = await postMove('join', { player });
+  if(response?.sequence) lastSeq = Math.max(lastSeq, response.sequence);
   // start periodic polls
   pollTimer   = setInterval(fetchEvents, 500);
   statusTimer = setInterval(async ()=>{
     const s = await getLobbyStatus();
-    const isOngoing = s && (s.status === 'ongoing');
+    const isOngoing = s && ['ongoing', 'active'].includes(String(s.status || '').toLowerCase());
+    setSecondPlayerPresent(Boolean(s?.user2_id) || player === 2 || sawOtherJoin);
     inviteRow.style.display = 'none';
     statusEl.textContent = isOngoing || sawOtherJoin ? 'Game on' : 'Solo mode - waiting for opponent';
   }, 800);
@@ -470,7 +512,7 @@ function nowMs(){ return Date.now(); }
 function tick(ts){
   const dt = ts - state.lastFrame; state.lastFrame = ts;
   if(!state.startAt){ requestAnimationFrame(tick); return; }
-  const elapsed = Math.max(0, nowMs() - state.startAt);
+  const elapsed = Math.max(0, nowMs() - (state.levelStartAt || state.startAt));
 
   const me = player===1 ? state.p1 : state.p2;
   const dx = (input.right?1:0) - (input.left?1:0);
@@ -492,7 +534,8 @@ function tick(ts){
   for(let i=state.orbs.length-1;i>=0;i--){ if(state.orbs[i].y < -20) state.orbs.splice(i,1); }
 
   const toKill = [];
-  for(let r=0;r<GRID_ROWS;r++){
+  const rows = levelRows();
+  for(let r=0;r<rows;r++){
     for(let c=0;c<GRID_COLS;c++){
       const key = `${r},${c}`; if(state.kills.has(key)) continue;
       const pos = alienPos(r,c, elapsed);
@@ -522,10 +565,9 @@ function tick(ts){
   }
 
   if(!state.over){
-    let remaining = GRID_ROWS*GRID_COLS - state.kills.size;
+    let remaining = totalAliens() - state.kills.size;
     if(remaining<=0){
-      state.over = true; state.reason = 'Cleared';
-      postMove('game_over', { reason:'Cleared' });
+      advanceLevel();
     }
   }
 
@@ -548,6 +590,7 @@ function applyMove(sender, p){
     case 'join':
       if(sender !== user){
         sawOtherJoin = true;
+        setSecondPlayerPresent(true);
         statusEl.textContent = 'Game on';
       }
       break;
@@ -557,6 +600,7 @@ function applyMove(sender, p){
                      : (typeof p.at === 'number' ? p.at*1000 : Date.now()+600);
       if(!state.startAt){
         state.startAt = startMs;
+        state.levelStartAt = startMs;
         state.started = true;
         waitingCover.style.display='none';
         statusEl.textContent = 'Game on';
@@ -571,9 +615,13 @@ function applyMove(sender, p){
     }
     case 'move':
       if(p.player===1) state.p1.x = p.x;
-      if(p.player===2) state.p2.x = p.x;
+      if(p.player===2) {
+        setSecondPlayerPresent(true);
+        state.p2.x = p.x;
+      }
       break;
     case 'fire':
+      if(p.player===2) setSecondPlayerPresent(true);
       state.orbs.push(orb(p.player, p.x, p.y));
       break;
     case 'kill':
@@ -586,7 +634,12 @@ function applyMove(sender, p){
       statusEl.textContent = 'Game over';
       break;
     case 'restart':
-      softRestart();
+      softRestart(typeof p.startAt === 'number' ? p.startAt : undefined);
+      break;
+    case 'level_up':
+      if(Number(p.level || 0) > state.level) {
+        startLevel(Number(p.level || state.level + 1), typeof p.startAt === 'number' ? p.startAt : undefined, false);
+      }
       break;
   }
 }
@@ -597,7 +650,8 @@ function draw(elapsed, dt){
   drawStars(dt);
 
   if(enemyTinted){
-    for(let r=0;r<GRID_ROWS;r++){
+    const rows = levelRows();
+    for(let r=0;r<rows;r++){
       for(let c=0;c<GRID_COLS;c++){
         if(state.kills.has(`${r},${c}`)) continue;
         const {x,y} = alienPos(r,c, elapsed);
@@ -605,7 +659,8 @@ function draw(elapsed, dt){
       }
     }
   }else{
-    for(let r=0;r<GRID_ROWS;r++){
+    const rows = levelRows();
+    for(let r=0;r<rows;r++){
       for(let c=0;c<GRID_COLS;c++){
         if(state.kills.has(`${r},${c}`)) continue;
         const {x,y} = alienPos(r,c, elapsed);
@@ -627,23 +682,31 @@ function draw(elapsed, dt){
 
   const p1 = state.p1, p2 = state.p2;
   if(imgP1.complete && imgP1.naturalWidth) ctx.drawImage(imgP1, p1.x - SHIP_W/2, SHIP_Y - SHIP_H/2, SHIP_W, SHIP_H);
-  if(imgP2.complete && imgP2.naturalWidth) ctx.drawImage(imgP2, p2.x - SHIP_W/2, SHIP_Y - SHIP_H/2, SHIP_W, SHIP_H);
+  if(hasSecondPlayer && imgP2.complete && imgP2.naturalWidth) ctx.drawImage(imgP2, p2.x - SHIP_W/2, SHIP_Y - SHIP_H/2, SHIP_W, SHIP_H);
 
   positionShipLabel('labelP1', p1.x, SHIP_Y + 18, player===1 ? 'Player 1 (You)' : 'Player 1');
-  positionShipLabel('labelP2', p2.x, SHIP_Y + 18, player===2 ? 'Player 2 (You)' : 'Player 2');
+  if(hasSecondPlayer) positionShipLabel('labelP2', p2.x, SHIP_Y + 18, player===2 ? 'Player 2 (You)' : 'Player 2');
 
   el('scoreL').textContent = `P1: ${state.p1.score}`;
   el('scoreR').textContent = `P2: ${state.p2.score}`;
 
-  el('tip').style.opacity = Math.max(0, 1 - Math.min(1, elapsed/5000));
+  el('tip').textContent = `Level ${state.level} · ${hasSecondPlayer ? 'Co-op fire active' : 'Solo mode - waiting for opponent'}`;
+  el('tip').style.opacity = Math.max(.72, 1 - Math.min(.28, elapsed/6000));
 }
 
 function positionShipLabel(id, x, y, text){
   const d = el(id); d.textContent = text;
+  if(id === 'labelP2' && !hasSecondPlayer) return;
   const rect = cvs.getBoundingClientRect();
   const scaleX = rect.width / W, scaleY = rect.height / H;
   d.style.left = (rect.left + window.scrollX + x*scaleX) + 'px';
   d.style.top  = (rect.top  + window.scrollY + y*scaleY) + 'px';
+}
+
+function setSecondPlayerPresent(present){
+  hasSecondPlayer = Boolean(present);
+  el('scoreR').style.display = hasSecondPlayer ? '' : 'none';
+  el('labelP2').style.display = hasSecondPlayer ? '' : 'none';
 }
 
 /* ================= Controls ================= */
@@ -655,15 +718,30 @@ el('leave').addEventListener('click', leaveToParent);
 el('leave2').addEventListener('click', leaveToParent);
 
 /* Restart soft reset */
-function softRestart(){
+function softRestart(startAt = Date.now()+650){
   state.over=false; state.reason='';
+  state.level = 1;
   state.p1.x = W*0.28; state.p2.x = W*0.72;
   state.p1.score=0; state.p2.score=0; state.kills.clear(); state.orbs.length=0;
-  state.startAt = Date.now()+800;
+  state.startAt = startAt;
+  state.levelStartAt = startAt;
   state.started = true;
-  statusEl.textContent = 'Game on';
+  statusEl.textContent = hasSecondPlayer ? 'Game on' : 'Solo mode - waiting for opponent';
   state.lastFrame = performance.now();
   requestAnimationFrame(tick);
+}
+
+function startLevel(level, startAt = Date.now()+850, announce = true){
+  state.level = Math.max(1, level);
+  state.levelStartAt = startAt;
+  state.kills.clear();
+  state.orbs.length = 0;
+  statusEl.textContent = `Level ${state.level}`;
+  if(announce) postMove('level_up', { level: state.level, startAt });
+}
+
+function advanceLevel(){
+  startLevel(state.level + 1);
 }
 
 /* ================= Kickoff ================= */
@@ -678,6 +756,7 @@ async function kickoff(){
   // 2) Start immediately in solo mode; networking upgrades it when a partner joins.
   if(!state.startAt){
     state.startAt = Date.now()+300;
+    state.levelStartAt = state.startAt;
     state.started = true;
     initStars();
     bindKeys();
@@ -691,8 +770,9 @@ kickoff();
 /* Reposition labels on resize */
 window.addEventListener('resize', ()=>{
   positionShipLabel('labelP1', state.p1.x, SHIP_Y + 18, player===1 ? 'Player 1 (You)' : 'Player 1');
-  positionShipLabel('labelP2', state.p2.x, SHIP_Y + 18, player===2 ? 'Player 2 (You)' : 'Player 2');
+  if(hasSecondPlayer) positionShipLabel('labelP2', state.p2.x, SHIP_Y + 18, player===2 ? 'Player 2 (You)' : 'Player 2');
 });
+setSecondPlayerPresent(hasSecondPlayer);
 </script>
 </body>
 </html>

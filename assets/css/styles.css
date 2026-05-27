@@ -698,7 +698,7 @@ textarea:focus { border-color: rgba(124,106,247,.8); box-shadow: 0 0 0 3px rgba(
   z-index: 12;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
-  padding: 16px;
+  padding: 12px 14px 14px;
   background:
     radial-gradient(820px 440px at 50% 0%, rgba(124,106,247,.12), transparent 58%),
     linear-gradient(135deg, #030407, #080912 52%, #020306);
@@ -709,7 +709,7 @@ textarea:focus { border-color: rgba(124,106,247,.8); box-shadow: 0 0 0 3px rgba(
   justify-content: space-between;
   align-items: center;
   gap: 14px;
-  padding: 0 0 12px;
+  padding: 0 0 8px;
 }
 .game-stage-head strong {
   display: flex;
@@ -737,8 +737,8 @@ textarea:focus { border-color: rgba(124,106,247,.8); box-shadow: 0 0 0 3px rgba(
 .game-stage-body {
   min-height: 0;
   display: grid;
-  grid-template-columns: minmax(128px, 170px) minmax(500px, 1fr) minmax(128px, 170px);
-  gap: 14px;
+  grid-template-columns: minmax(116px, 156px) minmax(620px, 1fr) minmax(116px, 156px);
+  gap: 12px;
   align-items: stretch;
 }
 .game-frame-wrap {
