@@ -72,7 +72,7 @@ const sessionLockError = document.getElementById('session-lock-error');
 let textMenuMode = 'copy';
 let lastEventId = 0;
 let lastCommunityEventId = 0;
-let lastPollLatencyMs = null;
+let lastLatencyMs = null;
 let activeChat = 'room';
 let ctxMenuParticipantId = null;
 let hostModalTargetParticipantId = null;
@@ -2027,15 +2027,32 @@ function renderLatency(ms) {
   latencyMonitorEl.classList.add(rounded < 180 ? 'latency-good' : (rounded < 500 ? 'latency-warn' : 'latency-bad'));
 }
 
+async function checkLatency() {
+  if (!latencyMonitorEl || !cfg || roomExitInProgress) return;
+  try {
+    const qs = new URLSearchParams({
+      session_id: cfg.sessionId,
+      join_token: cfg.myJoinToken,
+      t: String(Date.now()),
+    });
+    const startedAt = performance.now();
+    const response = await fetch(appUrl('/api/latency.php?' + qs), { cache: 'no-store' });
+    if (!response.ok) throw new Error('Latency check failed.');
+    await response.json();
+    const elapsed = performance.now() - startedAt;
+    lastLatencyMs = lastLatencyMs === null ? elapsed : (lastLatencyMs * .65) + (elapsed * .35);
+    renderLatency(lastLatencyMs);
+  } catch (err) {
+    console.warn(err);
+    renderLatency(Number.POSITIVE_INFINITY);
+  }
+}
+
 async function poll() {
   if (roomExitInProgress) return;
   try {
     const qs = new URLSearchParams({ session_id: cfg.sessionId, last_event_id: lastEventId, last_community_event_id: lastCommunityEventId, join_token: cfg.myJoinToken });
-    const startedAt = performance.now();
     const data = await fetch(appUrl('/api/poll.php?' + qs)).then(r => r.json());
-    const elapsed = performance.now() - startedAt;
-    lastPollLatencyMs = lastPollLatencyMs === null ? elapsed : (lastPollLatencyMs * .7) + (elapsed * .3);
-    renderLatency(lastPollLatencyMs);
     (data.events || []).forEach(ev => {
       lastEventId = Math.max(lastEventId, ev.id);
       const p = ev.payload || {};
@@ -2231,7 +2248,6 @@ async function poll() {
     });
   } catch (err) {
     console.warn(err);
-    renderLatency(Number.POSITIVE_INFINITY);
   } finally {
     if (!roomExitInProgress) setTimeout(poll, 25);
   }
@@ -4654,9 +4670,11 @@ async function bootRoom() {
   }
   updateComposerState();
   updateVoiceToggleButton();
+  checkLatency();
   poll();
   pollVoice();
   pollAppVersion();
+  setInterval(checkLatency, 5000);
   setInterval(pollAppVersion, 60000);
   setInterval(updateVisibleTimestamps, 30000);
   refreshPresence();
