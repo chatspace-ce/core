@@ -385,6 +385,7 @@ textarea:focus { border-color: rgba(124,106,247,.8); box-shadow: 0 0 0 3px rgba(
 .btn-voice:hover { background: linear-gradient(135deg, #8a78ff, #6592ff); }
 .minor { color: var(--muted); font-size: 13px; }
 .error { color: #ffd7df; background: rgba(255,95,122,.12); border: 1px solid rgba(255,95,122,.32); padding: 10px 12px; border-radius: 7px; margin-bottom: 12px; }
+.success { color: #dfffee; background: rgba(104,245,155,.12); border: 1px solid rgba(104,245,155,.28); padding: 10px 12px; border-radius: 7px; margin-bottom: 12px; }
 .topbar {
   position: relative;
   display: flex;
@@ -2102,6 +2103,28 @@ textarea:focus { border-color: rgba(124,106,247,.8); box-shadow: 0 0 0 3px rgba(
 }
 .password-status.ok { color: #7ff3df; }
 .password-status.error-text { color: #ffd7df; }
+.password-status.working { color: #b8adff; }
+.recovery-card {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  margin-bottom: 10px;
+  border: 1px solid rgba(255,255,255,.1);
+  border-radius: 8px;
+  background: rgba(0,0,0,.22);
+}
+.recovery-code {
+  padding: 10px 12px;
+  border: 1px solid rgba(124,106,247,.42);
+  border-radius: 7px;
+  background: rgba(124,106,247,.12);
+  color: var(--text);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 15px;
+  font-weight: 900;
+  letter-spacing: .03em;
+  text-align: center;
+}
 .password-actions {
   display: flex;
   justify-content: flex-end;

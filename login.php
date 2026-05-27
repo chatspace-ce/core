@@ -36,6 +36,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       <label>Password<input type="password" name="password" required autocomplete="current-password"></label>
       <button class="btn btn-primary" type="submit">Log In</button>
       <p class="minor">New here? <a href="<?= e(app_url('/register.php')) ?>">Create an account</a></p>
+      <p class="minor"><a href="<?= e(app_url('/recover.php')) ?>">Recover Account</a></p>
       <p class="minor auth-about-link"><a href="<?= e(app_url('/about.html')) ?>">About ChatSpace Community Edition</a></p>
     </form>
     <?php if ($branding['has_custom_logo']): ?>

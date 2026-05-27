@@ -147,6 +147,8 @@ function mysqlize_schema(string $schema): string {
         'public_id' => 'VARCHAR(64)',
         'session_public_id' => 'VARCHAR(64)',
         'password_hash' => 'VARCHAR(255)',
+        'recovery_code_hash' => 'VARCHAR(255)',
+        'recovery_code_suffix' => 'VARCHAR(16)',
         'display_name' => 'VARCHAR(191)',
         'role' => 'VARCHAR(32)',
         'avatar_path' => 'VARCHAR(512)',
@@ -192,6 +194,8 @@ function migrate(PDO $pdo): void {
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             email TEXT NOT NULL UNIQUE,
             password_hash TEXT NOT NULL,
+            recovery_code_hash TEXT DEFAULT NULL,
+            recovery_code_suffix TEXT DEFAULT NULL,
             display_name TEXT NOT NULL,
             role TEXT NOT NULL DEFAULT 'user',
             avatar_path TEXT DEFAULT 'preset:Default',
@@ -553,6 +557,14 @@ function migrate(PDO $pdo): void {
     }
 
     if (db_driver($pdo) !== 'sqlite') {
+        $mysqlUserCols = $pdo->query('SHOW COLUMNS FROM users')->fetchAll();
+        $mysqlUserColNames = array_map(fn(array $col): string => (string)($col['Field'] ?? ''), $mysqlUserCols);
+        if (!in_array('recovery_code_hash', $mysqlUserColNames, true)) {
+            $pdo->exec('ALTER TABLE users ADD COLUMN recovery_code_hash VARCHAR(255) DEFAULT NULL');
+        }
+        if (!in_array('recovery_code_suffix', $mysqlUserColNames, true)) {
+            $pdo->exec('ALTER TABLE users ADD COLUMN recovery_code_suffix VARCHAR(16) DEFAULT NULL');
+        }
         seed_app_settings($pdo);
         seed_link_icon_catalog($pdo);
         return;
@@ -562,6 +574,12 @@ function migrate(PDO $pdo): void {
     $userColNames = array_map(fn(array $col): string => (string)$col['name'], $userCols);
     if (!in_array('role', $userColNames, true)) {
         $pdo->exec("ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'user'");
+    }
+    if (!in_array('recovery_code_hash', $userColNames, true)) {
+        $pdo->exec('ALTER TABLE users ADD COLUMN recovery_code_hash TEXT DEFAULT NULL');
+    }
+    if (!in_array('recovery_code_suffix', $userColNames, true)) {
+        $pdo->exec('ALTER TABLE users ADD COLUMN recovery_code_suffix TEXT DEFAULT NULL');
     }
     $settingsCols = $pdo->query('PRAGMA table_info(app_settings)')->fetchAll();
     $settingsColNames = array_map(fn(array $col): string => (string)$col['name'], $settingsCols);

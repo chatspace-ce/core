@@ -94,6 +94,7 @@ $rooms = $roomsStmt->fetchAll();
         <button id="admin-open" type="button"><img src="<?= e(app_url('/assets/images/lobby.png')) ?>" alt="">Admin</button>
         <?php endif; ?>
         <button id="password-open" type="button"><img src="<?= e(app_url('/assets/images/secure.png')) ?>" alt="">Update Password</button>
+        <button id="recovery-open" type="button"><img src="<?= e(app_url('/assets/images/secure.png')) ?>" alt="">Account Recovery</button>
         <a href="<?= e(app_url('/logout.php')) ?>"><img src="<?= e(app_url('/assets/images/logout.png')) ?>" alt="">Log Out</a>
       </div>
     </div>
@@ -230,6 +231,23 @@ $rooms = $roomsStmt->fetchAll();
       <button class="btn" id="password-cancel" type="button">Cancel</button>
     </div>
   </form>
+</div>
+<div class="modal" id="recovery-modal">
+  <div class="modal-box password-box">
+    <div class="modal-head">
+      <strong>Account Recovery</strong>
+      <button class="window-close" id="recovery-close" type="button" aria-label="Close">×</button>
+    </div>
+    <div class="password-status" id="recovery-status" aria-live="polite"></div>
+    <div class="recovery-card" id="recovery-card">
+      <div class="minor">Checking recovery status...</div>
+    </div>
+    <p class="minor">Copy your Lost Access recovery code to a safe place. It is used if you lose access to your account.</p>
+    <div class="password-actions">
+      <button class="btn btn-primary" id="recovery-generate" type="button">Create Recovery Code</button>
+      <button class="btn" id="recovery-cancel" type="button">Cancel</button>
+    </div>
+  </div>
 </div>
 <?php if (in_array($user['role'] ?? 'user', ['admin', 'developer'], true)): ?>
 <div class="modal" id="admin-modal">

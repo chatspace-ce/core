@@ -53,6 +53,10 @@ const lobbyToast = document.getElementById('lobby-toast');
 const passwordModal = document.getElementById('password-modal');
 const passwordForm = document.getElementById('password-form');
 const passwordStatus = document.getElementById('password-status');
+const recoveryModal = document.getElementById('recovery-modal');
+const recoveryCard = document.getElementById('recovery-card');
+const recoveryStatus = document.getElementById('recovery-status');
+const recoveryGenerate = document.getElementById('recovery-generate');
 
 function esc(s) {
   return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
@@ -442,6 +446,62 @@ passwordForm?.addEventListener('submit', async e => {
       passwordStatus.textContent = err.message || 'Could not update password.';
       passwordStatus.classList.add('error-text');
     }
+  }
+});
+
+function setRecoveryStatus(message = '', type = '') {
+  if (!recoveryStatus) return;
+  recoveryStatus.textContent = message;
+  recoveryStatus.className = `password-status ${type}`.trim();
+}
+
+function renderRecoveryStatus(data) {
+  if (!recoveryCard) return;
+  const code = data.recovery_code || data.masked_code || '';
+  recoveryCard.innerHTML = data.has_code
+    ? `<div class="recovery-code">${esc(code)}</div><div class="minor">${data.recovery_code ? 'Copy this code to a safe place. It will not be shown again after you close this window.' : 'A recovery code already exists. Only the last segment can be shown.'}</div>`
+    : '<div class="minor">No Lost Access recovery code has been generated for this account.</div>';
+  if (recoveryGenerate) recoveryGenerate.textContent = data.has_code ? 'Recreate Recovery Code' : 'Create Recovery Code';
+}
+
+async function loadRecoveryStatus() {
+  setRecoveryStatus('');
+  if (recoveryCard) recoveryCard.innerHTML = '<div class="minor">Checking recovery status...</div>';
+  const data = await lobbyApiPost('/api/recovery.php', { action: 'status' });
+  renderRecoveryStatus(data);
+}
+
+function closeRecoveryModal() {
+  recoveryModal?.classList.remove('open');
+  setRecoveryStatus('');
+}
+
+document.getElementById('recovery-open')?.addEventListener('click', async () => {
+  lobbyMenu?.classList.remove('visible');
+  recoveryModal?.classList.add('open');
+  try {
+    await loadRecoveryStatus();
+  } catch (err) {
+    setRecoveryStatus(err.message || 'Could not load recovery status.', 'error-text');
+  }
+});
+
+document.getElementById('recovery-close')?.addEventListener('click', closeRecoveryModal);
+document.getElementById('recovery-cancel')?.addEventListener('click', closeRecoveryModal);
+
+recoveryGenerate?.addEventListener('click', async () => {
+  const recreate = recoveryGenerate.textContent.includes('Recreate');
+  if (recreate && !confirm('Recreate your recovery code? The old code will stop working.')) return;
+  recoveryGenerate.disabled = true;
+  setRecoveryStatus('Generating...', 'working');
+  try {
+    const data = await lobbyApiPost('/api/recovery.php', { action: 'generate' });
+    renderRecoveryStatus(data);
+    setRecoveryStatus('Recovery code generated. Copy it now and keep it somewhere safe.', 'ok');
+  } catch (err) {
+    setRecoveryStatus(err.message || 'Could not generate recovery code.', 'error-text');
+  } finally {
+    recoveryGenerate.disabled = false;
   }
 });
 
