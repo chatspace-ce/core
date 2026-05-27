@@ -98,7 +98,7 @@ $rooms = $roomsStmt->fetchAll();
         <a href="<?= e(app_url('/logout.php')) ?>"><img src="<?= e(app_url('/assets/images/logout.png')) ?>" alt="">Log Out</a>
       </div>
     </div>
-    <div class="room-grid">
+    <div class="room-grid" id="room-grid">
       <form class="room-card create-room-tile" id="create-room-form" method="post" enctype="multipart/form-data">
         <div class="create-room-tile-inner">
           <h2>Create Room</h2>
@@ -119,7 +119,7 @@ $rooms = $roomsStmt->fetchAll();
         </div>
       </form>
       <?php foreach ($rooms as $room): ?>
-      <article class="room-card">
+      <article class="room-card" data-room-id="<?= e($room['public_id']) ?>">
         <?php
           $tileBg = $room['background_path'];
           if ($room['background_path'] && str_starts_with((string)$room['background_mime'], 'video/')) {
@@ -132,8 +132,8 @@ $rooms = $roomsStmt->fetchAll();
           <?php endif; ?>
         </div>
         <div class="room-card-body">
-          <h2><?= e($room['name']) ?></h2>
-          <div class="minor"><?= (int)$room['online_count'] ?> online · made by <?= e($room['owner_name']) ?></div>
+          <h2 class="room-card-name"><?= e($room['name']) ?></h2>
+          <div class="minor room-card-meta"><span class="room-card-count"><?= (int)$room['online_count'] ?></span> online · made by <span class="room-card-owner"><?= e($room['owner_name']) ?></span></div>
           <p class="room-card-actions">
             <a class="btn btn-primary" href="<?= e(app_url('/chatroom.php?id=' . rawurlencode((string)$room['public_id']))) ?>">Enter</a>
             <?php if ((int)$room['owner_id'] === (int)$user['id'] || in_array($user['role'] ?? 'user', ['admin', 'developer'], true)): ?>

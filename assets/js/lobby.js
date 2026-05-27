@@ -14,6 +14,9 @@ const backgroundInput = document.getElementById('room-background-input');
 const backgroundName = document.getElementById('room-background-name');
 const createRoomForm = document.getElementById('create-room-form');
 const createRoomProgress = document.getElementById('room-upload-progress');
+const roomGrid = document.getElementById('room-grid');
+const lobbyRoomIds = new Set([...document.querySelectorAll('.room-card[data-room-id]')].map(card => card.dataset.roomId));
+let lobbyPollTimer = null;
 
 if (backgroundInput && backgroundName) {
   backgroundInput.addEventListener('change', () => {
@@ -60,6 +63,118 @@ const recoveryGenerate = document.getElementById('recovery-generate');
 
 function esc(s) {
   return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
+}
+
+function redirectToLogin() {
+  window.location.href = appUrl('/login.php');
+}
+
+function roomCardSelector(id) {
+  if (window.CSS?.escape) return `.room-card[data-room-id="${CSS.escape(id)}"]`;
+  return `.room-card[data-room-id="${String(id).replace(/"/g, '\\"')}"]`;
+}
+
+function roomVideoPlaceholder(room) {
+  return room?.video_without_thumb ? '<div class="room-video-placeholder">Video Room</div>' : '';
+}
+
+function roomCardHtml(room) {
+  const bg = room.tile_background_url ? ` style="background-image:url('${esc(room.tile_background_url)}')"` : '';
+  const edit = room.can_edit
+    ? `<button class="btn btn-primary room-edit-open" type="button" data-room-id="${esc(room.public_id)}" data-room-name="${esc(room.name)}" data-room-bg="${esc(room.background_url || '')}" data-room-thumb="${esc(room.thumb_url || '')}" data-room-mime="${esc(room.background_mime || '')}">Edit</button>`
+    : '';
+  return `<div class="room-card-media"${bg}>${roomVideoPlaceholder(room)}</div>
+    <div class="room-card-body">
+      <h2 class="room-card-name">${esc(room.name)}</h2>
+      <div class="minor room-card-meta"><span class="room-card-count">${Number(room.online_count || 0)}</span> online · made by <span class="room-card-owner">${esc(room.owner_name)}</span></div>
+      <p class="room-card-actions">
+        <a class="btn btn-primary" href="${esc(room.enter_url)}">Enter</a>
+        ${edit}
+      </p>
+    </div>`;
+}
+
+function roomCardFor(room, animate = false) {
+  const card = document.createElement('article');
+  card.className = `room-card${animate ? ' room-card-entering' : ''}`;
+  card.dataset.roomId = room.public_id;
+  card.innerHTML = roomCardHtml(room);
+  if (animate) {
+    requestAnimationFrame(() => card.classList.add('show'));
+    window.setTimeout(() => card.classList.remove('room-card-entering', 'show'), 520);
+  }
+  return card;
+}
+
+function updateRoomCard(card, room) {
+  if (!card) return;
+  const name = card.querySelector('.room-card-name');
+  const count = card.querySelector('.room-card-count');
+  const owner = card.querySelector('.room-card-owner');
+  const enter = card.querySelector('.room-card-actions a');
+  const edit = card.querySelector('.room-edit-open');
+  if (name && name.textContent !== room.name) name.textContent = room.name;
+  if (count && count.textContent !== String(Number(room.online_count || 0))) count.textContent = String(Number(room.online_count || 0));
+  if (owner && owner.textContent !== room.owner_name) owner.textContent = room.owner_name;
+  if (enter) enter.href = room.enter_url;
+  if (edit) {
+    edit.dataset.roomId = room.public_id;
+    edit.dataset.roomName = room.name;
+    edit.dataset.roomBg = room.background_url || '';
+    edit.dataset.roomThumb = room.thumb_url || '';
+    edit.dataset.roomMime = room.background_mime || '';
+  }
+}
+
+function insertRoomCard(room, animate = true) {
+  if (!roomGrid || !room?.public_id || lobbyRoomIds.has(room.public_id)) return null;
+  const card = roomCardFor(room, animate);
+  const firstRoom = roomGrid.querySelector('.room-card[data-room-id]');
+  roomGrid.insertBefore(card, firstRoom || null);
+  lobbyRoomIds.add(room.public_id);
+  return card;
+}
+
+function removeMissingRoomCards(activeIds) {
+  document.querySelectorAll('.room-card[data-room-id]').forEach(card => {
+    const id = card.dataset.roomId;
+    if (activeIds.has(id)) return;
+    lobbyRoomIds.delete(id);
+    card.classList.add('room-card-leaving');
+    window.setTimeout(() => card.remove(), 260);
+  });
+}
+
+function applyLobbyRooms(rooms = []) {
+  const activeIds = new Set();
+  rooms.forEach(room => {
+    activeIds.add(room.public_id);
+    const existing = document.querySelector(roomCardSelector(room.public_id));
+    if (existing) updateRoomCard(existing, room);
+    else insertRoomCard(room, true);
+  });
+  removeMissingRoomCards(activeIds);
+}
+
+async function pollLobbyRooms() {
+  clearTimeout(lobbyPollTimer);
+  try {
+    const resp = await fetch(appUrl('/api/lobby_rooms.php'), { cache: 'no-store' });
+    if (resp.status === 401) {
+      redirectToLogin();
+      return;
+    }
+    const data = await resp.json().catch(() => ({}));
+    if (data.redirect_url) {
+      window.location.href = data.redirect_url;
+      return;
+    }
+    if (!resp.ok || data.error) throw new Error(data.error || 'Could not refresh lobby.');
+    applyLobbyRooms(data.rooms || []);
+  } catch (err) {
+    console.warn(err);
+  }
+  lobbyPollTimer = window.setTimeout(pollLobbyRooms, 7000);
 }
 
 function parseServerDate(value) {
@@ -310,31 +425,36 @@ async function loadLobbyRoomEjections(roomPublicId) {
 }
 
 createRoomForm?.addEventListener('submit', async e => {
-  if (!backgroundInput?.files?.length) return;
   e.preventDefault();
   try {
-    await uploadFormWithProgress(createRoomForm, createRoomForm.action || window.location.href, createRoomProgress);
-    window.location.reload();
+    const resp = await uploadFormWithProgress(createRoomForm, appUrl('/api/lobby_rooms.php'), createRoomProgress);
+    const data = JSON.parse(resp.responseText || '{}');
+    if (data.error) throw new Error(data.error);
+    if (data.room) insertRoomCard(data.room, true);
+    else applyLobbyRooms(data.rooms || []);
+    createRoomForm.reset();
+    if (backgroundName) backgroundName.textContent = 'No file selected';
+    window.setTimeout(() => resetUploadProgress(createRoomProgress), 650);
   } catch (err) {
     alert(err.message || err);
     resetUploadProgress(createRoomProgress);
   }
 });
 
-document.querySelectorAll('.room-edit-open').forEach(btn => {
-  btn.addEventListener('click', () => {
-    lobbyRoomEditId.value = btn.dataset.roomId || '';
-    lobbyRoomEditName.value = btn.dataset.roomName || '';
-    lobbyRoomEditBackground.value = '';
-    lobbyRoomEditBackgroundName.textContent = 'No file selected';
-    resetUploadProgress(lobbyRoomEditProgress);
-    setLobbyRoomPreview(btn.dataset.roomBg || '', btn.dataset.roomMime || '');
-    if (String(btn.dataset.roomMime || '').startsWith('video/') && btn.dataset.roomThumb) {
-      lobbyRoomEditPreview.innerHTML = `<img src="${esc(btn.dataset.roomThumb)}" alt="Current room background thumbnail">`;
-    }
-    lobbyRoomEditModal.classList.add('open');
-    loadLobbyRoomEjections(lobbyRoomEditId.value);
-  });
+roomGrid?.addEventListener('click', e => {
+  const btn = e.target.closest('.room-edit-open');
+  if (!btn) return;
+  lobbyRoomEditId.value = btn.dataset.roomId || '';
+  lobbyRoomEditName.value = btn.dataset.roomName || '';
+  lobbyRoomEditBackground.value = '';
+  lobbyRoomEditBackgroundName.textContent = 'No file selected';
+  resetUploadProgress(lobbyRoomEditProgress);
+  setLobbyRoomPreview(btn.dataset.roomBg || '', btn.dataset.roomMime || '');
+  if (String(btn.dataset.roomMime || '').startsWith('video/') && btn.dataset.roomThumb) {
+    lobbyRoomEditPreview.innerHTML = `<img src="${esc(btn.dataset.roomThumb)}" alt="Current room background thumbnail">`;
+  }
+  lobbyRoomEditModal.classList.add('open');
+  loadLobbyRoomEjections(lobbyRoomEditId.value);
 });
 
 document.getElementById('lobby-room-edit-close')?.addEventListener('click', () => {
@@ -379,6 +499,8 @@ if (new URLSearchParams(window.location.search).get('room_deleted') === '1' && l
   clean.searchParams.delete('room_deleted');
   window.history.replaceState({}, document.title, clean.toString());
 }
+
+pollLobbyRooms();
 
 document.getElementById('lobby-toast-close')?.addEventListener('click', () => {
   lobbyToast?.classList.remove('show');

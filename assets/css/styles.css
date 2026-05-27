@@ -501,6 +501,21 @@ textarea:focus { border-color: rgba(124,106,247,.8); box-shadow: 0 0 0 3px rgba(
 .room-card-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .room-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 14px; align-items: stretch; }
 .room-card { min-height: 210px; border-radius: 8px; overflow: hidden; border: 1px solid var(--line); background: var(--panel2); position: relative; display: flex; flex-direction: column; justify-content: flex-end; }
+.room-card-entering {
+  opacity: 0;
+  transform: translateX(-18px) scale(.985);
+}
+.room-card-entering.show {
+  opacity: 1;
+  transform: translateX(0) scale(1);
+  transition: opacity .32s ease, transform .32s cubic-bezier(.2,.78,.28,1);
+}
+.room-card-leaving {
+  opacity: 0;
+  transform: translateX(18px) scale(.985);
+  transition: opacity .22s ease, transform .22s ease;
+  pointer-events: none;
+}
 .create-room-tile {
   justify-content: stretch;
   padding: 16px;
