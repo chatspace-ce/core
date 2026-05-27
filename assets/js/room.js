@@ -31,6 +31,7 @@ const userListEl = document.getElementById('user-list');
 const friendListEl = document.getElementById('friend-results');
 const gameListEl = document.getElementById('active-games');
 const gameStartMenu = document.getElementById('game-start-menu');
+const voiceSideSection = document.getElementById('voice-side-section');
 const voiceListEl = document.getElementById('voice-list');
 const voiceCountLabel = document.getElementById('voice-count-label');
 const ctxMenu = document.getElementById('ctx-menu');
@@ -4551,7 +4552,8 @@ async function pollVoice() {
 
 function renderVoiceList(list) {
   latestVoiceParticipants = Array.isArray(list) ? list : [];
-  if (voiceCountLabel) voiceCountLabel.textContent = `(${latestVoiceParticipants.length})`;
+  if (voiceSideSection) voiceSideSection.hidden = latestVoiceParticipants.length === 0;
+  if (voiceCountLabel) voiceCountLabel.textContent = latestVoiceParticipants.length ? `(${latestVoiceParticipants.length})` : '';
   voiceListEl.innerHTML = '';
   latestVoiceParticipants.forEach(v => {
     const known = participants.get(Number(v.id));

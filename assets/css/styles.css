@@ -1515,6 +1515,7 @@ textarea:focus { border-color: rgba(124,106,247,.8); box-shadow: 0 0 0 3px rgba(
   gap: 7px;
 }
 .friend-list, .game-list, .voice-list { display: grid; gap: 7px; }
+.voice-side-section[hidden] { display: none; }
 .voice-list:empty { display: none; }
 .voice-card {
   position: relative;
