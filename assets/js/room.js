@@ -3749,15 +3749,28 @@ document.getElementById('horizontal-divider')?.addEventListener('pointerdown', e
 
 document.getElementById('vertical-divider')?.addEventListener('pointerdown', e => {
   e.preventDefault();
-  e.currentTarget.classList.add('dragging');
+  const divider = e.currentTarget;
+  divider.classList.add('dragging');
+  if (divider.setPointerCapture) {
+    try { divider.setPointerCapture(e.pointerId); } catch {}
+  }
   const onMove = ev => applyVerticalDividerDrag(ev.clientX);
-  const onUp = () => {
-    e.currentTarget.classList.remove('dragging');
+  const onUp = ev => {
+    divider.classList.remove('dragging');
+    if (divider.releasePointerCapture && ev?.pointerId !== undefined) {
+      try { divider.releasePointerCapture(ev.pointerId); } catch {}
+    }
     document.removeEventListener('pointermove', onMove);
     document.removeEventListener('pointerup', onUp);
+    document.removeEventListener('pointercancel', onUp);
+    document.removeEventListener('mouseup', onUp);
+    window.removeEventListener('blur', onUp);
   };
   document.addEventListener('pointermove', onMove);
   document.addEventListener('pointerup', onUp);
+  document.addEventListener('pointercancel', onUp);
+  document.addEventListener('mouseup', onUp);
+  window.addEventListener('blur', onUp);
 });
 
 async function loadGames() {
