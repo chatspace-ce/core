@@ -15,14 +15,30 @@ $room = $stmt->fetch();
 if (!$room) json_out(['error' => 'Room not found'], 404);
 if (!can_use_host_tools($user, $room)) json_out(['error' => 'Host tools unavailable'], 403);
 
+$action = (string)($body['action'] ?? '');
+
+if ($action === 'clear_room_history') {
+    $clearId = uuid_v4();
+    $pdo->prepare('DELETE FROM message_reactions WHERE message_id IN (SELECT id FROM messages WHERE session_id = ?)')
+        ->execute([$sessionId]);
+    $pdo->prepare('DELETE FROM messages WHERE session_id = ?')->execute([$sessionId]);
+    $payload = [
+        'clear_id' => $clearId,
+        'cleared_by_user_id' => (int)$user['id'],
+        'cleared_by_name' => $user['display_name'],
+        'cleared_at' => gmdate('Y-m-d H:i:s'),
+    ];
+    emit_event($pdo, $sessionId, 'room_history_clear', $payload);
+    log_tool($pdo, (int)$user['id'], 'clear_room_history', null, (int)$room['id'], 'Cleared room chat history');
+    json_out(['ok' => true] + $payload);
+}
+
 $targetParticipantId = (int)($body['target_participant_id'] ?? 0);
 $stmt = $pdo->prepare('SELECT p.*, u.display_name AS user_display_name FROM participants p JOIN users u ON u.id = p.user_id WHERE p.id = ? AND p.session_id = ? LIMIT 1');
 $stmt->execute([$targetParticipantId, $sessionId]);
 $target = $stmt->fetch();
 if (!$target) json_out(['error' => 'Target user is not in this room'], 404);
 if ((int)$target['user_id'] === (int)$user['id']) json_out(['error' => 'You cannot use host tools on yourself'], 400);
-
-$action = (string)($body['action'] ?? '');
 
 if ($action === 'warn') {
     $message = trim((string)($body['message'] ?? ''));

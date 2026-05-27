@@ -113,6 +113,7 @@ let activeGame = null;
 const activeGames = new Map();
 const gameChatLastIds = new Map();
 const gameTypingIds = new Set();
+const seenRoomHistoryClears = new Set();
 let gameChatPollTimer = null;
 let gameTypingActive = false;
 let gameTypingStopTimer = null;
@@ -371,6 +372,8 @@ function setPermissionUI() {
   if (editAction) editAction.hidden = !cfg?.canEditRoom;
   const effectsAction = document.getElementById('room-action-effects');
   if (effectsAction) effectsAction.hidden = !cfg?.canUseHostTools;
+  const clearHistoryAction = document.getElementById('room-action-clear-history');
+  if (clearHistoryAction) clearHistoryAction.hidden = !cfg?.canUseHostTools;
 }
 
 function allChannelMaps() {
@@ -1446,6 +1449,34 @@ function removeMessageFromChannels(messageId) {
   if (activeChat === 'room') renderActiveChat();
 }
 
+function animateRoomHistoryClear() {
+  if (activeChat !== 'room') return;
+  const rows = [...messagesEl.children].reverse();
+  if (!rows.length) {
+    renderActiveChat();
+    return;
+  }
+  rows.forEach((row, index) => {
+    row.style.maxHeight = `${row.offsetHeight}px`;
+    row.style.animationDelay = `${index * 42}ms`;
+    row.classList.add('message-wipe-out');
+  });
+  window.setTimeout(() => {
+    if (activeChat === 'room') renderActiveChat();
+  }, rows.length * 42 + 520);
+}
+
+function handleRoomHistoryClear(payload = {}) {
+  const clearId = payload.clear_id || `${payload.cleared_at || Date.now()}`;
+  if (seenRoomHistoryClears.has(clearId)) return;
+  seenRoomHistoryClears.add(clearId);
+  channelMessages.room.clear();
+  messages.clear();
+  clearUnread('room');
+  updateTabBadges();
+  if (activeChat === 'room') animateRoomHistoryClear();
+}
+
 function updateMessageInChannel(chatKey, messageId, changes) {
   const id = Number(messageId);
   const map = channelMapFor(chatKey);
@@ -1900,6 +1931,7 @@ async function poll() {
         if (cfg.canModerateMessages) updateMessageInChannels(p.message_id, { is_deleted: true, deleted_at: p.deleted_at || new Date().toISOString() });
         else removeMessageFromChannels(p.message_id);
       }
+      if (ev.type === 'room_history_clear') handleRoomHistoryClear(p);
       if (ev.type === 'reaction') {
         const msg = messages.get(Number(p.message_id)) || channelMessages.room.get(Number(p.message_id));
         if (msg) {
@@ -2629,6 +2661,7 @@ function openRoomActionMenu() {
   const r = btn.getBoundingClientRect();
   document.getElementById('room-action-edit').style.display = cfg.canEditRoom ? 'block' : 'none';
   document.getElementById('room-action-effects').style.display = cfg.canUseHostTools ? 'block' : 'none';
+  document.getElementById('room-action-clear-history').style.display = cfg.canUseHostTools ? 'block' : 'none';
   roomActionMenu.classList.add('visible');
   const mr = roomActionMenu.getBoundingClientRect();
   roomActionMenu.style.left = `${Math.max(8, Math.min(r.left, window.innerWidth - mr.width - 8))}px`;
@@ -3716,6 +3749,36 @@ document.getElementById('room-action-effects')?.addEventListener('click', async 
     document.getElementById('room-effects-modal').classList.add('open');
   } catch (err) {
     alert(err.message || err);
+  }
+});
+
+function closeClearRoomHistoryModal() {
+  document.getElementById('clear-room-history-modal')?.classList.remove('open');
+}
+
+document.getElementById('room-action-clear-history')?.addEventListener('click', () => {
+  closeRoomActionMenu();
+  document.getElementById('clear-room-history-modal')?.classList.add('open');
+});
+
+document.getElementById('clear-room-history-close')?.addEventListener('click', closeClearRoomHistoryModal);
+document.getElementById('clear-room-history-cancel')?.addEventListener('click', closeClearRoomHistoryModal);
+
+document.getElementById('clear-room-history-confirm')?.addEventListener('click', async e => {
+  const btn = e.currentTarget;
+  btn.disabled = true;
+  try {
+    const data = await apiPost('/api/host_tools.php', {
+      action: 'clear_room_history',
+      session_id: cfg.sessionId,
+      join_token: cfg.myJoinToken,
+    });
+    closeClearRoomHistoryModal();
+    handleRoomHistoryClear(data);
+  } catch (err) {
+    showWarning(err.message || 'Could not clear room history.');
+  } finally {
+    btn.disabled = false;
   }
 });
 

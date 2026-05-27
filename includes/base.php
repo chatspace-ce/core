@@ -747,6 +747,7 @@ function upsert_link_icon_catalog(PDO $pdo, string $iconName, string $label, str
 function seed_app_settings(PDO $pdo): void {
     $defaults = [
         'chat_posts_per_second' => '3',
+        'room_chat_history_limit' => '100',
         'avatar_movements_per_second' => '12',
         'avatar_max_size_mb' => '5',
         'room_image_max_size_mb' => '10',

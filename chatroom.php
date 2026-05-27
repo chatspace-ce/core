@@ -352,6 +352,19 @@ $linkIconCatalog = link_icon_catalog($pdo);
     </div>
   </div>
 </div>
+<div class="modal" id="clear-room-history-modal">
+  <div class="modal-box warning-box">
+    <div class="modal-head">
+      <strong>Clear Room History</strong>
+      <button class="window-close" id="clear-room-history-close" type="button" aria-label="Close">×</button>
+    </div>
+    <div>This will remove the room chat history for everyone in the room.</div>
+    <div class="delete-message-actions">
+      <button class="btn" id="clear-room-history-cancel" type="button">Cancel</button>
+      <button class="btn btn-danger" id="clear-room-history-confirm" type="button">Clear History</button>
+    </div>
+  </div>
+</div>
 <div id="ctx-menu">
   <button id="ctx-change-avatar" type="button">Change Avatar</button>
   <button id="ctx-toggle-webcam" type="button">Enable Webcam</button>
@@ -394,6 +407,7 @@ $linkIconCatalog = link_icon_catalog($pdo);
 <div id="room-action-menu">
   <button id="room-action-edit" type="button">Edit Room</button>
   <button id="room-action-effects" type="button">Room Effects</button>
+  <button id="room-action-clear-history" class="danger" type="button">Clear Room History</button>
 </div>
 <div id="room-menu">
   <button id="lock-session-btn" type="button"><img src="<?= e(app_url('/assets/images/secure.png')) ?>" alt="">Lock Session</button>

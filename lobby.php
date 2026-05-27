@@ -89,10 +89,10 @@ $rooms = $roomsStmt->fetchAll();
         <button class="gear-btn lobby-gear" id="lobby-menu-btn" type="button" aria-label="Lobby menu">⚙</button>
       </div>
       <div id="lobby-menu">
-        <button id="password-open" type="button"><img src="<?= e(app_url('/assets/images/secure.png')) ?>" alt="">Update Password</button>
         <?php if (in_array($user['role'] ?? 'user', ['admin', 'developer'], true)): ?>
         <button id="admin-open" type="button"><img src="<?= e(app_url('/assets/images/lobby.png')) ?>" alt="">Admin</button>
         <?php endif; ?>
+        <button id="password-open" type="button"><img src="<?= e(app_url('/assets/images/secure.png')) ?>" alt="">Update Password</button>
         <a href="<?= e(app_url('/logout.php')) ?>"><img src="<?= e(app_url('/assets/images/logout.png')) ?>" alt="">Log Out</a>
       </div>
     </div>
@@ -320,6 +320,7 @@ $rooms = $roomsStmt->fetchAll();
           <div class="admin-panel">
             <form class="admin-settings" id="admin-settings">
               <label>Chat posts per second <input name="chat_posts_per_second" type="number" min="0.2" max="30" step="0.1"></label>
+              <label>Room chat history posts <input name="room_chat_history_limit" type="number" min="1" max="1000" step="10"></label>
               <label>Avatar movements per second <input name="avatar_movements_per_second" type="number" min="1" max="60" step="1"></label>
               <label>Avatar max size MB <input name="avatar_max_size_mb" type="number" min="0.5" max="50" step="0.5"></label>
               <label>Room image max size MB <input name="room_image_max_size_mb" type="number" min="1" max="100" step="1"></label>

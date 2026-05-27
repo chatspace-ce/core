@@ -743,6 +743,7 @@ adminSettings?.addEventListener('submit', async e => {
     await adminSystemRequest({
       action: 'save_settings',
       chat_posts_per_second: form.elements.chat_posts_per_second.value,
+      room_chat_history_limit: form.elements.room_chat_history_limit.value,
       avatar_movements_per_second: form.elements.avatar_movements_per_second.value,
       avatar_max_size_mb: form.elements.avatar_max_size_mb.value,
       room_image_max_size_mb: form.elements.room_image_max_size_mb.value,

@@ -116,6 +116,7 @@ $action = (string)($body['action'] ?? '');
 if ($action === 'save_settings') {
     $allowed = [
         'chat_posts_per_second' => [0.2, 30],
+        'room_chat_history_limit' => [1, 1000],
         'avatar_movements_per_second' => [1, 60],
         'avatar_max_size_mb' => [0.5, 50],
         'room_image_max_size_mb' => [1, 100],

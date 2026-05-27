@@ -19,6 +19,8 @@ cleanup_stale_participants($pdo, (int)$session['id']);
 cleanup_room_effects($pdo, (int)$session['id']);
 $participant = participant_for_user($pdo, (int)$session['id'], $user);
 $canModerateMessages = can_use_host_tools($user, $room);
+$historyLimit = max(1, min(1000, (int)app_setting($pdo, 'room_chat_history_limit', '100')));
+$roomLimitSql = 'LIMIT ' . $historyLimit;
 
 function community_reactions_for(PDO $pdo, array $messageIds): array {
     if (!$messageIds) return [];
@@ -104,7 +106,9 @@ $participants = array_map(function(array $p) use ($roomOwnerId): array {
 }, $stmt->fetchAll());
 
 $stmt = $pdo->prepare(
-    'SELECT m.*,
+    'SELECT *
+       FROM (
+        SELECT m.*,
             COALESCE(p.display_name, m.display_name, u.display_name) AS author_display_name,
             COALESCE(p.avatar_path, m.avatar_path, u.avatar_path) AS author_avatar_path,
             COALESCE(p.webcam_path, m.avatar_url) AS author_avatar_url,
@@ -116,7 +120,9 @@ $stmt = $pdo->prepare(
      LEFT JOIN users u ON u.id = COALESCE(p.user_id, m.user_id)
      WHERE m.session_id = ?
        AND (? = 1 OR COALESCE(m.is_deleted, 0) = 0)
-     ORDER BY m.sent_at ASC LIMIT 120'
+     ORDER BY m.sent_at DESC, m.id DESC ' . $roomLimitSql . '
+       ) room_history
+      ORDER BY sent_at ASC, id ASC'
 );
 $stmt->execute([$roomOwnerId, (int)$session['id'], $canModerateMessages ? 1 : 0]);
 $rawMessages = $stmt->fetchAll();
