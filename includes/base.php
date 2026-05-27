@@ -138,7 +138,7 @@ function mysqlize_schema(string $schema): string {
     $schema = str_replace('INTEGER', 'INT', $schema);
     $schema = str_replace('REAL', 'DOUBLE', $schema);
     $schema = preg_replace('/\bTEXT\b/', 'VARCHAR(1024)', $schema) ?? $schema;
-    $longTextColumns = ['payload', 'content', 'original_content', 'state_json', 'data', 'reason'];
+    $longTextColumns = ['payload', 'content', 'original_content', 'url_preview_json', 'state_json', 'data', 'reason'];
     foreach ($longTextColumns as $column) {
         $schema = preg_replace('/\b' . $column . '\s+VARCHAR\(1024\)/', $column . ' LONGTEXT', $schema) ?? $schema;
     }
@@ -263,6 +263,7 @@ function migrate(PDO $pdo): void {
             avatar_url TEXT DEFAULT NULL,
             content TEXT NOT NULL,
             original_content TEXT DEFAULT NULL,
+            url_preview_json TEXT DEFAULT NULL,
             message_type TEXT NOT NULL DEFAULT 'text',
             file_size INTEGER DEFAULT NULL,
             mime_type TEXT DEFAULT NULL,
@@ -487,6 +488,7 @@ function migrate(PDO $pdo): void {
             avatar_url TEXT DEFAULT NULL,
             content TEXT NOT NULL,
             original_content TEXT DEFAULT NULL,
+            url_preview_json TEXT DEFAULT NULL,
             message_type TEXT NOT NULL DEFAULT 'text',
             file_size INTEGER DEFAULT NULL,
             mime_type TEXT DEFAULT NULL,
@@ -548,6 +550,7 @@ function migrate(PDO $pdo): void {
             'display_name VARCHAR(191) DEFAULT NULL',
             'avatar_path VARCHAR(512) DEFAULT NULL',
             'avatar_url VARCHAR(512) DEFAULT NULL',
+            'url_preview_json LONGTEXT DEFAULT NULL',
         ] as $definition) {
             try {
                 $pdo->exec('ALTER TABLE messages ADD COLUMN ' . $definition);
@@ -573,6 +576,13 @@ function migrate(PDO $pdo): void {
         foreach (['muted', 'deafened', 'speaking'] as $voiceCol) {
             if (!in_array($voiceCol, $mysqlVoiceColNames, true)) {
                 $pdo->exec("ALTER TABLE voice_sessions ADD COLUMN {$voiceCol} INTEGER NOT NULL DEFAULT 0");
+            }
+        }
+        foreach (['messages', 'community_messages'] as $previewTable) {
+            $previewCols = $pdo->query('SHOW COLUMNS FROM ' . $previewTable)->fetchAll();
+            $previewColNames = array_map(fn(array $col): string => (string)($col['Field'] ?? ''), $previewCols);
+            if (!in_array('url_preview_json', $previewColNames, true)) {
+                $pdo->exec('ALTER TABLE ' . $previewTable . ' ADD COLUMN url_preview_json LONGTEXT DEFAULT NULL');
             }
         }
         seed_app_settings($pdo);
@@ -670,6 +680,9 @@ function migrate(PDO $pdo): void {
     if (!in_array('original_content', $messageColNames, true)) {
         $pdo->exec('ALTER TABLE messages ADD COLUMN original_content TEXT DEFAULT NULL');
     }
+    if (!in_array('url_preview_json', $messageColNames, true)) {
+        $pdo->exec('ALTER TABLE messages ADD COLUMN url_preview_json TEXT DEFAULT NULL');
+    }
     if (!in_array('file_size', $messageColNames, true)) {
         $pdo->exec('ALTER TABLE messages ADD COLUMN file_size INTEGER DEFAULT NULL');
     }
@@ -695,6 +708,9 @@ function migrate(PDO $pdo): void {
     $communityMessageColNames = array_map(fn(array $col): string => (string)$col['name'], $communityMessageCols);
     if (!in_array('original_content', $communityMessageColNames, true)) {
         $pdo->exec('ALTER TABLE community_messages ADD COLUMN original_content TEXT DEFAULT NULL');
+    }
+    if (!in_array('url_preview_json', $communityMessageColNames, true)) {
+        $pdo->exec('ALTER TABLE community_messages ADD COLUMN url_preview_json TEXT DEFAULT NULL');
     }
     if (!in_array('message_type', $communityMessageColNames, true)) {
         $pdo->exec("ALTER TABLE community_messages ADD COLUMN message_type TEXT NOT NULL DEFAULT 'text'");
@@ -895,6 +911,168 @@ function message_gesture(?string $content): ?array {
     if (!$content) return null;
     $decoded = json_decode($content, true);
     return is_array($decoded) ? $decoded : null;
+}
+
+function message_url_preview(?string $content): ?array {
+    if (!$content) return null;
+    $decoded = json_decode($content, true);
+    return is_array($decoded) ? $decoded : null;
+}
+
+function first_url_in_text(string $text): ?string {
+    if (!preg_match('~https?://[^\s<>"\']+~i', $text, $m)) return null;
+    return rtrim($m[0], ".,!?)]}");
+}
+
+function preview_host_is_safe(string $host): bool {
+    $host = strtolower(trim($host, "[] \t\r\n"));
+    if ($host === '' || $host === 'localhost' || str_ends_with($host, '.localhost') || str_ends_with($host, '.local')) {
+        return false;
+    }
+    $ips = filter_var($host, FILTER_VALIDATE_IP) ? [$host] : (gethostbynamel($host) ?: []);
+    if (!$ips) return false;
+    foreach ($ips as $ip) {
+        if (!filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+function host_matches_domain(string $host, string $domain): bool {
+    $host = strtolower($host);
+    $domain = strtolower($domain);
+    return $host === $domain || str_ends_with($host, '.' . $domain);
+}
+
+function youtube_embed_url(array $parts): ?string {
+    $host = strtolower((string)($parts['host'] ?? ''));
+    $path = trim((string)($parts['path'] ?? ''), '/');
+    parse_str((string)($parts['query'] ?? ''), $query);
+    $id = '';
+    if (host_matches_domain($host, 'youtu.be')) {
+        $id = explode('/', $path)[0] ?? '';
+    } elseif (($query['v'] ?? '') !== '') {
+        $id = (string)$query['v'];
+    } elseif (preg_match('~(?:embed|shorts)/([A-Za-z0-9_-]{6,})~', $path, $m)) {
+        $id = $m[1];
+    }
+    return preg_match('/^[A-Za-z0-9_-]{6,}$/', $id) ? 'https://www.youtube-nocookie.com/embed/' . rawurlencode($id) : null;
+}
+
+function spotify_embed_url(array $parts): ?string {
+    $host = strtolower((string)($parts['host'] ?? ''));
+    if (!host_matches_domain($host, 'spotify.com')) return null;
+    $segments = array_values(array_filter(explode('/', trim((string)($parts['path'] ?? ''), '/'))));
+    $allowed = ['album', 'artist', 'episode', 'playlist', 'show', 'track'];
+    $type = $segments[0] ?? '';
+    $id = $segments[1] ?? '';
+    if (!in_array($type, $allowed, true) || !preg_match('/^[A-Za-z0-9]+$/', $id)) return null;
+    return 'https://open.spotify.com/embed/' . rawurlencode($type) . '/' . rawurlencode($id);
+}
+
+function soundcloud_embed_url(string $url, array $parts): ?string {
+    $host = strtolower((string)($parts['host'] ?? ''));
+    if (!host_matches_domain($host, 'soundcloud.com')) return null;
+    return 'https://w.soundcloud.com/player/?url=' . rawurlencode($url) . '&auto_play=false&hide_related=true&show_comments=false&show_user=true&show_reposts=false&visual=false';
+}
+
+function html_meta_value(string $html, string $name): ?string {
+    $quoted = preg_quote($name, '~');
+    $patterns = [
+        '~<meta[^>]+(?:property|name)=["\']' . $quoted . '["\'][^>]+content=["\']([^"\']+)["\'][^>]*>~i',
+        '~<meta[^>]+content=["\']([^"\']+)["\'][^>]+(?:property|name)=["\']' . $quoted . '["\'][^>]*>~i',
+    ];
+    foreach ($patterns as $pattern) {
+        if (preg_match($pattern, $html, $m)) {
+            return trim(html_entity_decode($m[1], ENT_QUOTES | ENT_HTML5, 'UTF-8'));
+        }
+    }
+    return null;
+}
+
+function absolutize_preview_url(string $assetUrl, string $pageUrl): string {
+    if ($assetUrl === '' || preg_match('#^https?://#i', $assetUrl)) return $assetUrl;
+    $parts = parse_url($pageUrl);
+    if (!$parts || empty($parts['scheme']) || empty($parts['host'])) return '';
+    $base = $parts['scheme'] . '://' . $parts['host'] . (!empty($parts['port']) ? ':' . $parts['port'] : '');
+    if (str_starts_with($assetUrl, '//')) return $parts['scheme'] . ':' . $assetUrl;
+    if (str_starts_with($assetUrl, '/')) return $base . $assetUrl;
+    $dir = rtrim(dirname((string)($parts['path'] ?? '/')), '/');
+    return $base . ($dir ? $dir . '/' : '/') . $assetUrl;
+}
+
+function fetch_url_metadata(string $url): array {
+    $context = stream_context_create([
+        'http' => [
+            'method' => 'GET',
+            'timeout' => 2.5,
+            'follow_location' => 1,
+            'max_redirects' => 3,
+            'ignore_errors' => true,
+            'header' => "User-Agent: ChatSpaceCE-LinkPreview/1.0\r\nAccept: text/html,application/xhtml+xml\r\n",
+        ],
+        'ssl' => [
+            'verify_peer' => true,
+            'verify_peer_name' => true,
+        ],
+    ]);
+    $handle = @fopen($url, 'rb', false, $context);
+    if (!$handle) return [];
+    $html = stream_get_contents($handle, 131072);
+    fclose($handle);
+    if (!is_string($html) || $html === '') return [];
+    $title = html_meta_value($html, 'og:title') ?: html_meta_value($html, 'twitter:title');
+    if (!$title && preg_match('~<title[^>]*>(.*?)</title>~is', $html, $m)) {
+        $title = trim(html_entity_decode(strip_tags($m[1]), ENT_QUOTES | ENT_HTML5, 'UTF-8'));
+    }
+    $description = html_meta_value($html, 'og:description') ?: html_meta_value($html, 'description') ?: html_meta_value($html, 'twitter:description');
+    $image = html_meta_value($html, 'og:image') ?: html_meta_value($html, 'twitter:image');
+    if ($image) $image = absolutize_preview_url($image, $url);
+    return [
+        'title' => $title ? (function_exists('mb_substr') ? mb_substr($title, 0, 140, 'UTF-8') : substr($title, 0, 140)) : '',
+        'description' => $description ? (function_exists('mb_substr') ? mb_substr($description, 0, 220, 'UTF-8') : substr($description, 0, 220)) : '',
+        'image_url' => $image ?: '',
+    ];
+}
+
+function url_preview_for_text(string $text): ?array {
+    $url = first_url_in_text($text);
+    if (!$url) return null;
+    $parts = parse_url($url);
+    if (!$parts || !in_array(strtolower((string)($parts['scheme'] ?? '')), ['http', 'https'], true) || empty($parts['host'])) {
+        return null;
+    }
+    $host = strtolower((string)$parts['host']);
+    $provider = '';
+    $embedUrl = null;
+    if (host_matches_domain($host, 'youtube.com') || host_matches_domain($host, 'youtu.be')) {
+        $provider = 'YouTube';
+        $embedUrl = youtube_embed_url($parts);
+    } elseif (host_matches_domain($host, 'spotify.com')) {
+        $provider = 'Spotify';
+        $embedUrl = spotify_embed_url($parts);
+    } elseif (host_matches_domain($host, 'soundcloud.com')) {
+        $provider = 'SoundCloud';
+        $embedUrl = soundcloud_embed_url($url, $parts);
+    }
+    if ($embedUrl === null && !preview_host_is_safe($host)) return null;
+
+    $meta = preview_host_is_safe($host) ? fetch_url_metadata($url) : [];
+    $preview = [
+        'url' => $url,
+        'host' => preg_replace('/^www\./', '', $host),
+        'provider' => $provider,
+        'type' => $embedUrl ? 'player' : 'summary',
+        'embed_url' => $embedUrl ?: '',
+        'title' => $meta['title'] ?? '',
+        'description' => $meta['description'] ?? '',
+        'image_url' => $meta['image_url'] ?? '',
+    ];
+    if ($preview['type'] === 'summary' && $preview['title'] === '' && $preview['description'] === '' && $preview['image_url'] === '') {
+        return null;
+    }
+    return $preview;
 }
 
 function save_room_background_upload(array $upload, ?array $thumbUpload = null): array {

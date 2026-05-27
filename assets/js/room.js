@@ -344,6 +344,45 @@ function esc(s) {
   return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
 }
 
+function isHttpUrl(value) {
+  return /^https?:\/\//i.test(String(value || ''));
+}
+
+function linkifiedTextHtml(text) {
+  const raw = String(text || '');
+  const parts = raw.split(/(https?:\/\/[^\s<>"']+)/gi);
+  return parts.map(part => {
+    if (!/^https?:\/\//i.test(part)) return esc(part).replace(/\n/g, '<br>');
+    const clean = part.replace(/[.,!?)]}]+$/g, '');
+    const suffix = part.slice(clean.length);
+    return `<a class="chat-text-link" href="${esc(clean)}" target="_blank" rel="noopener noreferrer">${esc(clean)}</a>${esc(suffix)}`;
+  }).join('');
+}
+
+function urlPreviewHtml(preview) {
+  if (!preview || typeof preview !== 'object' || !isHttpUrl(preview.url)) return '';
+  const title = esc(preview.title || preview.provider || preview.host || preview.url);
+  const description = esc(preview.description || '');
+  const host = esc(preview.provider || preview.host || '');
+  const image = isHttpUrl(preview.image_url) ? esc(preview.image_url) : '';
+  if (preview.type === 'player' && isHttpUrl(preview.embed_url)) {
+    const providerClass = String(preview.provider || '').toLowerCase().replace(/[^a-z0-9]+/g, '-');
+    return `<div class="url-preview url-preview-player ${providerClass}">
+      <div class="url-preview-host">${host}</div>
+      <iframe src="${esc(preview.embed_url)}" loading="lazy" allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture" referrerpolicy="strict-origin-when-cross-origin"></iframe>
+      ${title ? `<a class="url-preview-title" href="${esc(preview.url)}" target="_blank" rel="noopener noreferrer">${title}</a>` : ''}
+    </div>`;
+  }
+  return `<a class="url-preview url-preview-summary" href="${esc(preview.url)}" target="_blank" rel="noopener noreferrer">
+    ${image ? `<span class="url-preview-thumb"><img src="${image}" alt=""></span>` : ''}
+    <span class="url-preview-copy">
+      <span class="url-preview-host">${host}</span>
+      ${title ? `<span class="url-preview-title">${title}</span>` : ''}
+      ${description ? `<span class="url-preview-description">${description}</span>` : ''}
+    </span>
+  </a>`;
+}
+
 function avatarUrl(p) {
   if (!p) return cfg.avatarPresets.Default;
   if (isUserBlocked(p.user_id)) return appUrl('/assets/images/baghead.png');
@@ -1605,7 +1644,7 @@ function messageBodyHtml(msg) {
     const ext = (msg.original_name || 'file').split('.').pop().slice(0, 4).toUpperCase();
     return `<a class="chat-file" href="${url}" target="_blank" rel="noopener" download><span class="chat-file-icon">${esc(ext || 'FILE')}</span><span><span class="chat-file-name">${name}</span><span class="chat-file-meta">${esc(msg.mime_type || 'Document')} · ${formatBytes(msg.file_size)}</span></span></a>`;
   }
-  return esc(msg.content);
+  return `<div class="chat-text">${linkifiedTextHtml(msg.content)}</div>${urlPreviewHtml(msg.url_preview)}`;
 }
 
 function gifDelayCentiseconds(bytes, offset) {
@@ -2002,7 +2041,7 @@ async function poll() {
       if (ev.type === 'message') renderMessage(p, true);
       if (ev.type === 'message_edit') {
         const msg = messages.get(Number(p.message_id));
-        const changes = { content: p.content, edited_at: p.edited_at || new Date().toISOString() };
+        const changes = { content: p.content, url_preview: p.url_preview || null, edited_at: p.edited_at || new Date().toISOString() };
         if (cfg.canModerateMessages && msg && !msg.original_content && msg.content !== p.content) changes.original_content = msg.content;
         updateMessageInChannels(p.message_id, changes);
       }
@@ -2170,7 +2209,7 @@ async function poll() {
       }
       if (ev.type === 'community_message_edit' || ev.type === 'link_message_edit' || ev.type === 'dm_message_edit') {
         const chatKey = chatKeyForMessagePayload(p);
-        updateMessageInChannel(chatKey, p.message_id, { content: p.content, edited_at: p.edited_at || new Date().toISOString() });
+        updateMessageInChannel(chatKey, p.message_id, { content: p.content, url_preview: p.url_preview || null, edited_at: p.edited_at || new Date().toISOString() });
       }
       if (ev.type === 'community_message_delete' || ev.type === 'link_message_delete' || ev.type === 'dm_message_delete') {
         removeMessageFromChannel(chatKeyForMessagePayload(p), p.message_id);
@@ -3396,7 +3435,7 @@ async function saveInlineEdit(msg, input, chatKey = activeChat) {
       channel: channelForApi(chatKey),
       content,
     });
-    updateMessageInChannel(chatKey, msg.id, { content, edited_at: updated.edited_at || new Date().toISOString() });
+    updateMessageInChannel(chatKey, msg.id, { content, url_preview: updated.url_preview || null, edited_at: updated.edited_at || new Date().toISOString() });
   } catch (err) {
     showWarning(err.message || 'Could not edit message.');
   }
