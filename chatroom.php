@@ -127,6 +127,7 @@ $linkIconCatalog = link_icon_catalog($pdo);
       </div>
     </section>
   </main>
+  <div class="vertical-divider" id="vertical-divider"></div>
   <aside class="sidebar">
     <section class="side-section">
       <button class="gear-btn" id="room-menu-btn" type="button" aria-label="Room menu">⚙</button>

@@ -23,6 +23,8 @@ let cfg = null;
 const participants = new Map();
 const dmUsers = new Map();
 const messages = new Map();
+const roomLayout = document.querySelector('.room-layout');
+const mainEl = document.querySelector('.main');
 const roomStage = document.getElementById('room-stage');
 const messagesEl = document.getElementById('messages');
 const userListEl = document.getElementById('user-list');
@@ -3514,16 +3516,44 @@ function setRoomHeight(pct) {
 }
 
 function applyDividerDrag(clientY) {
-  const rect = document.querySelector('.main').getBoundingClientRect();
+  const rect = mainEl.getBoundingClientRect();
   let pct = ((clientY - rect.top) / rect.height) * 100;
   pct = Math.max(18, Math.min(78, pct));
   setRoomHeight(pct);
   participants.forEach(positionAvatar);
 }
 
-document.getElementById('horizontal-divider').addEventListener('pointerdown', e => {
+function setSidebarWidth(px) {
+  document.documentElement.style.setProperty('--sidebar-width', `${Math.round(px)}px`);
+}
+
+function applyVerticalDividerDrag(clientX) {
+  const layoutRect = roomLayout.getBoundingClientRect();
+  const dividerWidth = document.getElementById('vertical-divider')?.getBoundingClientRect().width || 6;
+  const rightGutter = 10;
+  const minMainWidth = 620;
+  const minSidebarWidth = 300;
+  const maxSidebarWidth = Math.max(minSidebarWidth, Math.min(560, layoutRect.width - dividerWidth - rightGutter - minMainWidth));
+  let width = layoutRect.right - clientX - dividerWidth - rightGutter;
+  width = Math.max(minSidebarWidth, Math.min(maxSidebarWidth, width));
+  setSidebarWidth(width);
+  participants.forEach(positionAvatar);
+}
+
+document.getElementById('horizontal-divider')?.addEventListener('pointerdown', e => {
   e.preventDefault();
   const onMove = ev => applyDividerDrag(ev.clientY);
+  const onUp = () => {
+    document.removeEventListener('pointermove', onMove);
+    document.removeEventListener('pointerup', onUp);
+  };
+  document.addEventListener('pointermove', onMove);
+  document.addEventListener('pointerup', onUp);
+});
+
+document.getElementById('vertical-divider')?.addEventListener('pointerdown', e => {
+  e.preventDefault();
+  const onMove = ev => applyVerticalDividerDrag(ev.clientX);
   const onUp = () => {
     document.removeEventListener('pointermove', onMove);
     document.removeEventListener('pointerup', onUp);

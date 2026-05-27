@@ -563,7 +563,11 @@ textarea:focus { border-color: rgba(124,106,247,.8); box-shadow: 0 0 0 3px rgba(
   text-shadow: 0 2px 8px rgba(0,0,0,.85);
 }
 .room-card h2 { margin: 0 0 6px; font-size: 18px; }
-.room-layout { display: flex; height: 100%; }
+.room-layout {
+  display: flex;
+  height: 100%;
+  align-items: stretch;
+}
 .version-banner {
   position: fixed;
   top: 0;
@@ -589,7 +593,7 @@ textarea:focus { border-color: rgba(124,106,247,.8); box-shadow: 0 0 0 3px rgba(
   min-height: 30px;
   padding: 6px 14px;
 }
-.main { flex: 4; position: relative; padding: 10px; min-width: 0; }
+.main { flex: 1 1 auto; position: relative; padding: 10px; min-width: 0; }
 .room-stage {
   position: absolute;
   top: 10px;
@@ -766,7 +770,7 @@ textarea:focus { border-color: rgba(124,106,247,.8); box-shadow: 0 0 0 3px rgba(
 }
 .divider {
   position: absolute;
-  top: calc(var(--room-height, 60%) + 3px);
+  top: calc(var(--room-height, 60%) + 5px);
   left: 10px;
   right: 10px;
   height: 6px;
@@ -777,6 +781,18 @@ textarea:focus { border-color: rgba(124,106,247,.8); box-shadow: 0 0 0 3px rgba(
   transition: background .15s;
 }
 .divider:hover { background: var(--accent); }
+.vertical-divider {
+  flex: 0 0 6px;
+  width: 6px;
+  height: calc(100% - 20px);
+  margin: 10px 0;
+  border-radius: 3px;
+  background: var(--border);
+  cursor: col-resize;
+  z-index: 10;
+  transition: background .15s;
+}
+.vertical-divider:hover { background: var(--accent); }
 .chat-pane {
   position: absolute;
   left: 10px;
@@ -3097,6 +3113,7 @@ textarea:focus { border-color: rgba(124,106,247,.8); box-shadow: 0 0 0 3px rgba(
   .main { height: 58%; padding: 6px; }
   .room-stage { top: 6px; left: 6px; right: 6px; }
   .divider { left: 6px; right: 6px; }
+  .vertical-divider { display: none; }
   .chat-pane { left: 6px; right: 6px; bottom: 6px; }
   .sidebar {
     width: auto;
