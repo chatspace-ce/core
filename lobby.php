@@ -2,6 +2,7 @@
 require_once __DIR__ . '/includes/base.php';
 $user = require_user();
 $pdo = db();
+$branding = install_branding($pdo);
 $communityEjection = active_community_ejection($pdo, (int)$user['id']);
 if ($communityEjection) {
     redirect_to('/community_ejected.php');
@@ -67,7 +68,7 @@ $rooms = $roomsStmt->fetchAll();
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Lobby - ChatSpace CE</title>
+  <title><?= e(branded_page_title('Lobby', $pdo)) ?></title>
   <link rel="stylesheet" href="<?= e(app_url('/assets/css/styles.css')) ?>">
 </head>
 <body data-app-base="<?= e(app_base_path()) ?>">
@@ -76,10 +77,10 @@ $rooms = $roomsStmt->fetchAll();
     <div class="topbar">
       <div class="lobby-brand-block">
         <div class="app-title">
-          <img src="<?= e(app_url('/assets/images/chatspace-ce-logo.png')) ?>" alt="">
+          <img class="<?= $branding['has_custom_logo'] ? 'custom-brand-logo' : '' ?>" src="<?= e(app_url($branding['has_custom_logo'] ? $branding['logo_path'] : '/assets/images/chatspace-ce-logo.png')) ?>" alt="<?= e($branding['community_name'] ?: 'ChatSpace Community Edition') ?>">
           <div>
-            <div class="app-name">ChatSpace</div>
-            <div class="app-edition">Community Edition</div>
+            <div class="app-name"><?= e($branding['community_name'] ?: 'ChatSpace') ?></div>
+            <div class="app-edition"><?= $branding['community_name'] ? 'Community powered by ChatSpace CE' : 'Community Edition' ?></div>
           </div>
         </div>
         <h1 class="picker-title">Lobby</h1>
@@ -142,6 +143,12 @@ $rooms = $roomsStmt->fetchAll();
       </article>
       <?php endforeach; ?>
     </div>
+    <?php if ($branding['has_custom_logo']): ?>
+      <div class="powered-by lobby-powered-by">
+        <span>Powered by</span>
+        <img src="<?= e(app_url($branding['powered_logo_path'])) ?>" alt="ChatSpace Community Edition">
+      </div>
+    <?php endif; ?>
   </section>
 </main>
 <div class="modal" id="lobby-room-edit-modal">

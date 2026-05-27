@@ -67,6 +67,32 @@ function setup_avatar_upload(): string {
     return '/assets/uploads/avatars/' . $file;
 }
 
+function setup_brand_logo_upload(): string {
+    if (empty($_FILES['community_logo']['tmp_name']) || !is_uploaded_file($_FILES['community_logo']['tmp_name'])) {
+        return '';
+    }
+    $finfo = new finfo(FILEINFO_MIME_TYPE);
+    $mime = $finfo->file($_FILES['community_logo']['tmp_name']) ?: '';
+    $allowed = [
+        'image/png' => 'png',
+        'image/jpeg' => 'jpg',
+        'image/gif' => 'gif',
+        'image/webp' => 'webp',
+    ];
+    $dims = @getimagesize($_FILES['community_logo']['tmp_name']);
+    if (!isset($allowed[$mime]) || (int)$_FILES['community_logo']['size'] > 5 * 1024 * 1024 || !$dims || $dims[0] < 42 || $dims[1] < 42 || $dims[0] > 2000 || $dims[1] > 2000) {
+        throw new RuntimeException('Use a PNG, JPG, GIF, or WEBP logo under 5 MB and between 42x42 and 2000x2000.');
+    }
+    $dir = __DIR__ . '/assets/uploads/branding';
+    if (!is_dir($dir)) mkdir($dir, 0775, true);
+    $file = bin2hex(random_bytes(12)) . '.' . $allowed[$mime];
+    $dest = $dir . '/' . $file;
+    if (!move_uploaded_file($_FILES['community_logo']['tmp_name'], $dest)) {
+        throw new RuntimeException('Could not save community logo.');
+    }
+    return '/assets/uploads/branding/' . $file;
+}
+
 if (setup_admin_exists() && ($_GET['done'] ?? '') !== '1') {
     redirect_to('/login.php');
 }
@@ -116,10 +142,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['step'] ?? '') === 'admin')
         if (!chatspace_configured()) throw new RuntimeException('Database setup is not complete.');
         if ($name === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) throw new RuntimeException('Display name and a valid email are required.');
         if (strlen($password) < 8 || $password !== $confirm) throw new RuntimeException('Use matching passwords of at least 8 characters.');
+        $communityName = trim((string)($_POST['community_name'] ?? ''));
+        if ((function_exists('mb_strlen') ? mb_strlen($communityName, 'UTF-8') : strlen($communityName)) > 80) {
+            throw new RuntimeException('Community name must be 80 characters or less.');
+        }
+        $communityLogo = setup_brand_logo_upload();
         $avatar = setup_avatar_upload();
         $pdo = db();
         $stmt = $pdo->prepare('INSERT INTO users (email, password_hash, display_name, role, avatar_path) VALUES (?,?,?,?,?)');
         $stmt->execute([$email, password_hash($password, PASSWORD_DEFAULT), $name, 'admin', $avatar]);
+        set_app_setting($pdo, 'community_name', $communityName);
+        if ($communityLogo !== '') set_app_setting($pdo, 'community_logo_path', $communityLogo);
         $_SESSION['user_id'] = (int)$pdo->lastInsertId();
         redirect_to('/setup.php?done=1');
     } catch (Throwable $e) {
@@ -219,6 +252,18 @@ $requiredMissing = array_filter($requirements, fn($r) => $r['required'] && !$r['
         <div class="form-row">
           <label>Password<input name="password" type="password" minlength="8" required autocomplete="new-password"></label>
           <label>Confirm password<input name="confirm_password" type="password" minlength="8" required autocomplete="new-password"></label>
+        </div>
+        <div class="setup-branding-fields">
+          <h2>Community Branding</h2>
+          <p class="minor">Optional. Add a community name and logo for this installation.</p>
+          <label>Community name<input name="community_name" maxlength="80" placeholder="Your Community"></label>
+          <label>Community logo
+            <span class="file-picker">
+              <input id="setup-community-logo" type="file" name="community_logo" accept="image/jpeg,image/png,image/gif,image/webp">
+              <span class="file-picker-btn">Choose Logo</span>
+              <span class="file-picker-name" id="setup-community-logo-name">No file selected</span>
+            </span>
+          </label>
         </div>
         <button class="btn btn-primary setup-submit" type="submit">Create Admin</button>
       </form>

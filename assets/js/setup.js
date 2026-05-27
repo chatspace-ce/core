@@ -22,6 +22,13 @@ setupAvatar?.addEventListener('change', () => {
   if (setupAvatarName) setupAvatarName.textContent = file ? file.name : 'No file selected';
 });
 
+const setupCommunityLogo = document.getElementById('setup-community-logo');
+const setupCommunityLogoName = document.getElementById('setup-community-logo-name');
+setupCommunityLogo?.addEventListener('change', () => {
+  const file = setupCommunityLogo.files && setupCommunityLogo.files[0];
+  if (setupCommunityLogoName) setupCommunityLogoName.textContent = file ? file.name : 'No file selected';
+});
+
 const setupAdminForm = setupAvatar?.closest('form');
 setupAdminForm?.addEventListener('submit', async event => {
   const file = setupAvatar?.files?.[0];

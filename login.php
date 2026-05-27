@@ -1,10 +1,12 @@
 <?php
 require_once __DIR__ . '/includes/base.php';
 $error = '';
+$pdo = db();
+$branding = install_branding($pdo);
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $login = trim($_POST['login'] ?? '');
     $password = (string)($_POST['password'] ?? '');
-    $stmt = db()->prepare('SELECT * FROM users WHERE LOWER(email) = LOWER(?) OR LOWER(display_name) = LOWER(?) LIMIT 1');
+    $stmt = $pdo->prepare('SELECT * FROM users WHERE LOWER(email) = LOWER(?) OR LOWER(display_name) = LOWER(?) LIMIT 1');
     $stmt->execute([$login, $login]);
     $user = $stmt->fetch();
     if ($user && password_verify($password, $user['password_hash'])) {
@@ -19,14 +21,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Login - ChatSpace CE</title>
+  <title><?= e(branded_page_title('Login', $pdo)) ?></title>
   <link rel="stylesheet" href="<?= e(app_url('/assets/css/styles.css')) ?>">
 </head>
 <body data-app-base="<?= e(app_base_path()) ?>">
 <main class="auth-shell">
   <section class="auth-card">
     <a class="auth-logo-link" href="<?= e(app_url('/about.html')) ?>" aria-label="About ChatSpace Community Edition">
-      <img class="auth-logo-full" src="<?= e(app_url('/assets/images/logos/chatspace-ce-full-logo.png')) ?>" alt="ChatSpace Community Edition">
+      <img class="auth-logo-full <?= $branding['has_custom_logo'] ? 'custom-brand-logo' : '' ?>" src="<?= e(app_url($branding['logo_path'])) ?>" alt="<?= e($branding['community_name'] ?: 'ChatSpace Community Edition') ?>">
     </a>
     <?php if ($error): ?><div class="error"><?= e($error) ?></div><?php endif; ?>
     <form class="form-grid" method="post">
@@ -36,6 +38,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       <p class="minor">New here? <a href="<?= e(app_url('/register.php')) ?>">Create an account</a></p>
       <p class="minor auth-about-link"><a href="<?= e(app_url('/about.html')) ?>">About ChatSpace Community Edition</a></p>
     </form>
+    <?php if ($branding['has_custom_logo']): ?>
+      <div class="powered-by auth-powered-by">
+        <span>Powered by</span>
+        <img src="<?= e(app_url($branding['powered_logo_path'])) ?>" alt="ChatSpace Community Edition">
+      </div>
+    <?php endif; ?>
   </section>
 </main>
 </body>

@@ -756,6 +756,8 @@ function seed_app_settings(PDO $pdo): void {
         'gif_giphy_api_key' => '',
         'gif_tenor_api_key' => '',
         'gif_default_provider' => 'giphy',
+        'community_name' => '',
+        'community_logo_path' => '',
     ];
     $stmt = $pdo->prepare(db_uses_mysql_syntax($pdo)
         ? 'INSERT IGNORE INTO app_settings (setting_key, value) VALUES (?,?)'
@@ -788,6 +790,35 @@ function set_app_setting(PDO $pdo, string $key, string $value): void {
         : 'INSERT INTO app_settings (setting_key, value) VALUES (?,?) ON CONFLICT(setting_key) DO UPDATE SET value = excluded.value'
     );
     $stmt->execute([$key, $value]);
+}
+
+function install_branding(?PDO $pdo = null): array {
+    $defaults = [
+        'community_name' => '',
+        'logo_path' => '/assets/images/logos/chatspace-ce-full-logo.png',
+        'powered_logo_path' => '/assets/images/logos/chatspace-ce-full-logo.png',
+        'has_custom_logo' => false,
+    ];
+    if (!chatspace_configured()) return $defaults;
+    try {
+        $pdo = $pdo ?: db();
+        $name = trim(app_setting($pdo, 'community_name', ''));
+        $logo = trim(app_setting($pdo, 'community_logo_path', ''));
+        return [
+            'community_name' => $name,
+            'logo_path' => $logo !== '' ? $logo : $defaults['logo_path'],
+            'powered_logo_path' => $defaults['powered_logo_path'],
+            'has_custom_logo' => $logo !== '',
+        ];
+    } catch (Throwable) {
+        return $defaults;
+    }
+}
+
+function branded_page_title(string $page, ?PDO $pdo = null): string {
+    $brand = install_branding($pdo);
+    $prefix = $brand['community_name'] !== '' ? $brand['community_name'] . ' - ' : '';
+    return $prefix . $page . ' - ChatSpace CE';
 }
 
 function gesture_snapshot(array $gesture): array {
