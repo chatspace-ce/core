@@ -641,7 +641,9 @@ async function loadAdminSettings() {
   if (!adminSettings) return;
   const data = await fetch(appUrl('/api/admin_system.php?action=settings')).then(r => r.json());
   Object.entries(data.settings || {}).forEach(([key, value]) => {
-    if (adminSettings.elements[key]) adminSettings.elements[key].value = value;
+    if (!adminSettings.elements[key]) return;
+    if (adminSettings.elements[key].type === 'checkbox') adminSettings.elements[key].checked = value === '1';
+    else adminSettings.elements[key].value = value;
   });
 }
 
@@ -844,6 +846,8 @@ adminSettings?.addEventListener('submit', async e => {
       gif_giphy_api_key: form.elements.gif_giphy_api_key.value,
       gif_tenor_api_key: form.elements.gif_tenor_api_key.value,
       gif_default_provider: form.elements.gif_default_provider.value,
+      age_gate_enabled: form.elements.age_gate_enabled.checked ? 1 : 0,
+      age_gate_min_age: form.elements.age_gate_min_age.value,
     });
     setAdminFormStatus(form, 'Settings saved.', 'ok');
     await loadAdminLogs();

@@ -354,6 +354,8 @@ $rooms = $roomsStmt->fetchAll();
               <label>Idle removal minutes <input name="participant_idle_timeout_minutes" type="number" min="0.5" max="120" step="0.5"></label>
               <label>GIPHY API key <input name="gif_giphy_api_key" type="password" autocomplete="off" placeholder="Optional"></label>
               <label>Tenor API key <input name="gif_tenor_api_key" type="password" autocomplete="off" placeholder="Optional"></label>
+              <label class="check-label"><input name="age_gate_enabled" type="checkbox" value="1"> Enable registration age gate</label>
+              <label>Age gate minimum age <input name="age_gate_min_age" type="number" min="1" max="120" step="1"></label>
               <label>Default GIF provider
                 <select name="gif_default_provider">
                   <option value="giphy">GIPHY</option>

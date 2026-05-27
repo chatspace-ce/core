@@ -793,6 +793,8 @@ function seed_app_settings(PDO $pdo): void {
         'gif_giphy_api_key' => '',
         'gif_tenor_api_key' => '',
         'gif_default_provider' => 'giphy',
+        'age_gate_enabled' => '0',
+        'age_gate_min_age' => '13',
         'community_name' => '',
         'community_logo_path' => '',
     ];

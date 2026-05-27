@@ -3,6 +3,8 @@ require_once __DIR__ . '/includes/base.php';
 $error = '';
 $pdo = db();
 $branding = install_branding($pdo);
+$ageGateEnabled = app_setting($pdo, 'age_gate_enabled', '0') === '1';
+$ageGateMinAge = max(1, min(120, (int)app_setting($pdo, 'age_gate_min_age', '13')));
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $email = strtolower(trim($_POST['email'] ?? ''));
     $name = trim($_POST['display_name'] ?? '');
@@ -21,7 +23,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $avatarPath = '/assets/uploads/avatars/' . $file;
         }
     }
-    if (!filter_var($email, FILTER_VALIDATE_EMAIL) || $name === '' || strlen($password) < 8 || !$avatarPath) {
+    $ageVerified = !$ageGateEnabled || !empty($_POST['age_gate_confirm']);
+    if ($ageGateEnabled && !$ageVerified) {
+        $error = 'You must verify that you are at least ' . $ageGateMinAge . ' to create an account.';
+    } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL) || $name === '' || strlen($password) < 8 || !$avatarPath) {
         $error = 'Use a valid email, display name, password of at least 8 characters, and an avatar image between 42x42 and 250x250.';
     } else {
         try {
@@ -62,6 +67,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       <label>Display name<input name="display_name" required autocomplete="nickname"></label>
       <label>Avatar<input type="file" name="avatar" accept="image/jpeg,image/png,image/gif,image/webp" required></label>
       <label>Password<input type="password" name="password" required minlength="8" autocomplete="new-password"></label>
+      <?php if ($ageGateEnabled): ?>
+      <label class="check-label"><input type="checkbox" name="age_gate_confirm" value="1" required> I confirm that I am at least <?= e((string)$ageGateMinAge) ?>.</label>
+      <?php endif; ?>
       <button class="btn btn-primary" type="submit">Sign Up</button>
       <p class="minor">Already have an account? <a href="<?= e(app_url('/login.php')) ?>">Log in</a></p>
       <p class="minor auth-about-link"><a href="<?= e(app_url('/about.html')) ?>">About ChatSpace Community Edition</a></p>

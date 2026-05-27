@@ -123,6 +123,7 @@ if ($action === 'save_settings') {
         'room_image_max_size_mb' => [1, 100],
         'room_video_max_size_mb' => [5, 1000],
         'participant_idle_timeout_minutes' => [0.5, 120],
+        'age_gate_min_age' => [1, 120],
     ];
     foreach ($allowed as $key => [$min, $max]) {
         $value = (float)($body[$key] ?? app_setting($pdo, $key, (string)$min));
@@ -136,6 +137,7 @@ if ($action === 'save_settings') {
     set_app_setting($pdo, 'gif_giphy_api_key', $giphyKey);
     set_app_setting($pdo, 'gif_tenor_api_key', $tenorKey);
     set_app_setting($pdo, 'gif_default_provider', $provider);
+    set_app_setting($pdo, 'age_gate_enabled', !empty($body['age_gate_enabled']) ? '1' : '0');
     log_tool($pdo, (int)$me['id'], 'admin_settings_update', null, null, 'Updated community settings');
     json_out(['ok' => true, 'settings' => admin_settings($pdo)]);
 }
