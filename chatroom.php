@@ -158,9 +158,9 @@ $linkIconCatalog = link_icon_catalog($pdo);
     </section>
     <div class="sidebar-bottom-tools">
       <section class="side-section">
-        <div class="side-title">Voice Chat</div>
+        <div class="side-title">Voice Chat <span id="voice-count-label">(0)</span></div>
         <div class="voice-list" id="voice-list"></div>
-        <button class="btn btn-voice" id="voice-toggle" style="width:100%;margin-top:8px;">Join Voice</button>
+        <button class="btn btn-voice" id="voice-toggle" type="button" style="width:100%;margin-top:8px;">Join Voice</button>
       </section>
       <section class="side-section">
         <button class="btn icon-label" id="locate-btn" style="width:100%;"><img src="<?= e(app_url('/assets/images/locate.png')) ?>" alt="">Locate Friends</button>

@@ -32,6 +32,7 @@ const friendListEl = document.getElementById('friend-results');
 const gameListEl = document.getElementById('active-games');
 const gameStartMenu = document.getElementById('game-start-menu');
 const voiceListEl = document.getElementById('voice-list');
+const voiceCountLabel = document.getElementById('voice-count-label');
 const ctxMenu = document.getElementById('ctx-menu');
 const textCtxMenu = document.getElementById('text-ctx-menu');
 const msgActionMenu = document.getElementById('msg-action-menu');
@@ -84,6 +85,15 @@ const AVATAR_STAGE_SIZE = 150;
 let voiceStream = null;
 let voiceJoined = false;
 let voicePollTimer = null;
+let voiceMuted = false;
+let voiceDeafened = false;
+let voiceSpeaking = false;
+let voiceAnalyserTimer = null;
+let voiceAudioContext = null;
+let voiceAnalyser = null;
+let voiceMicSource = null;
+let latestVoiceParticipants = [];
+let lastVoiceStatusSignature = '';
 let lastVoiceSignalId = 0;
 const peers = new Map();
 const typingTimers = new Map();
@@ -4329,31 +4339,147 @@ document.getElementById('friend-search').addEventListener('input', () => {
   window.friendSearchTimer = setTimeout(loadFriends, 120);
 });
 
-document.getElementById('voice-toggle').addEventListener('click', async e => {
-  if (voiceJoined) {
-    leaveVoice();
-    e.currentTarget.textContent = 'Join Voice';
-  } else {
-    await joinVoice();
-    e.currentTarget.textContent = 'Leave Voice';
+function updateVoiceToggleButton() {
+  const btn = document.getElementById('voice-toggle');
+  if (!btn) return;
+  btn.textContent = voiceJoined ? 'Leave Voice' : 'Join Voice';
+  btn.classList.toggle('active', voiceJoined);
+}
+
+function restartVoicePoll(delay = 0) {
+  clearTimeout(voicePollTimer);
+  voicePollTimer = setTimeout(pollVoice, delay);
+}
+
+function setRemoteAudioDeafened() {
+  document.querySelectorAll('audio[id^="voice-audio-"]').forEach(audio => {
+    audio.muted = voiceDeafened;
+  });
+}
+
+function syncVoiceStatus(force = false) {
+  if (!voiceJoined) return Promise.resolve();
+  const signature = `${voiceMuted ? 1 : 0}:${voiceDeafened ? 1 : 0}:${voiceSpeaking ? 1 : 0}`;
+  if (!force && signature === lastVoiceStatusSignature) return Promise.resolve();
+  lastVoiceStatusSignature = signature;
+  return apiPost('/api/voice_signal.php', {
+    action: 'status',
+    session_id: cfg.sessionId,
+    participant_id: cfg.myParticipantId,
+    join_token: cfg.myJoinToken,
+    muted: voiceMuted,
+    deafened: voiceDeafened,
+    speaking: voiceSpeaking,
+  }).catch(() => {});
+}
+
+function renderCurrentVoiceList() {
+  renderVoiceList(latestVoiceParticipants);
+}
+
+function setVoiceMuted(muted) {
+  voiceMuted = Boolean(muted);
+  if (voiceStream) voiceStream.getAudioTracks().forEach(track => { track.enabled = !voiceMuted; });
+  if (voiceMuted && voiceSpeaking) voiceSpeaking = false;
+  renderCurrentVoiceList();
+  syncVoiceStatus(true);
+}
+
+function setVoiceDeafened(deafened) {
+  voiceDeafened = Boolean(deafened);
+  setRemoteAudioDeafened();
+  renderCurrentVoiceList();
+  syncVoiceStatus(true);
+}
+
+function stopVoiceAnalyser() {
+  clearInterval(voiceAnalyserTimer);
+  voiceAnalyserTimer = null;
+  try { voiceMicSource?.disconnect(); } catch {}
+  voiceMicSource = null;
+  voiceAnalyser = null;
+  if (voiceAudioContext) {
+    voiceAudioContext.close().catch(() => {});
+    voiceAudioContext = null;
   }
+}
+
+function startVoiceAnalyser() {
+  stopVoiceAnalyser();
+  if (!voiceStream) return;
+  try {
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContextClass) return;
+    voiceAudioContext = new AudioContextClass();
+    voiceAnalyser = voiceAudioContext.createAnalyser();
+    voiceAnalyser.fftSize = 512;
+    voiceMicSource = voiceAudioContext.createMediaStreamSource(voiceStream);
+    voiceMicSource.connect(voiceAnalyser);
+    const samples = new Uint8Array(voiceAnalyser.fftSize);
+    voiceAnalyserTimer = setInterval(() => {
+      if (!voiceAnalyser) return;
+      voiceAnalyser.getByteTimeDomainData(samples);
+      let sum = 0;
+      for (let i = 0; i < samples.length; i++) {
+        const v = (samples[i] - 128) / 128;
+        sum += v * v;
+      }
+      const rms = Math.sqrt(sum / samples.length);
+      const speaking = Boolean(!voiceMuted && rms > 0.045);
+      if (speaking !== voiceSpeaking) {
+        voiceSpeaking = speaking;
+        renderCurrentVoiceList();
+        syncVoiceStatus();
+      }
+    }, 140);
+  } catch {}
+}
+
+document.getElementById('voice-toggle').addEventListener('click', async () => {
+  if (voiceJoined) await leaveVoice();
+  else await joinVoice();
 });
 
 async function joinVoice() {
-  voiceStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-  voiceJoined = true;
-  await apiPost('/api/voice_signal.php', { action: 'join', session_id: cfg.sessionId, participant_id: cfg.myParticipantId, join_token: cfg.myJoinToken });
-  pollVoice();
+  if (voiceJoined) return;
+  try {
+    voiceStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+    voiceMuted = false;
+    voiceDeafened = false;
+    voiceSpeaking = false;
+    voiceJoined = true;
+    updateVoiceToggleButton();
+    await apiPost('/api/voice_signal.php', { action: 'join', session_id: cfg.sessionId, participant_id: cfg.myParticipantId, join_token: cfg.myJoinToken });
+    await syncVoiceStatus(true);
+    startVoiceAnalyser();
+    restartVoicePoll(0);
+  } catch (err) {
+    voiceJoined = false;
+    updateVoiceToggleButton();
+    if (voiceStream) voiceStream.getTracks().forEach(t => t.stop());
+    voiceStream = null;
+    alert(err.message || 'Could not join voice chat.');
+  }
 }
 
 async function leaveVoice() {
+  if (!voiceJoined) return;
   voiceJoined = false;
-  clearTimeout(voicePollTimer);
+  voiceMuted = false;
+  voiceDeafened = false;
+  voiceSpeaking = false;
+  lastVoiceStatusSignature = '';
+  stopVoiceAnalyser();
+  updateVoiceToggleButton();
   for (const pc of peers.values()) pc.close();
   peers.clear();
+  document.querySelectorAll('audio[id^="voice-audio-"]').forEach(audio => audio.remove());
   if (voiceStream) voiceStream.getTracks().forEach(t => t.stop());
   voiceStream = null;
   await apiPost('/api/voice_signal.php', { action: 'leave', session_id: cfg.sessionId, participant_id: cfg.myParticipantId, join_token: cfg.myJoinToken }).catch(() => {});
+  latestVoiceParticipants = latestVoiceParticipants.filter(v => Number(v.id) !== Number(cfg.myParticipantId));
+  renderVoiceList(latestVoiceParticipants);
+  restartVoicePoll(0);
 }
 
 async function getPeer(id, polite = false) {
@@ -4369,6 +4495,7 @@ async function getPeer(id, polite = false) {
       audio.autoplay = true;
       document.body.appendChild(audio);
     }
+    audio.muted = voiceDeafened;
     audio.srcObject = e.streams[0];
   };
   pc.onicecandidate = e => {
@@ -4388,13 +4515,13 @@ function sendSignal(toId, type, data) {
 }
 
 async function pollVoice() {
-  if (!voiceJoined) return;
   try {
     const qs = new URLSearchParams({ session_id: cfg.sessionId, participant_id: cfg.myParticipantId, after: lastVoiceSignalId, join_token: cfg.myJoinToken });
     const data = await fetch(appUrl('/api/voice_signal.php?' + qs)).then(r => r.json());
     renderVoiceList(data.voice_participants || []);
     for (const sig of data.signals || []) {
       lastVoiceSignalId = Math.max(lastVoiceSignalId, sig.id);
+      if (!voiceJoined) continue;
       const from = sig.from_participant_id;
       if (!from || from === cfg.myParticipantId) continue;
       const pc = await getPeer(from, sig.type === 'offer');
@@ -4419,15 +4546,32 @@ async function pollVoice() {
   } catch (err) {
     console.warn(err);
   }
-  voicePollTimer = setTimeout(pollVoice, 1000);
+  restartVoicePoll(voiceJoined ? 1000 : 2000);
 }
 
 function renderVoiceList(list) {
+  latestVoiceParticipants = Array.isArray(list) ? list : [];
+  if (voiceCountLabel) voiceCountLabel.textContent = `(${latestVoiceParticipants.length})`;
   voiceListEl.innerHTML = '';
-  list.forEach(v => {
+  latestVoiceParticipants.forEach(v => {
+    const known = participants.get(Number(v.id));
+    const person = Object.assign({}, known || {}, v);
+    const own = Number(person.id) === Number(cfg.myParticipantId);
+    const muted = own ? voiceMuted : Boolean(person.muted);
+    const deafened = own ? voiceDeafened : Boolean(person.deafened);
+    const speaking = own ? voiceSpeaking : Boolean(person.speaking);
     const row = document.createElement('div');
-    row.className = 'minor';
-    row.textContent = `${v.display_name} is in voice`;
+    row.className = `voice-card person-row ${participantRoleClass(person)}${speaking ? ' speaking' : ''}`;
+    row.dataset.participantId = person.id;
+    const statusText = speaking ? 'Speaking' : 'In voice';
+    const controls = own
+      ? `<button class="voice-control${muted ? ' active' : ''}" data-voice-mute type="button" title="${muted ? 'Unmute mic' : 'Mute mic'}" aria-label="${muted ? 'Unmute mic' : 'Mute mic'}"><span class="voice-icon voice-icon-mic"></span></button>
+         <button class="voice-control${deafened ? ' active' : ''}" data-voice-deafen type="button" title="${deafened ? 'Undeafen' : 'Deafen'}" aria-label="${deafened ? 'Undeafen' : 'Deafen'}"><span class="voice-icon voice-icon-volume"></span></button>`
+      : `${muted ? '<span class="voice-status-icon active" title="Mic muted"><span class="voice-icon voice-icon-mic"></span></span>' : ''}
+         ${deafened ? '<span class="voice-status-icon active" title="Deafened"><span class="voice-icon voice-icon-volume"></span></span>' : ''}`;
+    row.innerHTML = `<span class="user-avatar-wrap"><img src="${esc(avatarUrl(person))}" alt=""><span class="voice-speaking-dot${speaking ? ' speaking' : ''}"></span></span><div><strong class="person-name-line"><span>${esc(displayNameFor(person))}</span></strong><div class="minor">${own ? 'You' : statusText}</div></div><div class="voice-card-actions">${controls}</div>`;
+    row.querySelector('[data-voice-mute]')?.addEventListener('click', () => setVoiceMuted(!voiceMuted));
+    row.querySelector('[data-voice-deafen]')?.addEventListener('click', () => setVoiceDeafened(!voiceDeafened));
     voiceListEl.appendChild(row);
   });
 }
@@ -4463,7 +4607,9 @@ async function bootRoom() {
     addSystemMessage(`${cfg.activeRoomEffect.label || 'Room effect'} is currently active.`);
   }
   updateComposerState();
+  updateVoiceToggleButton();
   poll();
+  pollVoice();
   pollAppVersion();
   setInterval(pollAppVersion, 60000);
   setInterval(updateVisibleTimestamps, 30000);

@@ -370,6 +370,9 @@ function migrate(PDO $pdo): void {
         CREATE TABLE IF NOT EXISTS voice_sessions (
             participant_id INTEGER PRIMARY KEY,
             session_id INTEGER NOT NULL,
+            muted INTEGER NOT NULL DEFAULT 0,
+            deafened INTEGER NOT NULL DEFAULT 0,
+            speaking INTEGER NOT NULL DEFAULT 0,
             joined_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
         );
 
@@ -565,6 +568,13 @@ function migrate(PDO $pdo): void {
         if (!in_array('recovery_code_suffix', $mysqlUserColNames, true)) {
             $pdo->exec('ALTER TABLE users ADD COLUMN recovery_code_suffix VARCHAR(16) DEFAULT NULL');
         }
+        $mysqlVoiceCols = $pdo->query('SHOW COLUMNS FROM voice_sessions')->fetchAll();
+        $mysqlVoiceColNames = array_map(fn(array $col): string => (string)($col['Field'] ?? ''), $mysqlVoiceCols);
+        foreach (['muted', 'deafened', 'speaking'] as $voiceCol) {
+            if (!in_array($voiceCol, $mysqlVoiceColNames, true)) {
+                $pdo->exec("ALTER TABLE voice_sessions ADD COLUMN {$voiceCol} INTEGER NOT NULL DEFAULT 0");
+            }
+        }
         seed_app_settings($pdo);
         seed_link_icon_catalog($pdo);
         return;
@@ -618,6 +628,13 @@ function migrate(PDO $pdo): void {
     }
     if (!$hasLinkedTo) {
         $pdo->exec('ALTER TABLE participants ADD COLUMN linked_to_participant_id INTEGER DEFAULT NULL');
+    }
+    $voiceCols = $pdo->query('PRAGMA table_info(voice_sessions)')->fetchAll();
+    $voiceColNames = array_map(fn(array $col): string => (string)$col['name'], $voiceCols);
+    foreach (['muted', 'deafened', 'speaking'] as $voiceCol) {
+        if (!in_array($voiceCol, $voiceColNames, true)) {
+            $pdo->exec("ALTER TABLE voice_sessions ADD COLUMN {$voiceCol} INTEGER NOT NULL DEFAULT 0");
+        }
     }
     $pdo->exec(
         "CREATE TABLE IF NOT EXISTS room_effects (
