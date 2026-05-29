@@ -1,0 +1,13 @@
+Options -Indexes
+
+<IfModule mod_php.c>
+  php_flag engine off
+</IfModule>
+
+<IfModule mod_headers.c>
+  Header always set X-Content-Type-Options "nosniff"
+</IfModule>
+
+<FilesMatch "\.(?:php[0-9]?|phtml|phar|cgi|pl|py|rb|asp|aspx|jsp|html?|shtml|xhtml|svgz?|js|mjs|css)$">
+  Require all denied
+</FilesMatch>
