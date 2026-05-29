@@ -2563,23 +2563,6 @@ function sendTyping(active) {
   return apiPost('/api/typing.php', payload).catch(() => {});
 }
 
-function markLeavingRoom() {
-  if (!cfg) return;
-  const params = new URLSearchParams();
-  params.set('session_id', cfg.sessionId);
-  params.set('join_token', cfg.myJoinToken);
-  params.set('_csrf', CSRF_TOKEN);
-  const blob = new Blob([params.toString()], { type: 'application/x-www-form-urlencoded' });
-  if (!navigator.sendBeacon || !navigator.sendBeacon(appUrl('/api/leave_room.php'), blob)) {
-    fetch(appUrl('/api/leave_room.php'), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-CSRF-Token': CSRF_TOKEN },
-      body: params,
-      keepalive: true,
-    }).catch(() => {});
-  }
-}
-
 function stopTypingNow() {
   clearTimeout(typingStopTimer);
   if (typingActive) {
