@@ -6,14 +6,22 @@ $branding = install_branding($pdo);
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $login = trim($_POST['login'] ?? '');
     $password = (string)($_POST['password'] ?? '');
-    $stmt = $pdo->prepare('SELECT * FROM users WHERE LOWER(email) = LOWER(?) OR LOWER(display_name) = LOWER(?) LIMIT 1');
-    $stmt->execute([$login, $login]);
-    $user = $stmt->fetch();
-    if ($user && password_verify($password, $user['password_hash'])) {
-        $_SESSION['user_id'] = (int)$user['id'];
-        redirect_to('/lobby.php');
+    $limit = auth_rate_limit_status($pdo, 'login', $login);
+    if (!$limit['allowed']) {
+        $error = $limit['message'];
+    } else {
+        $stmt = $pdo->prepare('SELECT * FROM users WHERE LOWER(email) = LOWER(?) OR LOWER(display_name) = LOWER(?) LIMIT 1');
+        $stmt->execute([$login, $login]);
+        $user = $stmt->fetch();
+        if ($user && password_verify($password, $user['password_hash'])) {
+            auth_rate_clear_identifier($pdo, 'login', $login);
+            $_SESSION['user_id'] = (int)$user['id'];
+            redirect_to('/lobby.php');
+        }
+        auth_rate_record_failure($pdo, 'login', $login);
+        $afterFailure = auth_rate_limit_status($pdo, 'login', $login);
+        $error = !$afterFailure['allowed'] ? $afterFailure['message'] : 'Login or password was not right.';
     }
-    $error = 'Login or password was not right.';
 }
 ?>
 <!doctype html>

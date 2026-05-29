@@ -173,6 +173,8 @@ function mysqlize_schema(string $schema): string {
         'scope' => 'VARCHAR(32)',
         'action' => 'VARCHAR(64)',
         'setting_key' => 'VARCHAR(191)',
+        'key_hash' => 'VARCHAR(64)',
+        'dimension' => 'VARCHAR(32)',
         'value' => 'VARCHAR(1024)',
     ];
     foreach ($shortColumns as $column => $type) {
@@ -181,7 +183,7 @@ function mysqlize_schema(string $schema): string {
     foreach (['current_room_id'] as $intColumn) {
         $schema = preg_replace('/\b' . $intColumn . '\s+INT/', $intColumn . ' INT', $schema) ?? $schema;
     }
-    foreach (['last_seen_at', 'created_at', 'started_at', 'joined_at', 'updated_at', 'sent_at', 'edited_at', 'deleted_at', 'expires_at', 'cleared_at'] as $dateColumn) {
+    foreach (['last_seen_at', 'created_at', 'started_at', 'joined_at', 'updated_at', 'sent_at', 'edited_at', 'deleted_at', 'expires_at', 'cleared_at', 'last_attempt_at', 'locked_until'] as $dateColumn) {
         $schema = preg_replace('/\b' . $dateColumn . '\s+VARCHAR\(1024\)/', $dateColumn . ' DATETIME', $schema) ?? $schema;
     }
     $schema = preg_replace('/CREATE TABLE IF NOT EXISTS ([^(]+)\s*\((.*?)\);/s', 'CREATE TABLE IF NOT EXISTS $1 ($2) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;', $schema) ?? $schema;
@@ -446,6 +448,18 @@ function migrate(PDO $pdo): void {
         CREATE TABLE IF NOT EXISTS app_settings (
             setting_key TEXT PRIMARY KEY,
             value TEXT NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS auth_attempts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            scope TEXT NOT NULL,
+            dimension TEXT NOT NULL,
+            key_hash TEXT NOT NULL,
+            attempts INTEGER NOT NULL DEFAULT 0,
+            last_attempt_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            locked_until TEXT DEFAULT NULL,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(scope, dimension, key_hash)
         );
 
         CREATE TABLE IF NOT EXISTS gestures (
@@ -845,6 +859,11 @@ function seed_app_settings(PDO $pdo): void {
         'room_image_max_size_mb' => '10',
         'room_video_max_size_mb' => '200',
         'participant_idle_timeout_minutes' => '2',
+        'auth_login_max_attempts' => '5',
+        'auth_recovery_max_attempts' => '5',
+        'auth_ip_max_attempts' => '30',
+        'auth_attempt_window_minutes' => '15',
+        'auth_lockout_minutes' => '15',
         'gif_giphy_api_key' => '',
         'gif_tenor_api_key' => '',
         'gif_default_provider' => 'giphy',
@@ -884,6 +903,107 @@ function set_app_setting(PDO $pdo, string $key, string $value): void {
         : 'INSERT INTO app_settings (setting_key, value) VALUES (?,?) ON CONFLICT(setting_key) DO UPDATE SET value = excluded.value'
     );
     $stmt->execute([$key, $value]);
+}
+
+function client_ip_address(): string {
+    return trim((string)($_SERVER['REMOTE_ADDR'] ?? 'unknown')) ?: 'unknown';
+}
+
+function auth_rate_seconds(int $seconds): string {
+    $seconds = max(1, $seconds);
+    if ($seconds < 60) return $seconds . ' second' . ($seconds === 1 ? '' : 's');
+    $minutes = (int)ceil($seconds / 60);
+    if ($minutes < 60) return $minutes . ' minute' . ($minutes === 1 ? '' : 's');
+    $hours = (int)ceil($minutes / 60);
+    return $hours . ' hour' . ($hours === 1 ? '' : 's');
+}
+
+function auth_rate_scope_max(PDO $pdo, string $scope): int {
+    $key = $scope === 'recovery' ? 'auth_recovery_max_attempts' : 'auth_login_max_attempts';
+    return max(1, (int)app_setting_float($pdo, $key, $scope === 'recovery' ? 5 : 5));
+}
+
+function auth_rate_ip_max(PDO $pdo): int {
+    return max(1, (int)app_setting_float($pdo, 'auth_ip_max_attempts', 30));
+}
+
+function auth_rate_window_minutes(PDO $pdo): float {
+    return max(1.0, app_setting_float($pdo, 'auth_attempt_window_minutes', 15));
+}
+
+function auth_rate_lockout_minutes(PDO $pdo): float {
+    return max(1.0, app_setting_float($pdo, 'auth_lockout_minutes', 15));
+}
+
+function auth_rate_key_hash(string $scope, string $dimension, string $value): string {
+    $normalized = strtolower(trim($scope)) . "\n" . strtolower(trim($dimension)) . "\n" . strtolower(trim($value));
+    return hash('sha256', $normalized);
+}
+
+function auth_rate_keys(string $scope, string $identifier): array {
+    $identifier = trim($identifier) !== '' ? trim($identifier) : '(blank)';
+    return [
+        ['dimension' => 'identifier', 'hash' => auth_rate_key_hash($scope, 'identifier', $identifier)],
+        ['dimension' => 'ip', 'hash' => auth_rate_key_hash($scope, 'ip', client_ip_address())],
+    ];
+}
+
+function auth_rate_cleanup(PDO $pdo): void {
+    $windowMinutes = auth_rate_window_minutes($pdo);
+    $cutoff = gmdate('Y-m-d H:i:s', time() - (int)ceil($windowMinutes * 60));
+    $now = gmdate('Y-m-d H:i:s');
+    $stmt = $pdo->prepare('DELETE FROM auth_attempts WHERE last_attempt_at < ? AND (locked_until IS NULL OR locked_until < ?)');
+    $stmt->execute([$cutoff, $now]);
+}
+
+function auth_rate_limit_status(PDO $pdo, string $scope, string $identifier): array {
+    auth_rate_cleanup($pdo);
+    $now = time();
+    $blockedUntil = 0;
+    $stmt = $pdo->prepare('SELECT dimension, locked_until FROM auth_attempts WHERE scope = ? AND dimension = ? AND key_hash = ? LIMIT 1');
+    foreach (auth_rate_keys($scope, $identifier) as $key) {
+        $stmt->execute([$scope, $key['dimension'], $key['hash']]);
+        $row = $stmt->fetch();
+        if (!$row || empty($row['locked_until'])) continue;
+        $until = strtotime((string)$row['locked_until']) ?: 0;
+        if ($until > $blockedUntil) $blockedUntil = $until;
+    }
+    if ($blockedUntil > $now) {
+        return [
+            'allowed' => false,
+            'retry_after' => $blockedUntil - $now,
+            'message' => 'Too many attempts. Try again in ' . auth_rate_seconds($blockedUntil - $now) . '.',
+        ];
+    }
+    return ['allowed' => true, 'retry_after' => 0, 'message' => ''];
+}
+
+function auth_rate_record_failure(PDO $pdo, string $scope, string $identifier): void {
+    $now = gmdate('Y-m-d H:i:s');
+    $windowCutoff = gmdate('Y-m-d H:i:s', time() - (int)ceil(auth_rate_window_minutes($pdo) * 60));
+    $lockedUntil = gmdate('Y-m-d H:i:s', time() + (int)ceil(auth_rate_lockout_minutes($pdo) * 60));
+    $select = $pdo->prepare('SELECT attempts, last_attempt_at FROM auth_attempts WHERE scope = ? AND dimension = ? AND key_hash = ? LIMIT 1');
+    $write = $pdo->prepare(db_uses_mysql_syntax($pdo)
+        ? 'INSERT INTO auth_attempts (scope, dimension, key_hash, attempts, last_attempt_at, locked_until) VALUES (?,?,?,?,?,?) ON DUPLICATE KEY UPDATE attempts = VALUES(attempts), last_attempt_at = VALUES(last_attempt_at), locked_until = VALUES(locked_until)'
+        : 'INSERT INTO auth_attempts (scope, dimension, key_hash, attempts, last_attempt_at, locked_until) VALUES (?,?,?,?,?,?) ON CONFLICT(scope, dimension, key_hash) DO UPDATE SET attempts = excluded.attempts, last_attempt_at = excluded.last_attempt_at, locked_until = excluded.locked_until'
+    );
+    foreach (auth_rate_keys($scope, $identifier) as $key) {
+        $select->execute([$scope, $key['dimension'], $key['hash']]);
+        $row = $select->fetch();
+        $attempts = 1;
+        if ($row && (string)($row['last_attempt_at'] ?? '') >= $windowCutoff) {
+            $attempts = ((int)$row['attempts']) + 1;
+        }
+        $max = $key['dimension'] === 'ip' ? auth_rate_ip_max($pdo) : auth_rate_scope_max($pdo, $scope);
+        $lock = $attempts >= $max ? $lockedUntil : null;
+        $write->execute([$scope, $key['dimension'], $key['hash'], $attempts, $now, $lock]);
+    }
+}
+
+function auth_rate_clear_identifier(PDO $pdo, string $scope, string $identifier): void {
+    $hash = auth_rate_key_hash($scope, 'identifier', trim($identifier) !== '' ? trim($identifier) : '(blank)');
+    $stmt = $pdo->prepare("DELETE FROM auth_attempts WHERE scope = ? AND dimension = 'identifier' AND key_hash = ?");
+    $stmt->execute([$scope, $hash]);
 }
 
 function install_branding(?PDO $pdo = null): array {

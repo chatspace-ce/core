@@ -366,6 +366,17 @@ $rooms = $roomsStmt->fetchAll();
                   </div>
                 </section>
                 <section class="admin-settings-group admin-settings-group-wide">
+                  <h3>Account Protection</h3>
+                  <div class="admin-settings-fields auth-protection-fields">
+                    <label>Login attempts per account <input name="auth_login_max_attempts" type="number" min="1" max="50" step="1"></label>
+                    <label>Recovery attempts per account <input name="auth_recovery_max_attempts" type="number" min="1" max="50" step="1"></label>
+                    <label>Attempts per IP <input name="auth_ip_max_attempts" type="number" min="5" max="500" step="1"></label>
+                    <label>Attempt window minutes <input name="auth_attempt_window_minutes" type="number" min="1" max="1440" step="1"></label>
+                    <label>Lockout minutes <input name="auth_lockout_minutes" type="number" min="1" max="1440" step="1"></label>
+                  </div>
+                  <div class="admin-settings-hint">Defaults: 5 login attempts, 5 recovery attempts, 30 IP attempts, a 15 minute window, and a 15 minute lockout.</div>
+                </section>
+                <section class="admin-settings-group admin-settings-group-wide">
                   <h3>GIF Selector</h3>
                   <div class="admin-settings-fields three">
                     <label>GIPHY API key <input name="gif_giphy_api_key" type="password" autocomplete="off" placeholder="Optional"></label>

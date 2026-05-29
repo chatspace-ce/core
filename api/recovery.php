@@ -65,10 +65,20 @@ if ($action === 'reset_password') {
         json_out(['error' => 'New password and confirmation do not match.'], 400);
     }
 
+    $limit = auth_rate_limit_status($pdo, 'recovery', $login);
+    if (!$limit['allowed']) {
+        json_out(['error' => $limit['message'], 'retry_after' => $limit['retry_after']], 429);
+    }
+
     $stmt = $pdo->prepare('SELECT * FROM users WHERE LOWER(email) = LOWER(?) OR LOWER(display_name) = LOWER(?) LIMIT 1');
     $stmt->execute([$login, $login]);
     $user = $stmt->fetch();
     if (!$user || empty($user['recovery_code_hash']) || !password_verify($code, (string)$user['recovery_code_hash'])) {
+        auth_rate_record_failure($pdo, 'recovery', $login);
+        $afterFailure = auth_rate_limit_status($pdo, 'recovery', $login);
+        if (!$afterFailure['allowed']) {
+            json_out(['error' => $afterFailure['message'], 'retry_after' => $afterFailure['retry_after']], 429);
+        }
         json_out(['error' => 'Recovery details were not right.'], 403);
     }
     if (password_verify($newPassword, (string)$user['password_hash'])) {
@@ -77,6 +87,7 @@ if ($action === 'reset_password') {
 
     $stmt = $pdo->prepare('UPDATE users SET password_hash = ?, recovery_code_hash = NULL, recovery_code_suffix = NULL WHERE id = ?');
     $stmt->execute([password_hash($newPassword, PASSWORD_DEFAULT), (int)$user['id']]);
+    auth_rate_clear_identifier($pdo, 'recovery', $login);
     json_out(['ok' => true]);
 }
 

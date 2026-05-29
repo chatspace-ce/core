@@ -3041,6 +3041,15 @@ textarea:focus { border-color: rgba(124,106,247,.8); box-shadow: 0 0 0 3px rgba(
   border-radius: 7px;
   background: rgba(255,255,255,.045);
 }
+.auth-protection-fields {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+.admin-settings-hint {
+  margin-top: 10px;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 750;
+}
 .admin-settings-actions {
   display: grid;
   gap: 8px;
@@ -3105,6 +3114,7 @@ textarea:focus { border-color: rgba(124,106,247,.8); box-shadow: 0 0 0 3px rgba(
   .admin-settings-grid,
   .admin-settings-fields,
   .admin-settings-fields.three,
+  .auth-protection-fields,
   .admin-moderation-grid,
   .admin-summary-grid {
     grid-template-columns: 1fr;

@@ -123,6 +123,11 @@ if ($action === 'save_settings') {
         'room_image_max_size_mb' => [1, 100],
         'room_video_max_size_mb' => [5, 1000],
         'participant_idle_timeout_minutes' => [0.5, 120],
+        'auth_login_max_attempts' => [1, 50],
+        'auth_recovery_max_attempts' => [1, 50],
+        'auth_ip_max_attempts' => [5, 500],
+        'auth_attempt_window_minutes' => [1, 1440],
+        'auth_lockout_minutes' => [1, 1440],
         'age_gate_min_age' => [1, 120],
     ];
     foreach ($allowed as $key => [$min, $max]) {
