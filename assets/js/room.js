@@ -142,6 +142,7 @@ let activeGame = null;
 const activeGames = new Map();
 const gameChatLastIds = new Map();
 const gameTypingIds = new Set();
+const gameTypingTimers = new Map();
 const seenRoomHistoryClears = new Set();
 let gameChatPollTimer = null;
 let gameTypingActive = false;
@@ -2394,6 +2395,11 @@ async function poll() {
         const partnerId = p.participant_id;
         if (activeChat === `link:${partnerId}` || partnerId === cfg.myParticipantId) showTyping(p.participant_id, p.active);
       }
+      if (ev.type === 'game_typing' && activeGame?.lobby_code === p.lobby_code) {
+        if (Number(p.participant_id) !== Number(cfg.myParticipantId)) {
+          setGameTyping(p.participant_id, Boolean(p.active));
+        }
+      }
     });
   } catch (err) {
     console.warn(err);
@@ -2708,15 +2714,21 @@ async function startVoiceNote() {
     const formData = new FormData();
     formData.append('session_id', cfg.sessionId);
     formData.append('join_token', cfg.myJoinToken);
-    if (replyDraft && replyDraft.chatKey === 'room' && activeChat === 'room') {
+    formData.append('channel', channelForApi(activeChat));
+    const partnerId = activeLinkPartnerId();
+    const dmUserId = activeDmUserId();
+    if (partnerId) formData.append('target_participant_id', String(partnerId));
+    if (dmUserId) formData.append('target_user_id', String(dmUserId));
+    if (activeChat.startsWith('game:')) formData.append('lobby_code', activeChat.slice(5));
+    if (replyDraft && replyDraft.chatKey === activeChat) {
       formData.append('reply_to_id', String(replyDraft.id));
-      formData.append('reply_to_channel', 'room');
+      formData.append('reply_to_channel', channelForApi(replyDraft.chatKey));
     }
     formData.append('audio', blob, 'voice-note.webm');
-    apiUpload('/api/voice_notes.php', formData)
+    apiUpload('/api/files.php', formData)
       .then(msg => {
         clearReplyDraft();
-        addUploadedRoomMessage(msg);
+        addUploadedChatMessage(msg);
       })
       .catch(err => alert(err.message || err));
   });
@@ -4093,7 +4105,22 @@ async function sendGameMessage(content) {
 function stopGameChatPolling() {
   clearTimeout(gameChatPollTimer);
   gameChatPollTimer = null;
+  gameTypingTimers.forEach(timer => clearTimeout(timer));
+  gameTypingTimers.clear();
   gameTypingIds.clear();
+  updateGameStagePlayers();
+}
+
+function setGameTyping(participantId, active) {
+  const id = Number(participantId);
+  clearTimeout(gameTypingTimers.get(id));
+  gameTypingTimers.delete(id);
+  if (active) {
+    gameTypingIds.add(id);
+    gameTypingTimers.set(id, setTimeout(() => setGameTyping(id, false), 3500));
+  } else {
+    gameTypingIds.delete(id);
+  }
   updateGameStagePlayers();
 }
 
@@ -4114,9 +4141,9 @@ async function pollGameChat() {
       gameChatLastIds.set(lobby, Math.max(gameChatLastIds.get(lobby) || 0, Number(msg.id)));
       addGameMessageToChannel(msg, true);
     });
-    gameTypingIds.clear();
-    (data.typing || []).forEach(id => gameTypingIds.add(Number(id)));
-    updateGameStagePlayers();
+    if ((data.typing || []).length) {
+      (data.typing || []).forEach(id => setGameTyping(id, true));
+    }
   } catch (err) {
     console.warn(err);
   } finally {

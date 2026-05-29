@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/../includes/base.php';
+require_once __DIR__ . '/../includes/message_broker.php';
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') json_out(['error' => 'POST required'], 405);
 $body = input_json();
 $pdo = db();
@@ -262,36 +263,6 @@ if (((int)$roomRecent->fetchColumn() + (int)$communityRecent->fetchColumn()) >= 
     json_out(['error' => 'You are sending messages too quickly.'], 429);
 }
 
-if ($channel === 'community') {
-    $avatarUrl = $participant['webcam_path'] ?: resolve_avatar($participant['avatar_path']);
-    $stmt = $pdo->prepare(
-        "INSERT INTO community_messages (scope, participant_id, user_id, display_name, avatar_path, avatar_url, content, url_preview_json, reply_to_json, message_type, mime_type, original_name)
-         VALUES ('community',?,?,?,?,?,?,?,?,?,?,?)"
-    );
-    $stmt->execute([(int)$participant['id'], (int)$participant['user_id'], $participant['display_name'], $participant['avatar_path'], $avatarUrl, $content, $urlPreviewJson, $replyToJson, $messageType, $mimeType, $originalName]);
-    $id = (int)$pdo->lastInsertId();
-    $msg = [
-        'id' => $id,
-        'channel' => 'community',
-        'participant_id' => (int)$participant['id'],
-        'user_id' => (int)$participant['user_id'],
-        'display_name' => $participant['display_name'],
-        'avatar_url' => $avatarUrl,
-        'role' => $authorContext['role'],
-        'is_owner' => $authorContext['is_owner'],
-        'content' => $content,
-        'url_preview' => $urlPreview,
-        'reply_to' => $replyTo,
-        'gesture' => $messageType === 'gesture' ? $snapshot : null,
-        'message_type' => $messageType,
-        'mime_type' => $mimeType,
-        'original_name' => $originalName,
-        'sent_at' => gmdate('Y-m-d H:i:s'),
-    ];
-    emit_community_event($pdo, 'community', null, null, 'community_message', $msg);
-    json_out($msg);
-}
-
 if ($channel === 'link') {
     $targetId = (int)($body['target_participant_id'] ?? 0);
     if (!$targetId) json_out(['error' => 'Linked participant required'], 400);
@@ -304,37 +275,7 @@ if ($channel === 'link') {
     $stmt->execute([$sessionId, $targetId, (int)$participant['id'], (int)$participant['id']]);
     if (!$stmt->fetch()) json_out(['error' => 'You are not linked to that participant'], 403);
     $linkKey = link_key_for((int)$participant['id'], $targetId);
-    $avatarUrl = $participant['webcam_path'] ?: resolve_avatar($participant['avatar_path']);
-    $stmt = $pdo->prepare(
-        "INSERT INTO community_messages (scope, session_id, link_key, participant_id, user_id, display_name, avatar_path, avatar_url, content, url_preview_json, reply_to_json, message_type, mime_type, original_name)
-         VALUES ('link',?,?,?,?,?,?,?,?,?,?,?,?,?)"
-    );
-    $stmt->execute([$sessionId, $linkKey, (int)$participant['id'], (int)$participant['user_id'], $participant['display_name'], $participant['avatar_path'], $avatarUrl, $content, $urlPreviewJson, $replyToJson, $messageType, $mimeType, $originalName]);
-    $id = (int)$pdo->lastInsertId();
-    $msg = [
-        'id' => $id,
-        'channel' => 'link',
-        'link_key' => $linkKey,
-        'participant_id' => (int)$participant['id'],
-        'user_id' => (int)$participant['user_id'],
-        'display_name' => $participant['display_name'],
-        'avatar_url' => $avatarUrl,
-        'role' => $authorContext['role'],
-        'is_owner' => $authorContext['is_owner'],
-        'content' => $content,
-        'url_preview' => $urlPreview,
-        'reply_to' => $replyTo,
-        'gesture' => $messageType === 'gesture' ? $snapshot : null,
-        'message_type' => $messageType,
-        'mime_type' => $mimeType,
-        'original_name' => $originalName,
-        'sent_at' => gmdate('Y-m-d H:i:s'),
-    ];
-    emit_community_event($pdo, 'link', $sessionId, $linkKey, 'link_message', $msg);
-    json_out($msg);
-}
-
-if ($channel === 'dm') {
+} elseif ($channel === 'dm') {
     $targetUserId = (int)($body['target_user_id'] ?? 0);
     if (!$targetUserId || $targetUserId === (int)$participant['user_id']) json_out(['error' => 'DM recipient required'], 400);
     $stmt = $pdo->prepare('SELECT id, display_name, avatar_path FROM users WHERE id = ? LIMIT 1');
@@ -350,59 +291,22 @@ if ($channel === 'dm') {
     $stmt->execute([(int)$participant['user_id'], $targetUserId, $targetUserId, (int)$participant['user_id']]);
     if ($stmt->fetch()) json_out(['error' => 'You cannot DM this user.'], 403);
     $dmKey = dm_key_for((int)$participant['user_id'], $targetUserId);
-    $avatarUrl = $participant['webcam_path'] ?: resolve_avatar($participant['avatar_path']);
-    $stmt = $pdo->prepare(
-        "INSERT INTO community_messages (scope, link_key, participant_id, user_id, display_name, avatar_path, avatar_url, content, url_preview_json, reply_to_json, message_type, mime_type, original_name)
-         VALUES ('dm',?,?,?,?,?,?,?,?,?,?,?,?)"
-    );
-    $stmt->execute([$dmKey, (int)$participant['id'], (int)$participant['user_id'], $participant['display_name'], $participant['avatar_path'], $avatarUrl, $content, $urlPreviewJson, $replyToJson, $messageType, $mimeType, $originalName]);
-    $id = (int)$pdo->lastInsertId();
-    $msg = [
-        'id' => $id,
-        'channel' => 'dm',
-        'dm_key' => $dmKey,
-        'target_user_id' => $targetUserId,
-        'partner_user_id' => $targetUserId,
-        'participant_id' => (int)$participant['id'],
-        'user_id' => (int)$participant['user_id'],
-        'display_name' => $participant['display_name'],
-        'avatar_url' => $avatarUrl,
-        'role' => $authorContext['role'],
-        'is_owner' => false,
-        'content' => $content,
-        'url_preview' => $urlPreview,
-        'reply_to' => $replyTo,
-        'gesture' => $messageType === 'gesture' ? $snapshot : null,
-        'message_type' => $messageType,
-        'mime_type' => $mimeType,
-        'original_name' => $originalName,
-        'sent_at' => gmdate('Y-m-d H:i:s'),
-    ];
-    emit_community_event($pdo, 'dm', null, $dmKey, 'dm_message', $msg);
-    json_out($msg);
 }
 
-$avatarUrl = $participant['webcam_path'] ?: resolve_avatar($participant['avatar_path']);
-$stmt = $pdo->prepare('INSERT INTO messages (session_id, participant_id, user_id, display_name, avatar_path, avatar_url, content, url_preview_json, reply_to_json, message_type, mime_type, original_name) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)');
-$stmt->execute([$sessionId, (int)$participant['id'], (int)$participant['user_id'], $participant['display_name'], $participant['avatar_path'], $avatarUrl, $content, $urlPreviewJson, $replyToJson, $messageType, $mimeType, $originalName]);
-$id = (int)$pdo->lastInsertId();
-$msg = [
-    'id' => $id,
-    'participant_id' => (int)$participant['id'],
-    'user_id' => (int)$participant['user_id'],
-    'display_name' => $participant['display_name'],
-    'avatar_path' => $participant['avatar_path'],
-    'avatar_url' => $avatarUrl,
-    'role' => $authorContext['role'],
-    'is_owner' => $authorContext['is_owner'],
+$msg = create_message($pdo, $channel, $messageType, [
+    'session_id' => $sessionId,
+    'participant' => $participant,
+    'author_context' => $authorContext,
     'content' => $content,
     'url_preview' => $urlPreview,
+    'url_preview_json' => $urlPreviewJson,
     'reply_to' => $replyTo,
+    'reply_to_json' => $replyToJson,
     'gesture' => $messageType === 'gesture' ? $snapshot : null,
-    'message_type' => $messageType,
     'mime_type' => $mimeType,
     'original_name' => $originalName,
-    'sent_at' => gmdate('Y-m-d H:i:s'),
-];
-emit_event($pdo, $sessionId, 'message', $msg);
+    'link_key' => $linkKey ?? null,
+    'dm_key' => $dmKey ?? null,
+    'target_user_id' => $targetUserId ?? null,
+]);
 json_out($msg);

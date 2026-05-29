@@ -97,7 +97,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $pdo->prepare('DELETE FROM game_moves WHERE lobby_code = ?')->execute([$lobby]);
         $pdo->prepare('DELETE FROM game_state WHERE lobby_code = ?')->execute([$lobby]);
         $pdo->prepare('DELETE FROM game_chat_messages WHERE lobby_code = ?')->execute([$lobby]);
-        $pdo->prepare('DELETE FROM game_chat_typing WHERE lobby_code = ?')->execute([$lobby]);
         emit_event($pdo, $sessionId, 'game_end', ['lobby_code' => $lobby]);
         json_out(['ok' => true]);
     }

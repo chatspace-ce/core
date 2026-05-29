@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/../includes/base.php';
+require_once __DIR__ . '/../includes/message_broker.php';
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') json_out(['error' => 'POST required'], 405);
 
@@ -8,25 +9,33 @@ $sessionId = resolve_session_id($pdo, $_POST['session_id'] ?? '');
 $participant = auth_participant($pdo, $sessionId, $_POST['join_token'] ?? '');
 $authorContext = author_context_for_participant($pdo, $sessionId, $participant);
 
-if (empty($_FILES['file']) || !is_array($_FILES['file'])) {
+if (!empty($_FILES['file']) && is_array($_FILES['file'])) {
+    $file = $_FILES['file'];
+    $isVoiceNote = false;
+} elseif (!empty($_FILES['audio']) && is_array($_FILES['audio'])) {
+    $file = $_FILES['audio'];
+    $isVoiceNote = true;
+} else {
     json_out(['error' => 'File required'], 400);
 }
-
-$file = $_FILES['file'];
 if (($file['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
     json_out(['error' => 'Upload failed'], 400);
 }
-if ((int)$file['size'] > 50 * 1024 * 1024) {
-    json_out(['error' => 'File is too large'], 400);
+$maxSize = $isVoiceNote ? 20 * 1024 * 1024 : 50 * 1024 * 1024;
+if ((int)$file['size'] > $maxSize) {
+    json_out(['error' => $isVoiceNote ? 'Voice note is too large' : 'File is too large'], 400);
 }
 
 $tmpName = (string)$file['tmp_name'];
 $finfo = new finfo(FILEINFO_MIME_TYPE);
 $mimeType = $finfo->file($tmpName) ?: 'application/octet-stream';
+if ($isVoiceNote && $mimeType === 'application/octet-stream' && !empty($file['type'])) {
+    $mimeType = (string)$file['type'];
+}
 $originalName = trim((string)($file['name'] ?? 'attachment'));
 if ($originalName === '') $originalName = 'attachment';
 $originalExt = strtolower(pathinfo($originalName, PATHINFO_EXTENSION));
-$allowed = [
+$allowedFiles = [
     'image/jpeg' => 'jpg',
     'image/png' => 'png',
     'image/gif' => 'gif',
@@ -38,6 +47,16 @@ $allowed = [
     'text/rtf' => 'rtf',
     'text/plain' => 'txt',
 ];
+$allowedVoice = [
+    'audio/webm' => 'webm',
+    'video/webm' => 'webm',
+    'audio/ogg' => 'ogg',
+    'application/ogg' => 'ogg',
+    'audio/mpeg' => 'mp3',
+    'audio/mp4' => 'm4a',
+    'audio/wav' => 'wav',
+    'audio/x-wav' => 'wav',
+];
 $extMime = [
     'pdf' => 'application/pdf',
     'doc' => 'application/msword',
@@ -46,27 +65,31 @@ $extMime = [
     'txt' => 'text/plain',
 ];
 
-if (!isset($allowed[$mimeType]) && isset($extMime[$originalExt]) && in_array($mimeType, ['application/zip', 'application/octet-stream', 'text/plain'], true)) {
+if (!$isVoiceNote && !isset($allowedFiles[$mimeType]) && isset($extMime[$originalExt]) && in_array($mimeType, ['application/zip', 'application/octet-stream', 'text/plain'], true)) {
     $mimeType = $extMime[$originalExt];
 }
 
-if (!isset($allowed[$mimeType])) {
+if ($isVoiceNote) {
+    if (!isset($allowedVoice[$mimeType]) && !str_starts_with($mimeType, 'audio/')) {
+        json_out(['error' => 'Unsupported voice note format'], 400);
+    }
+} elseif (!isset($allowedFiles[$mimeType])) {
     json_out(['error' => 'Only images, PDFs, and documents are supported'], 400);
 }
 
-$uploadDir = __DIR__ . '/../assets/uploads/files';
+$uploadDir = __DIR__ . '/../assets/uploads/' . ($isVoiceNote ? 'voice' : 'files');
 if (!is_dir($uploadDir)) {
     mkdir($uploadDir, 0775, true);
 }
 
-$filename = 'f_' . bin2hex(random_bytes(16)) . '.' . $allowed[$mimeType];
+$extension = $isVoiceNote ? ($allowedVoice[$mimeType] ?? 'audio') : $allowedFiles[$mimeType];
+$filename = ($isVoiceNote ? 'vn_' : 'f_') . bin2hex(random_bytes(16)) . '.' . $extension;
 $target = $uploadDir . '/' . $filename;
 if (!move_uploaded_file($tmpName, $target)) {
     json_out(['error' => 'Could not save file'], 500);
 }
 
-$publicPath = '/assets/uploads/files/' . $filename;
-$avatarUrl = $participant['webcam_path'] ?: resolve_avatar($participant['avatar_path']);
+$publicPath = '/assets/uploads/' . ($isVoiceNote ? 'voice/' : 'files/') . $filename;
 $channel = (string)($_POST['channel'] ?? 'room');
 if (!in_array($channel, ['room', 'community', 'link', 'dm', 'game'], true)) $channel = 'room';
 
@@ -133,99 +156,26 @@ function file_reply_snapshot(PDO $pdo, string $channel, int $sessionId, array $p
 $replyTo = file_reply_snapshot($pdo, $channel, $sessionId, $participant);
 $replyToJson = $replyTo ? json_encode($replyTo, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) : null;
 
-$baseMsg = [
-    'participant_id' => (int)$participant['id'],
-    'user_id' => (int)$participant['user_id'],
-    'display_name' => $participant['display_name'],
-    'avatar_path' => $participant['avatar_path'],
-    'avatar_url' => $avatarUrl,
-    'role' => $authorContext['role'],
-    'is_owner' => $authorContext['is_owner'],
-    'content' => $publicPath,
-    'message_type' => 'file',
-    'file_size' => (int)$file['size'],
-    'mime_type' => $mimeType,
-    'original_name' => $originalName,
-    'reply_to' => $replyTo,
-    'sent_at' => gmdate('Y-m-d H:i:s'),
-];
-
-function insert_uploaded_file_message(PDO $pdo, string $channel, array $baseMsg, array $route): array {
-    $commonColumns = ['participant_id', 'user_id', 'display_name', 'avatar_path', 'avatar_url', 'content', 'reply_to_json', 'message_type', 'file_size', 'mime_type', 'original_name'];
-    $commonValues = [
-        $baseMsg['participant_id'],
-        $baseMsg['user_id'],
-        $baseMsg['display_name'],
-        $baseMsg['avatar_path'],
-        $baseMsg['avatar_url'],
-        $baseMsg['content'],
-        $route['reply_to_json'] ?? null,
-        $baseMsg['message_type'],
-        $baseMsg['file_size'],
-        $baseMsg['mime_type'],
-        $baseMsg['original_name'],
-    ];
-
-    if (in_array($channel, ['community', 'link', 'dm'], true)) {
-        $scope = $channel;
-        $columns = ['scope'];
-        $values = [$scope];
-        if ($channel === 'link') {
-            $columns[] = 'session_id';
-            $values[] = $route['session_id'];
-            $columns[] = 'link_key';
-            $values[] = $route['link_key'];
-        } elseif ($channel === 'dm') {
-            $columns[] = 'link_key';
-            $values[] = $route['dm_key'];
-        }
-        $columns = array_merge($columns, $commonColumns);
-        $values = array_merge($values, $commonValues);
-        $placeholders = implode(',', array_fill(0, count($columns), '?'));
-        $stmt = $pdo->prepare('INSERT INTO community_messages (' . implode(', ', $columns) . ') VALUES (' . $placeholders . ')');
-        $stmt->execute($values);
-
-        $msg = ['id' => (int)$pdo->lastInsertId(), 'channel' => $channel] + $baseMsg;
-        if ($channel === 'community') {
-            emit_community_event($pdo, 'community', null, null, 'community_message', $msg);
-            return $msg;
-        }
-        if ($channel === 'link') {
-            $msg = ['link_key' => $route['link_key']] + $msg;
-            emit_community_event($pdo, 'link', (int)$route['session_id'], $route['link_key'], 'link_message', $msg);
-            return $msg;
-        }
-        $msg = [
-            'dm_key' => $route['dm_key'],
-            'target_user_id' => (int)$route['target_user_id'],
-            'partner_user_id' => (int)$route['target_user_id'],
-            'is_owner' => false,
-        ] + $msg;
-        emit_community_event($pdo, 'dm', null, $route['dm_key'], 'dm_message', $msg);
-        return $msg;
-    }
-
-    if ($channel === 'game') {
-        $stmt = $pdo->prepare(
-            'INSERT INTO game_chat_messages (lobby_code, participant_id, content, message_type, file_size, mime_type, original_name)
-             VALUES (?,?,?,?,?,?,?)'
-        );
-        $stmt->execute([$route['lobby_code'], $baseMsg['participant_id'], $baseMsg['content'], $baseMsg['message_type'], $baseMsg['file_size'], $baseMsg['mime_type'], $baseMsg['original_name']]);
-        return ['id' => (int)$pdo->lastInsertId(), 'channel' => 'game', 'lobby_code' => $route['lobby_code']] + $baseMsg;
-    }
-
-    $stmt = $pdo->prepare(
-        'INSERT INTO messages (session_id, participant_id, user_id, display_name, avatar_path, avatar_url, content, reply_to_json, message_type, file_size, mime_type, original_name)
-         VALUES (?,?,?,?,?,?,?,?,?,?,?,?)'
-    );
-    $stmt->execute(array_merge([(int)$route['session_id']], $commonValues));
-    $msg = ['id' => (int)$pdo->lastInsertId()] + $baseMsg;
-    emit_event($pdo, (int)$route['session_id'], 'message', $msg);
-    return $msg;
+function uploaded_media_message(PDO $pdo, string $channel, string $messageType, array $participant, array $authorContext, string $content, array $file, string $mimeType, string $originalName, ?array $replyTo, ?string $replyToJson, array $route = []): array {
+    return create_message($pdo, $channel, $messageType, [
+        'session_id' => $route['session_id'] ?? null,
+        'participant' => $participant,
+        'author_context' => $authorContext,
+        'content' => $content,
+        'file_size' => (int)$file['size'],
+        'mime_type' => $mimeType,
+        'original_name' => $originalName,
+        'reply_to' => $replyTo,
+        'reply_to_json' => $replyToJson,
+        'link_key' => $route['link_key'] ?? null,
+        'dm_key' => $route['dm_key'] ?? null,
+        'target_user_id' => $route['target_user_id'] ?? null,
+        'lobby_code' => $route['lobby_code'] ?? null,
+    ]);
 }
 
 if ($channel === 'community') {
-    json_out(insert_uploaded_file_message($pdo, 'community', $baseMsg, ['reply_to_json' => $replyToJson]));
+    json_out(uploaded_media_message($pdo, 'community', $isVoiceNote ? 'voice_note' : 'file', $participant, $authorContext, $publicPath, $file, $mimeType, $isVoiceNote ? 'Voice Note' : $originalName, $replyTo, $replyToJson));
 }
 
 if ($channel === 'link') {
@@ -240,10 +190,9 @@ if ($channel === 'link') {
     $stmt->execute([$sessionId, $targetId, (int)$participant['id'], (int)$participant['id']]);
     if (!$stmt->fetch()) json_out(['error' => 'You are not linked to that participant'], 403);
     $linkKey = link_key_for((int)$participant['id'], $targetId);
-    json_out(insert_uploaded_file_message($pdo, 'link', $baseMsg, [
+    json_out(uploaded_media_message($pdo, 'link', $isVoiceNote ? 'voice_note' : 'file', $participant, $authorContext, $publicPath, $file, $mimeType, $isVoiceNote ? 'Voice Note' : $originalName, $replyTo, $replyToJson, [
         'session_id' => $sessionId,
         'link_key' => $linkKey,
-        'reply_to_json' => $replyToJson,
     ]));
 }
 
@@ -262,10 +211,9 @@ if ($channel === 'dm') {
     $stmt->execute([(int)$participant['user_id'], $targetUserId, $targetUserId, (int)$participant['user_id']]);
     if ($stmt->fetch()) json_out(['error' => 'You cannot DM this user.'], 403);
     $dmKey = dm_key_for((int)$participant['user_id'], $targetUserId);
-    json_out(insert_uploaded_file_message($pdo, 'dm', $baseMsg, [
+    json_out(uploaded_media_message($pdo, 'dm', $isVoiceNote ? 'voice_note' : 'file', $participant, $authorContext, $publicPath, $file, $mimeType, $isVoiceNote ? 'Voice Note' : $originalName, $replyTo, $replyToJson, [
         'dm_key' => $dmKey,
         'target_user_id' => $targetUserId,
-        'reply_to_json' => $replyToJson,
     ]));
 }
 
@@ -284,10 +232,9 @@ if ($channel === 'game') {
     if (!$game) json_out(['error' => 'Game not found'], 404);
     $playerIds = array_filter([(int)($game['user1_id'] ?? 0), (int)($game['user2_id'] ?? 0)]);
     if (!in_array((int)$participant['id'], $playerIds, true)) json_out(['error' => 'Join the game to use game chat'], 403);
-    json_out(insert_uploaded_file_message($pdo, 'game', $baseMsg, ['lobby_code' => $lobby]));
+    json_out(uploaded_media_message($pdo, 'game', $isVoiceNote ? 'voice_note' : 'file', $participant, $authorContext, $publicPath, $file, $mimeType, $isVoiceNote ? 'Voice Note' : $originalName, $replyTo, $replyToJson, ['lobby_code' => $lobby]));
 }
 
-json_out(insert_uploaded_file_message($pdo, 'room', $baseMsg, [
+json_out(uploaded_media_message($pdo, 'room', $isVoiceNote ? 'voice_note' : 'file', $participant, $authorContext, $publicPath, $file, $mimeType, $isVoiceNote ? 'Voice Note' : $originalName, $replyTo, $replyToJson, [
     'session_id' => $sessionId,
-    'reply_to_json' => $replyToJson,
 ]));

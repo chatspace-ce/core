@@ -59,6 +59,19 @@ $communityStmt = $pdo->prepare(
            scope = 'dm'
            AND (link_key LIKE ? OR link_key LIKE ?)
          )
+         OR (
+           scope = 'game'
+           AND session_id = ?
+           AND link_key IN (
+             SELECT gl.lobby_code
+             FROM game_lobbies gl
+             JOIN game_sessions gs ON gs.lobby_code = gl.lobby_code
+             WHERE gs.room_session_id = ?
+               AND gs.ended_at IS NULL
+               AND gl.status <> 'ended'
+               AND (gl.user1_id = ? OR gl.user2_id = ?)
+           )
+         )
        )
      ORDER BY id ASC LIMIT 200"
 );
@@ -70,7 +83,7 @@ for ($i = 0; $i < $pollAttempts; $i++) {
     }
     $stmt->execute([$sessionId, $last]);
     $rows = $stmt->fetchAll();
-    $communityStmt->execute([$lastCommunity, $sessionId, $sessionId, (int)$me['id'], (int)$me['id'], $dmLeft, $dmRight]);
+    $communityStmt->execute([$lastCommunity, $sessionId, $sessionId, (int)$me['id'], (int)$me['id'], $dmLeft, $dmRight, $sessionId, $sessionId, (int)$me['id'], (int)$me['id']]);
     $communityRows = $communityStmt->fetchAll();
     if ($rows || $communityRows) {
         json_out([
