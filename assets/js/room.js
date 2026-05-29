@@ -2183,7 +2183,8 @@ async function checkLatency() {
       t: String(Date.now()),
     });
     const startedAt = performance.now();
-    const response = await fetch(appUrl('/api/latency.php?' + qs), { cache: 'no-store' });
+    qs.set('mode', 'latency');
+    const response = await fetch(appUrl('/api/heartbeat.php?' + qs), { cache: 'no-store' });
     if (!response.ok) throw new Error('Latency check failed.');
     await response.json();
     const elapsed = performance.now() - startedAt;
@@ -2829,8 +2830,8 @@ document.getElementById('logout-link')?.addEventListener('click', async e => {
 async function refreshPresence() {
   if (roomExitInProgress) return;
   try {
-    const qs = new URLSearchParams({ session_id: cfg.sessionId, join_token: cfg.myJoinToken });
-    const data = await fetch(appUrl('/api/presence.php?' + qs)).then(r => r.json());
+    const qs = new URLSearchParams({ session_id: cfg.sessionId, join_token: cfg.myJoinToken, mode: 'presence' });
+    const data = await fetch(appUrl('/api/heartbeat.php?' + qs)).then(r => r.json());
     (data.participants || []).forEach(p => {
       const existing = participants.get(p.id);
       if (existing) {

@@ -1300,6 +1300,14 @@ function require_user(): array {
     return $user;
 }
 
+function require_staff(array $roles = ['admin', 'developer']): array {
+    $user = require_user();
+    if (!in_array($user['role'] ?? 'user', $roles, true)) {
+        json_out(['error' => 'Admin required'], 403);
+    }
+    return $user;
+}
+
 function json_out(array $data, int $status = 200): never {
     http_response_code($status);
     header('Content-Type: application/json');

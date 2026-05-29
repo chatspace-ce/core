@@ -1,10 +1,7 @@
 <?php
 require_once __DIR__ . '/../includes/base.php';
 
-$me = require_user();
-if (!in_array($me['role'] ?? 'user', ['admin', 'developer'], true)) {
-    json_out(['error' => 'Admin required'], 403);
-}
+$me = require_staff();
 $pdo = db();
 $roles = ['admin', 'developer', 'guide', 'user'];
 
