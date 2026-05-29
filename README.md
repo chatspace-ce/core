@@ -70,6 +70,6 @@ AstroPlaces Chat proposed the `.agst` Gesture format adopted here as an open sta
 
 ## License
 
-ChatSpace Community Edition is free to self-host, use, modify, and share under the project license. It may not be resold, repackaged as a paid product, offered as a hosted/managed service, or used to build a commercial competing product.
+ChatSpace Community Edition is free and source-available under the Elastic License 2.0. You may self-host it, use it, modify it, and share it under the project license. It may not be resold, repackaged as a paid product, offered as a hosted/managed service, or used to build a commercial competing product.
 
 See [LICENSE.md](LICENSE.md).

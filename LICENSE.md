@@ -2,13 +2,13 @@
 
 Copyright 2026 Catie Clark, Mark Oscar Hughes, and contributors.
 
-Licensed under the Elastic License 2.0.
+Licensed under the Elastic License 2.0. ChatSpace Community Edition is source-available under EL2, not OSI-defined open source.
 
 URL: https://www.elastic.co/licensing/elastic-license
 
 ## Plain-English Community Edition Intent
 
-ChatSpace Community Edition is free as in free margaritas from someone at a bar: offered because someone wanted you to have a good time, not because there is a catch hiding under the little umbrella.
+ChatSpace Community Edition is source-available, and free as in free margaritas from someone at a bar: offered because someone wanted you to have a good time, not because there is a catch hiding under the little umbrella.
 
 You may use it, install it, modify it for your own community, and share copies of it under the terms below.
 
