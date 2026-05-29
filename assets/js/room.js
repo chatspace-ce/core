@@ -506,10 +506,6 @@ function applyWebcamState(participantId, enabled, webcamPath = null) {
   if (!next.webcam_enabled) detachParticipantVideo(participantId);
 }
 
-function applyWebcamPath(participantId, webcamPath) {
-  applyWebcamState(participantId, Boolean(webcamPath), webcamPath || null);
-}
-
 function messageAvatarUrl(msg, participant = null) {
   if (participant) return avatarUrl(participant);
   if (isUserBlocked(msg?.user_id)) return appUrl('/assets/images/baghead.png');
