@@ -767,12 +767,6 @@ function updateComposerPlaceholder() {
   else input.placeholder = `Message ${chatLabel(activeChat)}`;
 }
 
-function isLinkedWithMe(p) {
-  const me = participants.get(cfg.myParticipantId);
-  if (!me || !p) return false;
-  return me.linked_to === p.id || p.linked_to === cfg.myParticipantId;
-}
-
 function preloadImage(src) {
   return new Promise(resolve => {
     if (!src) {
