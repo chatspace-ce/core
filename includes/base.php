@@ -1293,6 +1293,12 @@ function current_user(): ?array {
     return $stmt->fetch() ?: null;
 }
 
+function authenticate_user(int $userId): void {
+    session_regenerate_id(true);
+    $_SESSION['user_id'] = $userId;
+    unset($_SESSION['_csrf_token']);
+}
+
 function require_user(): array {
     $user = current_user();
     if (!$user) {

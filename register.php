@@ -37,7 +37,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
             $stmt = $pdo->prepare('INSERT INTO users (email, password_hash, display_name, avatar_path) VALUES (?,?,?,?)');
             $stmt->execute([$email, password_hash($password, PASSWORD_DEFAULT), $name, $avatarPath]);
-            $_SESSION['user_id'] = (int)$pdo->lastInsertId();
+            authenticate_user((int)$pdo->lastInsertId());
             redirect_to('/lobby.php');
         } catch (RuntimeException $e) {
             $error = $e->getMessage();

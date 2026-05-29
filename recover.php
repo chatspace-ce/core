@@ -20,17 +20,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } elseif ($newPassword !== $confirmPassword) {
         $error = 'New password and confirmation do not match.';
     } else {
-        $stmt = $pdo->prepare('SELECT * FROM users WHERE LOWER(email) = LOWER(?) OR LOWER(display_name) = LOWER(?) LIMIT 1');
-        $stmt->execute([$login, $login]);
-        $user = $stmt->fetch();
-        if (!$user || empty($user['recovery_code_hash']) || !password_verify($code, (string)$user['recovery_code_hash'])) {
-            $error = 'Recovery details were not right.';
-        } elseif (password_verify($newPassword, (string)$user['password_hash'])) {
-            $error = 'New password must be different from the current password.';
+        $limit = auth_rate_limit_status($pdo, 'recovery', $login);
+        if (!$limit['allowed']) {
+            $error = $limit['message'];
         } else {
-            $stmt = $pdo->prepare('UPDATE users SET password_hash = ?, recovery_code_hash = NULL, recovery_code_suffix = NULL WHERE id = ?');
-            $stmt->execute([password_hash($newPassword, PASSWORD_DEFAULT), (int)$user['id']]);
-            $success = 'Password reset. Your old recovery code has been invalidated.';
+            $stmt = $pdo->prepare('SELECT * FROM users WHERE LOWER(email) = LOWER(?) OR LOWER(display_name) = LOWER(?) LIMIT 1');
+            $stmt->execute([$login, $login]);
+            $user = $stmt->fetch();
+            if (!$user || empty($user['recovery_code_hash']) || !password_verify($code, (string)$user['recovery_code_hash'])) {
+                auth_rate_record_failure($pdo, 'recovery', $login);
+                $afterFailure = auth_rate_limit_status($pdo, 'recovery', $login);
+                $error = !$afterFailure['allowed'] ? $afterFailure['message'] : 'Recovery details were not right.';
+            } elseif (password_verify($newPassword, (string)$user['password_hash'])) {
+                $error = 'New password must be different from the current password.';
+            } else {
+                $stmt = $pdo->prepare('UPDATE users SET password_hash = ?, recovery_code_hash = NULL, recovery_code_suffix = NULL WHERE id = ?');
+                $stmt->execute([password_hash($newPassword, PASSWORD_DEFAULT), (int)$user['id']]);
+                auth_rate_clear_identifier($pdo, 'recovery', $login);
+                $success = 'Password reset. Your old recovery code has been invalidated.';
+            }
         }
     }
 }

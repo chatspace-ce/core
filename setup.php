@@ -177,7 +177,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['step'] ?? '') === 'admin')
         $stmt->execute([$email, password_hash($password, PASSWORD_DEFAULT), $name, 'admin', $avatar]);
         set_app_setting($pdo, 'community_name', $communityName);
         if ($communityLogo !== '') set_app_setting($pdo, 'community_logo_path', $communityLogo);
-        $_SESSION['user_id'] = (int)$pdo->lastInsertId();
+        authenticate_user((int)$pdo->lastInsertId());
         redirect_to('/setup.php?done=1');
     } catch (Throwable $e) {
         $error = $e->getMessage();

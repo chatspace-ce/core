@@ -15,7 +15,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $user = $stmt->fetch();
         if ($user && password_verify($password, $user['password_hash'])) {
             auth_rate_clear_identifier($pdo, 'login', $login);
-            $_SESSION['user_id'] = (int)$user['id'];
+            authenticate_user((int)$user['id']);
             redirect_to('/lobby.php');
         }
         auth_rate_record_failure($pdo, 'login', $login);
