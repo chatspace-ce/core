@@ -13,10 +13,10 @@ if ($user) {
     $participants = $stmt->fetchAll();
     foreach ($participants as $participant) {
         $pdo->prepare('DELETE FROM voice_sessions WHERE participant_id = ?')->execute([(int)$participant['id']]);
-        $pdo->prepare('INSERT INTO voice_signals (session_id, from_participant_id, to_participant_id, type, data) VALUES (?,?,?,?,?)')
-            ->execute([(int)$participant['session_id'], (int)$participant['id'], 0, 'leave', json_encode(['participant_id' => (int)$participant['id']])]);
+        $pdo->prepare('INSERT INTO media_signals (session_id, media, from_participant_id, to_participant_id, type, data) VALUES (?,?,?,?,?,?)')
+            ->execute([(int)$participant['session_id'], 'voice', (int)$participant['id'], 0, 'leave', json_encode(['participant_id' => (int)$participant['id']])]);
     }
-    db()->prepare('UPDATE participants SET last_seen_at = NULL, webcam_path = NULL WHERE user_id = ?')->execute([(int)$user['id']]);
+    db()->prepare('UPDATE participants SET last_seen_at = NULL, webcam_path = NULL, webcam_enabled = 0 WHERE user_id = ?')->execute([(int)$user['id']]);
     db()->prepare('UPDATE users SET current_room_id = NULL, last_seen_at = CURRENT_TIMESTAMP WHERE id = ?')->execute([(int)$user['id']]);
 }
 session_destroy();

@@ -16,8 +16,8 @@ emit_event($pdo, $sessionId, 'voice', [
     'participant_id' => (int)$p['id'],
     'active' => false,
 ]);
-$pdo->prepare('INSERT INTO voice_signals (session_id, from_participant_id, to_participant_id, type, data) VALUES (?,?,?,?,?)')
-    ->execute([$sessionId, (int)$p['id'], 0, 'leave', json_encode(['participant_id' => (int)$p['id']])]);
+$pdo->prepare('INSERT INTO media_signals (session_id, media, from_participant_id, to_participant_id, type, data) VALUES (?,?,?,?,?,?)')
+    ->execute([$sessionId, 'voice', (int)$p['id'], 0, 'leave', json_encode(['participant_id' => (int)$p['id']])]);
 emit_event($pdo, $sessionId, 'presence_leave', [
     'participant_id' => (int)$p['id'],
     'display_name' => $p['display_name'],

@@ -3846,7 +3846,7 @@ ctxToggleWebcam.addEventListener('click', async () => {
   if (webcamStream) {
     webcamStream.getTracks().forEach(t => t.stop());
     webcamStream = null;
-    await apiPost('/api/webcam_frame.php', { action: 'off', session_id: cfg.sessionId, join_token: cfg.myJoinToken });
+    await apiPost('/api/media_signal.php', { action: 'webcam_off', media: 'webcam', session_id: cfg.sessionId, join_token: cfg.myJoinToken });
     detachParticipantVideo(cfg.myParticipantId);
     applyWebcamState(cfg.myParticipantId, false, null);
     renegotiateMediaPeers();
@@ -3864,7 +3864,7 @@ ctxToggleWebcam.addEventListener('click', async () => {
       renderParticipant(me);
       attachParticipantVideo(cfg.myParticipantId, webcamStream, true);
     }
-    await apiPost('/api/webcam_frame.php', { action: 'on', session_id: cfg.sessionId, join_token: cfg.myJoinToken });
+    await apiPost('/api/media_signal.php', { action: 'webcam_on', media: 'webcam', session_id: cfg.sessionId, join_token: cfg.myJoinToken });
     connectMediaPeers();
     restartVoicePoll(0);
   } catch (err) {
@@ -4629,8 +4629,9 @@ function syncVoiceStatus(force = false) {
   const signature = `${voiceMuted ? 1 : 0}:${voiceDeafened ? 1 : 0}:${voiceSpeaking ? 1 : 0}`;
   if (!force && signature === lastVoiceStatusSignature) return Promise.resolve();
   lastVoiceStatusSignature = signature;
-  return apiPost('/api/voice_signal.php', {
+  return apiPost('/api/media_signal.php', {
     action: 'status',
+    media: 'voice',
     session_id: cfg.sessionId,
     participant_id: cfg.myParticipantId,
     join_token: cfg.myJoinToken,
@@ -4866,7 +4867,7 @@ async function joinVoice() {
     voiceSpeaking = false;
     voiceJoined = true;
     updateVoiceToggleButton();
-    await apiPost('/api/voice_signal.php', { action: 'join', session_id: cfg.sessionId, participant_id: cfg.myParticipantId, join_token: cfg.myJoinToken });
+    await apiPost('/api/media_signal.php', { action: 'join', media: 'voice', session_id: cfg.sessionId, participant_id: cfg.myParticipantId, join_token: cfg.myJoinToken });
     await syncVoiceStatus(true);
     startVoiceAnalyser();
     document.querySelectorAll('audio[id^="voice-audio-"]').forEach(applyAudioOutput);
@@ -4900,7 +4901,7 @@ async function leaveVoice() {
     for (const pc of peers.values()) pc.close();
     peers.clear();
   }
-  await apiPost('/api/voice_signal.php', { action: 'leave', session_id: cfg.sessionId, participant_id: cfg.myParticipantId, join_token: cfg.myJoinToken }).catch(() => {});
+  await apiPost('/api/media_signal.php', { action: 'leave', media: 'voice', session_id: cfg.sessionId, participant_id: cfg.myParticipantId, join_token: cfg.myJoinToken }).catch(() => {});
   latestVoiceParticipants = latestVoiceParticipants.filter(v => Number(v.id) !== Number(cfg.myParticipantId));
   renderVoiceList(latestVoiceParticipants);
   restartVoicePoll(0);
@@ -4954,13 +4955,14 @@ function mediaSignalData(data) {
 }
 
 function sendSignal(toId, type, data) {
-  return apiPost('/api/voice_signal.php', { action: 'signal', session_id: cfg.sessionId, from_id: cfg.myParticipantId, to_id: toId, join_token: cfg.myJoinToken, type, data: mediaSignalData(data) });
+  const payload = mediaSignalData(data);
+  return apiPost('/api/media_signal.php', { action: 'signal', media: payload?.chatspace_media === 'video' ? 'webcam' : 'voice', session_id: cfg.sessionId, participant_id: cfg.myParticipantId, to_id: toId, join_token: cfg.myJoinToken, type, data: payload });
 }
 
 async function pollVoice() {
   try {
-    const qs = new URLSearchParams({ session_id: cfg.sessionId, participant_id: cfg.myParticipantId, after: lastVoiceSignalId, join_token: cfg.myJoinToken });
-    const data = await fetch(appUrl('/api/voice_signal.php?' + qs)).then(r => r.json());
+    const qs = new URLSearchParams({ media: 'all', session_id: cfg.sessionId, participant_id: cfg.myParticipantId, after: lastVoiceSignalId, join_token: cfg.myJoinToken });
+    const data = await fetch(appUrl('/api/media_signal.php?' + qs)).then(r => r.json());
     renderVoiceList(data.voice_participants || []);
     for (const sig of data.signals || []) {
       lastVoiceSignalId = Math.max(lastVoiceSignalId, sig.id);

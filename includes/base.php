@@ -373,9 +373,10 @@ function migrate(PDO $pdo): void {
             joined_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
         );
 
-        CREATE TABLE IF NOT EXISTS voice_signals (
+        CREATE TABLE IF NOT EXISTS media_signals (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             session_id INTEGER NOT NULL,
+            media TEXT NOT NULL DEFAULT 'voice',
             from_participant_id INTEGER NOT NULL,
             to_participant_id INTEGER NOT NULL,
             type TEXT NOT NULL,
