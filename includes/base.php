@@ -1188,14 +1188,72 @@ function json_out(array $data, int $status = 200): never {
     exit;
 }
 
+function request_raw_body(): string {
+    static $raw = null;
+    if ($raw !== null) return $raw;
+    $body = file_get_contents('php://input');
+    $raw = is_string($body) ? $body : '';
+    return $raw;
+}
+
 function input_json(): array {
-    $raw = file_get_contents('php://input');
+    $raw = request_raw_body();
     if ($raw !== false && trim($raw) !== '') {
         $data = json_decode($raw, true);
         if (is_array($data)) return $data;
     }
     return $_POST;
 }
+
+function csrf_token(): string {
+    if (empty($_SESSION['_csrf_token']) || !is_string($_SESSION['_csrf_token'])) {
+        $_SESSION['_csrf_token'] = bin2hex(random_bytes(32));
+    }
+    return $_SESSION['_csrf_token'];
+}
+
+function csrf_request_token(?array $jsonBody = null): string {
+    $header = (string)($_SERVER['HTTP_X_CSRF_TOKEN'] ?? '');
+    if ($header !== '') return $header;
+    $posted = (string)($_POST['_csrf'] ?? '');
+    if ($posted !== '') return $posted;
+    if ($jsonBody === null) {
+        $raw = request_raw_body();
+        $decoded = trim($raw) !== '' ? json_decode($raw, true) : null;
+        $jsonBody = is_array($decoded) ? $decoded : [];
+    }
+    return (string)($jsonBody['_csrf'] ?? '');
+}
+
+function csrf_verify(?array $jsonBody = null): bool {
+    $token = csrf_request_token($jsonBody);
+    return $token !== '' && hash_equals(csrf_token(), $token);
+}
+
+function csrf_failure_response(): never {
+    $path = parse_url($_SERVER['REQUEST_URI'] ?? '', PHP_URL_PATH) ?: '';
+    $accept = strtolower((string)($_SERVER['HTTP_ACCEPT'] ?? ''));
+    $contentType = strtolower((string)($_SERVER['CONTENT_TYPE'] ?? ''));
+    if (str_contains($path, '/api/') || str_contains($path, '/games/api/') || str_contains($accept, 'application/json') || str_contains($contentType, 'application/json')) {
+        json_out(['error' => 'Invalid or missing CSRF token. Refresh and try again.'], 419);
+    }
+    http_response_code(419);
+    header('Content-Type: text/plain; charset=utf-8');
+    echo 'Invalid or missing CSRF token. Refresh and try again.';
+    exit;
+}
+
+function csrf_protect_post(): void {
+    if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') return;
+    if (PHP_SAPI === 'cli') return;
+    if (!csrf_verify()) csrf_failure_response();
+}
+
+function csrf_input(): string {
+    return '<input type="hidden" name="_csrf" value="' . e(csrf_token()) . '">';
+}
+
+csrf_protect_post();
 
 function emit_event(PDO $pdo, int $sessionId, string $type, array $payload): void {
     $stmt = $pdo->prepare('INSERT INTO events (session_id, type, payload) VALUES (?,?,?)');

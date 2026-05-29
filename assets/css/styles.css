@@ -543,6 +543,12 @@ textarea:focus { border-color: rgba(124,106,247,.8); box-shadow: 0 0 0 3px rgba(
   cursor: pointer;
   font: inherit;
 }
+#lobby-menu .menu-form {
+  margin: 0;
+}
+#lobby-menu .menu-form button {
+  font: inherit;
+}
 #lobby-menu img {
   width: 18px;
   height: 18px;

@@ -55,7 +55,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   <title><?= e(branded_page_title('Sign Up', $pdo)) ?></title>
   <link rel="stylesheet" href="<?= e(app_url('/assets/css/styles.css')) ?>">
 </head>
-<body data-app-base="<?= e(app_base_path()) ?>">
+<body data-app-base="<?= e(app_base_path()) ?>" data-csrf="<?= e(csrf_token()) ?>">
 <main class="auth-shell">
   <section class="auth-card">
     <a class="auth-logo-link" href="<?= e(app_url('/about.html')) ?>" aria-label="About ChatSpace Community Edition">
@@ -63,6 +63,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     </a>
     <?php if ($error): ?><div class="error"><?= e($error) ?></div><?php endif; ?>
     <form class="form-grid" method="post" enctype="multipart/form-data">
+      <?= csrf_input() ?>
       <label>Email<input type="email" name="email" required autocomplete="email"></label>
       <label>Display name<input name="display_name" required autocomplete="nickname"></label>
       <label>Avatar<input type="file" name="avatar" accept="image/jpeg,image/png,image/gif,image/webp" required></label>

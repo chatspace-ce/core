@@ -230,6 +230,7 @@ const code   = params.get('code') || params.get('lobby') || 'demo';
 const player = parseInt(params.get('player')||'1',10);
 const user   = parseInt(params.get('user')||'1001',10);
 const gameId = parseInt(params.get('game')||'7',10);
+const csrf   = params.get('csrf') || '';
 const embedded = params.get('embedded') === '1';
 if (embedded) document.body.classList.add('embedded');
 
@@ -290,7 +291,8 @@ async function apiGet(p){
 async function apiPost(p,d){
   p = gameApiPath(p);
   const u=(p.startsWith('/'))?`${base}${p}`:`${p}`;
-  const r=await fetch(u,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(d)});
+  const payload = Object.assign({}, d || {}, { _csrf: csrf });
+  const r=await fetch(u,{method:'POST',headers:{'Content-Type':'application/json','X-CSRF-Token':csrf},body:JSON.stringify(payload)});
   if(!r.ok) throw new Error('net'); return r.json();
 }
 async function sendMove(type, extra={}){ try{ await apiPost(`/api/moves.php`, { lobby_id: code, user_id: user, payload: {type, ...extra} }); }catch{} }
@@ -536,10 +538,10 @@ async function pollState(){
 el('leave').onclick=leaveFlow; el('leave2').onclick=leaveFlow;
 function leaveFlow(){ sendMove('leave',{}).catch(()=>{}); try{ apiPost(`/api/lobby.php`, { action:'close', lobby_id: code, user_id: user }); }catch{} leaveToParent(); }
 function beaconLeave(){ try{
-  const payload={ lobby_id: code, user_id: user, payload:{type:'leave'} };
+  const payload={ lobby_id: code, user_id: user, payload:{type:'leave'}, _csrf: csrf };
   const b=new Blob([JSON.stringify(payload)],{type:'application/json'});
   navigator.sendBeacon?.(`${base}/games/api/moves.php`, b);
-  const b2=new Blob([JSON.stringify({ action:'close', lobby_id: code, user_id: user })],{type:'application/json'});
+  const b2=new Blob([JSON.stringify({ action:'close', lobby_id: code, user_id: user, _csrf: csrf })],{type:'application/json'});
   navigator.sendBeacon?.(`${base}/games/api/lobby.php`, b2);
 }catch{}}
 window.addEventListener('pagehide', beaconLeave);

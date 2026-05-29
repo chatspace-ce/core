@@ -227,6 +227,7 @@ const code   = params.get('code') || params.get('lobby') || 'demo';
 const player = Math.max(1, Math.min(2, parseInt(params.get('player')||'1',10)));
 const user   = parseInt(params.get('user')||'1001',10);
 const gameId = parseInt(params.get('game')||'5',10);
+const csrf   = params.get('csrf') || '';
 const embedded = params.get('embedded') === '1';
 if (embedded) document.body.classList.add('embedded');
 
@@ -270,8 +271,9 @@ async function apiGet(p){
 }
 async function apiPost(p,d){
   const u=(p.startsWith('/'))?`${base}${p}`:`${p}`;
+  const payload = Object.assign({}, d || {}, { _csrf: csrf });
   try{
-    const r=await fetch(u,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(d)});
+    const r=await fetch(u,{method:'POST',headers:{'Content-Type':'application/json','X-CSRF-Token':csrf},body:JSON.stringify(payload)});
     if(!r.ok){ const t=await r.text().catch(()=> ''); throw new Error(`POST ${u} failed ${r.status}: ${t}`); }
     return r.json();
   }catch(e){ console.warn('POST error', e); throw e; }

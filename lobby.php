@@ -12,12 +12,6 @@ unset($_SESSION['room_ejection_notice']);
 $lobbyError = null;
 cleanup_stale_participants($pdo);
 
-if (($_GET['leave'] ?? '') === '1') {
-    $pdo->prepare('UPDATE participants SET last_seen_at = NULL, webcam_path = NULL WHERE user_id = ?')->execute([(int)$user['id']]);
-    $pdo->prepare('UPDATE users SET current_room_id = NULL, last_seen_at = CURRENT_TIMESTAMP WHERE id = ?')->execute([(int)$user['id']]);
-    redirect_to('/lobby.php');
-}
-
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $name = trim($_POST['name'] ?? '');
     if ($name !== '') {
@@ -71,7 +65,7 @@ $rooms = $roomsStmt->fetchAll();
   <title><?= e(branded_page_title('Lobby', $pdo)) ?></title>
   <link rel="stylesheet" href="<?= e(app_url('/assets/css/styles.css')) ?>">
 </head>
-<body data-app-base="<?= e(app_base_path()) ?>">
+<body data-app-base="<?= e(app_base_path()) ?>" data-csrf="<?= e(csrf_token()) ?>">
 <main class="picker-shell">
   <section class="picker-main">
     <div class="topbar">
@@ -95,11 +89,15 @@ $rooms = $roomsStmt->fetchAll();
         <?php endif; ?>
         <button id="password-open" type="button"><img src="<?= e(app_url('/assets/images/secure.png')) ?>" alt="">Update Password</button>
         <button id="recovery-open" type="button"><img src="<?= e(app_url('/assets/images/account-recovery.png')) ?>" alt="">Account Recovery</button>
-        <a href="<?= e(app_url('/logout.php')) ?>"><img src="<?= e(app_url('/assets/images/logout.png')) ?>" alt="">Log Out</a>
+        <form class="menu-form" method="post" action="<?= e(app_url('/logout.php')) ?>">
+          <?= csrf_input() ?>
+          <button type="submit"><img src="<?= e(app_url('/assets/images/logout.png')) ?>" alt="">Log Out</button>
+        </form>
       </div>
     </div>
     <div class="room-grid" id="room-grid">
       <form class="room-card create-room-tile" id="create-room-form" method="post" enctype="multipart/form-data">
+        <?= csrf_input() ?>
         <div class="create-room-tile-inner">
           <h2>Create Room</h2>
           <?php if ($lobbyError): ?><div class="form-error"><?= e($lobbyError) ?></div><?php endif; ?>
@@ -154,6 +152,7 @@ $rooms = $roomsStmt->fetchAll();
 </main>
 <div class="modal" id="lobby-room-edit-modal">
   <form class="modal-box" id="lobby-room-edit-form" enctype="multipart/form-data">
+    <?= csrf_input() ?>
     <div class="modal-head">
       <strong>Edit Room</strong>
       <button class="window-close" id="lobby-room-edit-close" type="button" aria-label="Close">×</button>
@@ -218,6 +217,7 @@ $rooms = $roomsStmt->fetchAll();
 <?php endif; ?>
 <div class="modal" id="password-modal">
   <form class="modal-box password-box" id="password-form">
+    <?= csrf_input() ?>
     <div class="modal-head">
       <strong>Update Password</strong>
       <button class="window-close" id="password-close" type="button" aria-label="Close">×</button>
@@ -321,6 +321,7 @@ $rooms = $roomsStmt->fetchAll();
           <div class="admin-section-sub">Create accounts, reset passwords, and set account roles.</div>
           <div class="admin-panel">
             <form class="admin-create" id="admin-create">
+              <?= csrf_input() ?>
               <input name="display_name" placeholder="Display name" required>
               <input name="email" type="email" placeholder="Email" required>
               <input name="password" type="password" placeholder="Password" required>
@@ -344,6 +345,7 @@ $rooms = $roomsStmt->fetchAll();
           <div class="admin-section-sub">Tune chat speed, avatar movement, and media upload boundaries.</div>
           <div class="admin-panel">
             <form class="admin-settings" id="admin-settings">
+              <?= csrf_input() ?>
               <div class="admin-settings-grid">
                 <section class="admin-settings-group">
                   <h3>Chat & Presence</h3>
@@ -399,6 +401,7 @@ $rooms = $roomsStmt->fetchAll();
             <div class="admin-actions">
               <a class="btn btn-primary" href="<?= e(app_url('/api/admin_database.php?action=download')) ?>">Full Backup</a>
               <form id="admin-db-export" class="admin-export-options">
+                <?= csrf_input() ?>
                 <div class="admin-import-note">
                   Select the portable data map to export. Files used by selected records are included in the JSON bundle.
                 </div>
@@ -409,6 +412,7 @@ $rooms = $roomsStmt->fetchAll();
                 <button class="btn btn-primary" type="submit">Export Selected</button>
               </form>
               <form id="admin-db-restore" class="admin-restore">
+                <?= csrf_input() ?>
                 <div class="admin-import-note">
                   Imports auto-detect full SQLite backups or portable JSON bundles. Portable imports apply whichever sections are present and match users by email.
                 </div>
@@ -432,6 +436,7 @@ $rooms = $roomsStmt->fetchAll();
           <div class="admin-section-sub">Add custom pairing icons for linked users. Built-in icons are protected, custom icons can be renamed or removed.</div>
           <div class="admin-panel">
             <form class="admin-link-icon-create" id="admin-link-icon-create" enctype="multipart/form-data">
+              <?= csrf_input() ?>
               <input name="label" placeholder="Icon label" required>
               <label class="file-picker">
                 <input name="icon" type="file" accept="image/png,image/webp,image/gif,image/jpeg" required>

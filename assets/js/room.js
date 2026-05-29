@@ -1,6 +1,7 @@
 'use strict';
 
 const APP_BASE = document.body?.dataset.appBase || '';
+const CSRF_TOKEN = document.body?.dataset.csrf || '';
 
 function appUrl(path) {
   if (!path) return APP_BASE || '/';
@@ -176,7 +177,8 @@ const EMOJI_OPTIONS = [
 ];
 
 function apiPost(url, body) {
-  return fetch(appUrl(url), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+  const payload = Object.assign({}, body || {}, { _csrf: CSRF_TOKEN });
+  return fetch(appUrl(url), { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': CSRF_TOKEN }, body: JSON.stringify(payload) })
     .then(async r => {
       const data = await r.json().catch(() => ({}));
       if (!r.ok || data.error) throw new Error(data.error || 'Request failed');
@@ -185,7 +187,8 @@ function apiPost(url, body) {
 }
 
 function apiUpload(url, formData) {
-  return fetch(appUrl(url), { method: 'POST', body: formData })
+  if (formData && !formData.has('_csrf')) formData.append('_csrf', CSRF_TOKEN);
+  return fetch(appUrl(url), { method: 'POST', headers: { 'X-CSRF-Token': CSRF_TOKEN }, body: formData })
     .then(async r => {
       const data = await r.json().catch(() => ({}));
       if (!r.ok || data.error) throw new Error(data.error || 'Upload failed');
@@ -260,6 +263,7 @@ function videoThumbnailBlob(file) {
 function apiUploadWithProgress(url, formData, progressEl, submitBtn = null) {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
+    if (formData && !formData.has('_csrf')) formData.append('_csrf', CSRF_TOKEN);
     const previousDisabled = submitBtn ? submitBtn.disabled : false;
     if (submitBtn) submitBtn.disabled = true;
     setUploadProgress(progressEl, 0, 'Uploading...');
@@ -301,6 +305,7 @@ function apiUploadWithProgress(url, formData, progressEl, submitBtn = null) {
     });
 
     xhr.open('POST', appUrl(url));
+    xhr.setRequestHeader('X-CSRF-Token', CSRF_TOKEN);
     xhr.send(formData);
   });
 }
@@ -2573,11 +2578,12 @@ function markLeavingRoom() {
   const params = new URLSearchParams();
   params.set('session_id', cfg.sessionId);
   params.set('join_token', cfg.myJoinToken);
+  params.set('_csrf', CSRF_TOKEN);
   const blob = new Blob([params.toString()], { type: 'application/x-www-form-urlencoded' });
   if (!navigator.sendBeacon || !navigator.sendBeacon(appUrl('/api/leave_room.php'), blob)) {
     fetch(appUrl('/api/leave_room.php'), {
       method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-CSRF-Token': CSRF_TOKEN },
       body: params,
       keepalive: true,
     }).catch(() => {});
@@ -2796,13 +2802,13 @@ function leaveRoomNow() {
   if (!cfg) return Promise.resolve();
   return fetch(appUrl('/api/leave_room.php'), {
     method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({ session_id: cfg.sessionId, join_token: cfg.myJoinToken }),
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-CSRF-Token': CSRF_TOKEN },
+    body: new URLSearchParams({ session_id: cfg.sessionId, join_token: cfg.myJoinToken, _csrf: CSRF_TOKEN }),
     keepalive: true,
   }).catch(() => {});
 }
 
-async function leaveRoomWithLocalExit(href) {
+async function leaveRoomWithLocalExit(href, afterLeave) {
   if (roomExitInProgress) return;
   roomExitInProgress = true;
   closeRoomMenu();
@@ -2816,17 +2822,23 @@ async function leaveRoomWithLocalExit(href) {
     await removeParticipant(me.id, { keepRecord: true });
   }
   await leaveRoomNow();
+  if (typeof afterLeave === 'function') {
+    afterLeave();
+    return;
+  }
   window.location.href = href;
 }
 
 document.getElementById('rooms-link')?.addEventListener('click', async e => {
   e.preventDefault();
-  const href = e.currentTarget.href;
+  const href = e.currentTarget.dataset.href || e.currentTarget.href || appUrl('/lobby.php');
   await leaveRoomWithLocalExit(href);
 });
 document.getElementById('logout-link')?.addEventListener('click', async e => {
   e.preventDefault();
-  await leaveRoomWithLocalExit(e.currentTarget.href);
+  await leaveRoomWithLocalExit(null, () => {
+    document.getElementById('logout-form')?.requestSubmit();
+  });
 });
 
 async function refreshPresence() {
@@ -3322,6 +3334,7 @@ async function uploadGesture(file) {
   const formData = new FormData();
   formData.append('session_id', cfg.sessionId);
   formData.append('join_token', cfg.myJoinToken);
+  formData.append('_csrf', CSRF_TOKEN);
   formData.append('gesture', file);
   await new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
@@ -3336,6 +3349,7 @@ async function uploadGesture(file) {
     });
     xhr.addEventListener('error', () => reject(new Error('Gesture upload failed.')));
     xhr.open('POST', appUrl('/api/gestures.php'));
+    xhr.setRequestHeader('X-CSRF-Token', CSRF_TOKEN);
     xhr.send(formData);
   });
   if (bar) bar.style.width = '100%';
@@ -3812,6 +3826,7 @@ avatarFileInput.addEventListener('change', async () => {
   const fd = new FormData();
   fd.append('session_id', cfg.sessionId);
   fd.append('join_token', cfg.myJoinToken);
+  fd.append('_csrf', CSRF_TOKEN);
   try {
     if (window.ChatSpaceAvatar) preparedFile = await window.ChatSpaceAvatar.prepareAvatarFile(file);
     previewUrl = URL.createObjectURL(preparedFile);
@@ -3824,7 +3839,7 @@ avatarFileInput.addEventListener('change', async () => {
       renderParticipant(me);
     }
     fd.append('avatar', preparedFile);
-    const resp = await fetch(appUrl('/api/avatar.php'), { method: 'POST', body: fd });
+    const resp = await fetch(appUrl('/api/avatar.php'), { method: 'POST', headers: { 'X-CSRF-Token': CSRF_TOKEN }, body: fd });
     const data = await resp.json();
     if (!resp.ok || data.error) throw new Error(data.error || 'Avatar upload failed');
     const updated = participants.get(cfg.myParticipantId);
@@ -3990,6 +4005,7 @@ function gameFrameUrl(game) {
     user: String(cfg.myParticipantId),
     game: String(meta.gameId || 0),
     embedded: '1',
+    csrf: CSRF_TOKEN,
   });
   return appUrl(`/games/${meta.path}/${meta.entry}?${qs}`);
 }

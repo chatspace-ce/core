@@ -197,7 +197,7 @@ $requiredMissing = array_filter($requirements, fn($r) => $r['required'] && !$r['
   <title>Setup - ChatSpace CE</title>
   <link rel="stylesheet" href="<?= e(app_url('/assets/css/styles.css')) ?>">
 </head>
-<body data-app-base="<?= e(app_base_path()) ?>">
+<body data-app-base="<?= e(app_base_path()) ?>" data-csrf="<?= e(csrf_token()) ?>">
 <main class="setup-shell">
   <section class="setup-card">
     <div class="app-title setup-brand setup-brand-full">
@@ -227,6 +227,7 @@ $requiredMissing = array_filter($requirements, fn($r) => $r['required'] && !$r['
         <?php endforeach; ?>
       </div>
       <form method="post" class="setup-form" novalidate>
+        <?= csrf_input() ?>
         <input type="hidden" name="step" value="database">
         <div class="setup-choice-grid">
           <label class="setup-choice">
@@ -263,6 +264,7 @@ $requiredMissing = array_filter($requirements, fn($r) => $r['required'] && !$r['
       <h1>Create Admin User</h1>
       <p class="subtitle">This account controls the community, rooms, users, and moderation tools.</p>
       <form method="post" class="setup-form" enctype="multipart/form-data" novalidate>
+        <?= csrf_input() ?>
         <input type="hidden" name="step" value="admin">
         <label>Display name<input name="display_name" required></label>
         <label>Avatar image

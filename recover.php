@@ -43,7 +43,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   <title><?= e(branded_page_title('Recover Account', $pdo)) ?></title>
   <link rel="stylesheet" href="<?= e(app_url('/assets/css/styles.css')) ?>">
 </head>
-<body data-app-base="<?= e(app_base_path()) ?>">
+<body data-app-base="<?= e(app_base_path()) ?>" data-csrf="<?= e(csrf_token()) ?>">
 <main class="auth-shell">
   <section class="auth-card">
     <a class="auth-logo-link" href="<?= e(app_url('/about.html')) ?>" aria-label="About ChatSpace Community Edition">
@@ -53,6 +53,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <?php if ($error): ?><div class="error"><?= e($error) ?></div><?php endif; ?>
     <?php if ($success): ?><div class="success"><?= e($success) ?></div><?php endif; ?>
     <form class="form-grid" method="post">
+      <?= csrf_input() ?>
       <label>Email or username<input name="login" required autocomplete="username" value="<?= e($_POST['login'] ?? '') ?>"></label>
       <label>Recovery Code<input name="recovery_code" required autocomplete="off" placeholder="kmsf-jjvz-xsfl-revv" value="<?= e($_POST['recovery_code'] ?? '') ?>"></label>
       <label>New password<input type="password" name="new_password" required minlength="8" autocomplete="new-password"></label>

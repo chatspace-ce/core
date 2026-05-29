@@ -62,7 +62,7 @@ $linkIconCatalog = link_icon_catalog($pdo);
   <title><?= e($room['name']) ?> - ChatSpace CE</title>
   <link rel="stylesheet" href="<?= e(app_url('/assets/css/styles.css')) ?>">
 </head>
-<body data-room-id="<?= e($room['public_id']) ?>" data-app-base="<?= e(app_base_path()) ?>">
+<body data-room-id="<?= e($room['public_id']) ?>" data-app-base="<?= e(app_base_path()) ?>" data-csrf="<?= e(csrf_token()) ?>">
 <div class="room-layout">
   <div class="version-banner" id="version-banner" hidden>
     <span id="version-banner-text">A new ChatSpace version is available.</span>
@@ -213,6 +213,7 @@ $linkIconCatalog = link_icon_catalog($pdo);
 </div>
 <div class="modal" id="room-edit-modal">
   <form class="modal-box" id="room-edit-form" enctype="multipart/form-data">
+    <?= csrf_input() ?>
     <div class="modal-head">
       <strong>Edit Room</strong>
       <button class="window-close" id="room-edit-close" type="button" aria-label="Close">×</button>
@@ -451,9 +452,12 @@ $linkIconCatalog = link_icon_catalog($pdo);
 </div>
 <div id="room-menu">
   <button id="lock-session-btn" type="button"><img src="<?= e(app_url('/assets/images/secure.png')) ?>" alt="">Lock Session</button>
-  <a id="rooms-link" href="<?= e(app_url('/lobby.php?leave=1')) ?>"><img src="<?= e(app_url('/assets/images/lobby.png')) ?>" alt="">Lobby</a>
-  <a id="logout-link" href="<?= e(app_url('/logout.php')) ?>"><img src="<?= e(app_url('/assets/images/logout.png')) ?>" alt="">Log Out</a>
+  <button id="rooms-link" type="button" data-href="<?= e(app_url('/lobby.php')) ?>"><img src="<?= e(app_url('/assets/images/lobby.png')) ?>" alt="">Lobby</button>
+  <button id="logout-link" type="button"><img src="<?= e(app_url('/assets/images/logout.png')) ?>" alt="">Log Out</button>
 </div>
+<form id="logout-form" method="post" action="<?= e(app_url('/logout.php')) ?>" hidden>
+  <?= csrf_input() ?>
+</form>
 <div class="session-lock" id="session-lock" aria-hidden="true">
   <form class="session-lock-box" id="session-lock-form">
     <div class="session-lock-brand">

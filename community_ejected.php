@@ -31,7 +31,10 @@ $expires = $ejection['expires_at'] ?? null;
     <?php if (!empty($ejection['reason'])): ?>
       <p class="minor"><?= e($ejection['reason']) ?></p>
     <?php endif; ?>
-    <a class="btn" href="<?= e(app_url('/logout.php')) ?>" style="width:100%;margin-top:14px;">Log Out</a>
+    <form method="post" action="<?= e(app_url('/logout.php')) ?>">
+      <?= csrf_input() ?>
+      <button class="btn" type="submit" style="width:100%;margin-top:14px;">Log Out</button>
+    </form>
   </main>
   <script src="<?= e(app_url('/assets/js/community_ejected.js')) ?>"></script>
 </body>

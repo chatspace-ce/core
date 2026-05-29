@@ -1,6 +1,7 @@
 'use strict';
 
 const APP_BASE = document.body?.dataset.appBase || '';
+const CSRF_TOKEN = document.body?.dataset.csrf || '';
 
 function appUrl(path) {
   if (!path) return APP_BASE || '/';
@@ -224,10 +225,11 @@ function setLobbyRoomPreview(path, mime = '') {
 }
 
 async function lobbyApiPost(url, body) {
+  const payload = Object.assign({}, body || {}, { _csrf: CSRF_TOKEN });
   const resp = await fetch(appUrl(url), {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
+    headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': CSRF_TOKEN },
+    body: JSON.stringify(payload),
   });
   const data = await resp.json().catch(() => ({}));
   if (!resp.ok || data.error) throw new Error(data.error || 'Request failed');
@@ -300,6 +302,7 @@ function videoThumbnailBlob(file) {
 
 async function roomBackgroundFormData(form) {
   const fd = new FormData(form);
+  if (!fd.has('_csrf')) fd.append('_csrf', CSRF_TOKEN);
   const file = fd.get('background');
   const thumb = await videoThumbnailBlob(file);
   if (thumb) fd.append('background_thumb', thumb, 'background-thumb.jpg');
@@ -352,6 +355,7 @@ function uploadFormWithProgress(form, url, progressEl) {
     });
 
     xhr.open('POST', url);
+    xhr.setRequestHeader('X-CSRF-Token', CSRF_TOKEN);
     xhr.send(formData);
   });
 }
@@ -393,8 +397,11 @@ function uploadPlainFormWithProgress(form, url, progressEl) {
       reject(new Error('Import canceled.'));
     });
 
+    const formData = new FormData(form);
+    if (!formData.has('_csrf')) formData.append('_csrf', CSRF_TOKEN);
     xhr.open('POST', url);
-    xhr.send(new FormData(form));
+    xhr.setRequestHeader('X-CSRF-Token', CSRF_TOKEN);
+    xhr.send(formData);
   });
 }
 
@@ -478,7 +485,8 @@ document.getElementById('lobby-room-delete-confirm')?.addEventListener('click', 
   try {
     const fd = new FormData();
     fd.append('room_public_id', lobbyRoomEditId.value);
-    const resp = await fetch(appUrl('/api/room_delete.php'), { method: 'POST', body: fd });
+    fd.append('_csrf', CSRF_TOKEN);
+    const resp = await fetch(appUrl('/api/room_delete.php'), { method: 'POST', headers: { 'X-CSRF-Token': CSRF_TOKEN }, body: fd });
     const data = await resp.json();
     if (!resp.ok || data.error) throw new Error(data.error || 'Room delete failed');
     window.location.href = appUrl('/lobby.php?room_deleted=1');
@@ -687,10 +695,11 @@ document.addEventListener('click', e => {
 });
 
 async function adminRequest(body) {
+  const payload = Object.assign({}, body || {}, { _csrf: CSRF_TOKEN });
   const resp = await fetch(appUrl('/api/admin_users.php'), {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
+    headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': CSRF_TOKEN },
+    body: JSON.stringify(payload),
   });
   const data = await resp.json().catch(() => ({}));
   if (!resp.ok || data.error) throw new Error(data.error || 'Admin request failed');
@@ -698,10 +707,11 @@ async function adminRequest(body) {
 }
 
 async function adminSystemRequest(body) {
+  const payload = Object.assign({}, body || {}, { _csrf: CSRF_TOKEN });
   const resp = await fetch(appUrl('/api/admin_system.php'), {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
+    headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': CSRF_TOKEN },
+    body: JSON.stringify(payload),
   });
   const data = await resp.json().catch(() => ({}));
   if (!resp.ok || data.error) throw new Error(data.error || 'Admin request failed');
@@ -709,7 +719,8 @@ async function adminSystemRequest(body) {
 }
 
 async function adminLinkIconRequest(formData) {
-  const resp = await fetch(appUrl('/api/admin_link_icons.php'), { method: 'POST', body: formData });
+  if (formData && !formData.has('_csrf')) formData.append('_csrf', CSRF_TOKEN);
+  const resp = await fetch(appUrl('/api/admin_link_icons.php'), { method: 'POST', headers: { 'X-CSRF-Token': CSRF_TOKEN }, body: formData });
   const data = await resp.json().catch(() => ({}));
   if (!resp.ok || data.error) throw new Error(data.error || 'Link icon request failed');
   return data;

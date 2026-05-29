@@ -1,5 +1,10 @@
 <?php
 require_once __DIR__ . '/includes/base.php';
+
+if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
+    redirect_to('/login.php');
+}
+
 $user = current_user();
 if ($user) {
     $pdo = db();

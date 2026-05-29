@@ -5,6 +5,7 @@
   let player = Math.max(1, Math.min(2, parseInt(params.get('player'), 10) || 1)); // 1=Red, 2=White
   const user   = parseInt(params.get('user'), 10) || 1001;
   const gameId = parseInt(params.get('game'), 10) || 0;
+  const csrf = params.get('csrf') || '';
 
   const url = new URL(window.location.href);
   const path = url.pathname;
@@ -192,10 +193,11 @@
     return res.ok ? res.json() : {};
   }
   async function apiPost(path,data){
+    const payload = Object.assign({}, data || {}, { _csrf: csrf });
     const res = await fetch(path,{
       method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body: JSON.stringify(data)
+      headers:{'Content-Type':'application/json','X-CSRF-Token':csrf},
+      body: JSON.stringify(payload)
     });
     if (!res.ok) throw new Error('network');
     return res.json();

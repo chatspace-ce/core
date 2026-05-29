@@ -6,6 +6,7 @@
     let youColor = (playerN === 1) ? 'w' : 'b';
     const user     = parseInt(params.get('user'), 10) || 1001;
     const gameId   = parseInt(params.get('game'), 10) || 0;
+    const csrf = params.get('csrf') || '';
     const url = new URL(window.location.href);
     const path = url.pathname; 
 
@@ -75,10 +76,11 @@
       return res.ok ? res.json() : {};
     }
     async function apiPost(path,data){
+      const payload = Object.assign({}, data || {}, { _csrf: csrf });
       const res = await fetch(path,{
         method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body: JSON.stringify(data),
+        headers:{'Content-Type':'application/json','X-CSRF-Token':csrf},
+        body: JSON.stringify(payload),
         cache: 'no-store'
       });
       if (!res.ok) throw new Error('network');
