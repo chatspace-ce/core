@@ -67,7 +67,7 @@ Apache and LiteSpeed installs include `.htaccess` files that:
 - Disable directory indexes
 - Disable PHP execution in `assets/uploads/`
 - Block executable or browser-executable uploads such as PHP, SVG, HTML, JS, and CSS
-- Send baseline security headers including `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`, `Permissions-Policy`, and a same-origin Content Security Policy
+- Send baseline security headers including `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`, `Permissions-Policy`, and a Content Security Policy that keeps the app same-origin while allowing configured GIF provider media
 
 For NGINX, add equivalent rules to the server block:
 
@@ -76,7 +76,7 @@ add_header X-Content-Type-Options "nosniff" always;
 add_header X-Frame-Options "SAMEORIGIN" always;
 add_header Referrer-Policy "strict-origin-when-cross-origin" always;
 add_header Permissions-Policy "camera=(self), microphone=(self), geolocation=(), payment=(), usb=()" always;
-add_header Content-Security-Policy "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'self'; form-action 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' data: blob:; font-src 'self'; connect-src 'self'; frame-src 'self'" always;
+add_header Content-Security-Policy "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'self'; form-action 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.giphy.com https://*.tenor.com https://tenor.googleapis.com; media-src 'self' data: blob: https://*.giphy.com https://*.tenor.com https://tenor.googleapis.com; font-src 'self'; connect-src 'self' https://*.giphy.com https://*.tenor.com https://tenor.googleapis.com; frame-src 'self'" always;
 
 location ^~ /db/ { deny all; }
 location ^~ /includes/ { deny all; }
