@@ -1998,12 +1998,188 @@ function renderRoomEffectsModal() {
   }
 }
 
+function waitForVideoEvent(video, eventName, timeoutMs = 3000) {
+  return new Promise((resolve, reject) => {
+    if (eventName === 'loadedmetadata' && Number.isFinite(video.duration) && video.duration > 0) {
+      resolve();
+      return;
+    }
+    const cleanup = () => {
+      clearTimeout(timer);
+      video.removeEventListener(eventName, onEvent);
+      video.removeEventListener('error', onError);
+    };
+    const onEvent = () => {
+      cleanup();
+      resolve();
+    };
+    const onError = () => {
+      cleanup();
+      reject(new Error('Video could not be inspected.'));
+    };
+    const timer = window.setTimeout(() => {
+      cleanup();
+      reject(new Error('Video inspection timed out.'));
+    }, timeoutMs);
+    video.addEventListener(eventName, onEvent, { once: true });
+    video.addEventListener('error', onError, { once: true });
+  });
+}
+
+function seekVideo(video, time, timeoutMs = 2500) {
+  return new Promise((resolve, reject) => {
+    const cleanup = () => {
+      clearTimeout(timer);
+      video.removeEventListener('seeked', onSeeked);
+      video.removeEventListener('error', onError);
+    };
+    const onSeeked = () => {
+      cleanup();
+      resolve();
+    };
+    const onError = () => {
+      cleanup();
+      reject(new Error('Video seek failed.'));
+    };
+    const timer = window.setTimeout(() => {
+      cleanup();
+      reject(new Error('Video seek timed out.'));
+    }, timeoutMs);
+    video.addEventListener('seeked', onSeeked, { once: true });
+    video.addEventListener('error', onError, { once: true });
+    video.currentTime = Math.max(0, time);
+  });
+}
+
+function isBlackVideoFrame(video, canvas) {
+  if (!video.videoWidth || !video.videoHeight) return false;
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  if (!ctx) return false;
+  ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+  const pixels = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+  let luminance = 0;
+  let brightPixels = 0;
+  const total = pixels.length / 4;
+  for (let i = 0; i < pixels.length; i += 4) {
+    const luma = (pixels[i] * .2126) + (pixels[i + 1] * .7152) + (pixels[i + 2] * .0722);
+    luminance += luma;
+    if (luma > 35) brightPixels++;
+  }
+  return (luminance / total) < 18 && (brightPixels / total) < .04;
+}
+
+async function inspectVideoLoopEdges(src) {
+  const probe = document.createElement('video');
+  probe.muted = true;
+  probe.playsInline = true;
+  probe.preload = 'auto';
+  probe.src = src;
+  try {
+    await waitForVideoEvent(probe, 'loadedmetadata');
+    const duration = Number(probe.duration || 0);
+    if (!Number.isFinite(duration) || duration <= .35) return { start: 0, end: duration || null };
+    const canvas = document.createElement('canvas');
+    canvas.width = 40;
+    canvas.height = 24;
+    const edgeWindow = Math.min(1.5, Math.max(.25, duration / 5));
+    const step = .08;
+    let start = 0;
+    let end = duration;
+
+    await seekVideo(probe, Math.min(.04, duration / 4));
+    if (isBlackVideoFrame(probe, canvas)) {
+      for (let t = step; t <= edgeWindow; t += step) {
+        await seekVideo(probe, Math.min(t, duration - .08));
+        if (!isBlackVideoFrame(probe, canvas)) {
+          start = Math.min(t + .015, duration - .16);
+          break;
+        }
+      }
+    }
+
+    await seekVideo(probe, Math.max(start + .12, duration - .06));
+    if (isBlackVideoFrame(probe, canvas)) {
+      for (let t = duration - step; t >= Math.max(start + .18, duration - edgeWindow); t -= step) {
+        await seekVideo(probe, t);
+        if (!isBlackVideoFrame(probe, canvas)) {
+          end = Math.max(start + .18, t - .015);
+          break;
+        }
+      }
+    }
+
+    return { start, end };
+  } finally {
+    probe.removeAttribute('src');
+    probe.load();
+  }
+}
+
+function attachSmartBackgroundVideo(video) {
+  if (!video || video.dataset.smartLoopAttached === '1') return;
+  video.dataset.smartLoopAttached = '1';
+  video.loop = false;
+  video.preload = 'auto';
+  const source = video.querySelector('source')?.getAttribute('src') || video.getAttribute('src') || '';
+  const src = source ? mediaUrl(source) : '';
+  const state = { start: 0, end: null, ready: false, seeking: false, raf: 0, destroyed: false };
+
+  const loopToStart = () => {
+    if (!state.ready || state.seeking || state.destroyed || !video.isConnected) return;
+    state.seeking = true;
+    video.currentTime = state.start;
+    video.play?.().catch(() => {});
+    window.setTimeout(() => { state.seeking = false; }, 90);
+  };
+
+  const tick = () => {
+    if (state.destroyed || !video.isConnected) {
+      cancelAnimationFrame(state.raf);
+      return;
+    }
+    if (state.ready && state.end && !video.paused && !state.seeking && video.currentTime >= state.end) {
+      loopToStart();
+    }
+    state.raf = requestAnimationFrame(tick);
+  };
+
+  video.addEventListener('ended', loopToStart);
+  video.addEventListener('loadedmetadata', () => {
+    if (state.start > 0 && video.currentTime < state.start) {
+      video.currentTime = state.start;
+    }
+  });
+
+  if (src) {
+    inspectVideoLoopEdges(src).then(edges => {
+      state.start = Math.max(0, Number(edges.start || 0));
+      state.end = Number(edges.end || 0) || null;
+      state.ready = true;
+      if (state.start > 0 && video.currentTime < state.start) video.currentTime = state.start;
+      video.play?.().catch(() => {});
+    }).catch(() => {
+      state.ready = true;
+    });
+  } else {
+    state.ready = true;
+  }
+  state.raf = requestAnimationFrame(tick);
+  video.addEventListener('emptied', () => {
+    state.destroyed = true;
+    cancelAnimationFrame(state.raf);
+  }, { once: true });
+}
+
+function initRoomBackgroundVideos(root = document) {
+  root.querySelectorAll?.('.room-bg video').forEach(attachSmartBackgroundVideo);
+}
+
 function backgroundMarkup(path, mime) {
   const safePath = esc(mediaUrl(path || ''));
   const safeMime = esc(mime || '');
   if (!safePath) return '';
   if (String(mime || '').startsWith('video/')) {
-    return `<video autoplay loop muted playsinline><source src="${safePath}" type="${safeMime}"></video>`;
+    return `<video class="smart-bg-video" autoplay muted playsinline preload="auto"><source src="${safePath}" type="${safeMime}"></video>`;
   }
   return '';
 }
@@ -2034,6 +2210,7 @@ function applyRoomBackground(path, mime) {
   if (path && !String(mime || '').startsWith('video/')) next.style.backgroundImage = `url("${mediaUrl(path)}")`;
   next.innerHTML = backgroundMarkup(path, mime);
   roomStage.appendChild(next);
+  initRoomBackgroundVideos(next);
   requestAnimationFrame(() => next.classList.add('show'));
   setTimeout(() => {
     if (current) current.remove();
@@ -5178,6 +5355,7 @@ window.addEventListener('resize', () => {
     if (target) snapLinkedPair(p, target, false);
   });
 });
+initRoomBackgroundVideos(document);
 bootRoom().catch(err => {
   console.error(err);
   messagesEl.innerHTML = `<div class="error">${esc(err.message || 'Room failed to load.')}</div>`;
