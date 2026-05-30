@@ -53,6 +53,9 @@ const gestureTray = document.getElementById('gesture-tray');
 const gesturePageLabel = document.getElementById('gesture-page-label');
 const gesturePrev = document.getElementById('gesture-prev');
 const gestureNext = document.getElementById('gesture-next');
+const gestureDeleteModal = document.getElementById('gesture-delete-modal');
+const gestureDeleteMessage = document.getElementById('gesture-delete-message');
+const gestureDeleteConfirm = document.getElementById('gesture-delete-confirm');
 const emojiGrid = document.getElementById('emoji-grid');
 const attachMenu = document.getElementById('attach-menu');
 const chatFileInput = document.getElementById('chat-file-input');
@@ -168,6 +171,7 @@ let gesturePaletteLoaded = false;
 let gestureOwnedCount = 0;
 let gestureOwnedLimit = 50;
 let gestureSearchTimer = null;
+let pendingGestureDelete = null;
 let activeGestureAudio = null;
 const mediaSearchValues = { gifs: '', gestures: '' };
 const EMOJI_OPTIONS = [
@@ -3247,6 +3251,80 @@ function gestureTileLabel(gesture) {
   return gesture.text || gesture.name || 'Gesture';
 }
 
+function gestureTileSelector(id) {
+  return `.gesture-tile[data-gesture-id="${String(Number(id) || 0)}"]`;
+}
+
+function updateGestureUploadTileState() {
+  const uploadTile = gestureGrid?.querySelector('.gesture-upload-tile');
+  if (!uploadTile) return;
+  const limitReached = gestureOwnedCount >= gestureOwnedLimit;
+  uploadTile.disabled = limitReached;
+  uploadTile.title = limitReached ? 'Remove some gestures to make room.' : 'Upload .agst';
+  uploadTile.querySelector('em')?.replaceChildren(document.createTextNode(`${gestureOwnedCount}/${gestureOwnedLimit}`));
+}
+
+function ensureGestureEmptyState() {
+  if (!gestureGrid) return;
+  const hasGestureTiles = Boolean(gestureGrid.querySelector('.gesture-tile'));
+  let empty = gestureGrid.querySelector('.gesture-empty');
+  if (hasGestureTiles) {
+    empty?.remove();
+    return;
+  }
+  if (!empty) {
+    empty = document.createElement('div');
+    empty.className = 'gesture-empty';
+    empty.textContent = 'No gestures found.';
+    gestureGrid.appendChild(empty);
+  }
+}
+
+function createGestureTile(gesture) {
+  const tile = document.createElement('div');
+  tile.className = `gesture-tile${gesture.mine ? ' mine' : ''}${gesture.is_public ? ' public' : ''}`;
+  tile.dataset.gestureId = gesture.id;
+  tile.innerHTML = `
+    <button class="gesture-play" type="button" aria-label="Send ${esc(gestureTileLabel(gesture))}">
+      <img src="${esc(mediaUrl(gesture.gif_path || gesture.gif_url))}" alt="${esc(gestureTileLabel(gesture))}">
+    </button>
+    ${gesture.mine ? '<button class="gesture-star" type="button" title="My gesture">★</button>' : ''}
+    <button class="gesture-global" type="button" title="${gesture.is_public ? 'Community gesture' : 'Private gesture'}"${gesture.mine ? '' : ' disabled'}>🌐</button>
+    ${gesture.audio_is_silent ? '' : '<button class="gesture-audio" type="button" title="Play gesture audio"><span>🎧</span></button>'}
+  `;
+  tile.addEventListener('click', e => {
+    if (e.target.closest('.gesture-star, .gesture-global, .gesture-audio')) return;
+    sendGesture(gesture);
+  });
+  tile.addEventListener('mouseenter', () => {
+    if (gestureTray) gestureTray.textContent = gestureTileLabel(gesture);
+  });
+  tile.addEventListener('mouseleave', () => {
+    if (gestureTray) gestureTray.textContent = '';
+  });
+  tile.querySelector('.gesture-star')?.addEventListener('click', e => {
+    e.stopPropagation();
+    openDeleteGestureModal(gesture);
+  });
+  tile.querySelector('.gesture-global')?.addEventListener('click', e => {
+    e.stopPropagation();
+    if (gesture.mine) toggleGesturePublic(gesture, !gesture.is_public);
+  });
+  tile.querySelector('.gesture-audio')?.addEventListener('click', e => {
+    e.stopPropagation();
+    toggleGestureAudio(gesture, e.currentTarget);
+  });
+  return tile;
+}
+
+function replaceGestureTile(gesture) {
+  const existing = gestureGrid?.querySelector(gestureTileSelector(gesture.id));
+  if (!existing) return false;
+  existing.replaceWith(createGestureTile(gesture));
+  ensureGestureEmptyState();
+  return true;
+}
+
 function renderGestureGrid(gestures) {
   gestureGrid.innerHTML = '';
   const uploadTile = document.createElement('button');
@@ -3271,40 +3349,7 @@ function renderGestureGrid(gestures) {
   }
 
   gestures.forEach(gesture => {
-    const tile = document.createElement('div');
-    tile.className = `gesture-tile${gesture.mine ? ' mine' : ''}${gesture.is_public ? ' public' : ''}`;
-    tile.dataset.gestureId = gesture.id;
-    tile.innerHTML = `
-      <button class="gesture-play" type="button" aria-label="Send ${esc(gestureTileLabel(gesture))}">
-        <img src="${esc(mediaUrl(gesture.gif_path || gesture.gif_url))}" alt="${esc(gestureTileLabel(gesture))}">
-      </button>
-      ${gesture.mine ? '<button class="gesture-star" type="button" title="My gesture">★</button>' : ''}
-      <button class="gesture-global" type="button" title="${gesture.is_public ? 'Community gesture' : 'Private gesture'}"${gesture.mine ? '' : ' disabled'}>🌐</button>
-      ${gesture.audio_is_silent ? '' : '<button class="gesture-audio" type="button" title="Play gesture audio"><span>🎧</span></button>'}
-    `;
-    tile.addEventListener('click', e => {
-      if (e.target.closest('.gesture-star, .gesture-global, .gesture-audio')) return;
-      sendGesture(gesture);
-    });
-    tile.addEventListener('mouseenter', () => {
-      if (gestureTray) gestureTray.textContent = gestureTileLabel(gesture);
-    });
-    tile.addEventListener('mouseleave', () => {
-      if (gestureTray) gestureTray.textContent = '';
-    });
-    tile.querySelector('.gesture-star')?.addEventListener('click', e => {
-      e.stopPropagation();
-      deleteGesture(gesture);
-    });
-    tile.querySelector('.gesture-global')?.addEventListener('click', e => {
-      e.stopPropagation();
-      if (gesture.mine) toggleGesturePublic(gesture, !gesture.is_public);
-    });
-    tile.querySelector('.gesture-audio')?.addEventListener('click', e => {
-      e.stopPropagation();
-      toggleGestureAudio(gesture, e.currentTarget);
-    });
-    gestureGrid.appendChild(tile);
+    gestureGrid.appendChild(createGestureTile(gesture));
   });
 }
 
@@ -3362,26 +3407,60 @@ gestureNext?.addEventListener('click', () => {
 });
 
 async function toggleGesturePublic(gesture, isPublic) {
+  const tile = gestureGrid?.querySelector(gestureTileSelector(gesture.id));
+  const toggle = tile?.querySelector('.gesture-global');
+  if (toggle) toggle.disabled = true;
   try {
-    await apiPost('/api/gestures.php', { session_id: cfg.sessionId, join_token: cfg.myJoinToken, action: 'toggle_public', gesture_id: gesture.id, is_public: isPublic });
-    await loadGestures();
+    const data = await apiPost('/api/gestures.php', { session_id: cfg.sessionId, join_token: cfg.myJoinToken, action: 'toggle_public', gesture_id: gesture.id, is_public: isPublic });
+    replaceGestureTile(data.gesture || { ...gesture, is_public: isPublic });
+  } catch (err) {
+    if (toggle) toggle.disabled = false;
+    alert(err.message || err);
+  }
+}
+
+function openDeleteGestureModal(gesture) {
+  pendingGestureDelete = gesture;
+  if (gestureDeleteMessage) {
+    gestureDeleteMessage.textContent = gesture.is_public
+      ? 'Are you sure you want to delete this gesture? It is public, so this removes it from everyone.'
+      : 'Are you sure you want to delete this gesture?';
+  }
+  gestureDeleteModal?.classList.add('open');
+}
+
+function closeDeleteGestureModal() {
+  pendingGestureDelete = null;
+  gestureDeleteModal?.classList.remove('open');
+}
+
+async function deleteGesture(gesture) {
+  try {
+    await apiPost('/api/gestures.php', { session_id: cfg.sessionId, join_token: cfg.myJoinToken, action: 'delete', gesture_id: gesture.id });
+    gestureGrid?.querySelector(gestureTileSelector(gesture.id))?.remove();
+    if (gesture.mine) {
+      gestureOwnedCount = Math.max(0, gestureOwnedCount - 1);
+      updateGestureUploadTileState();
+    }
+    ensureGestureEmptyState();
   } catch (err) {
     alert(err.message || err);
   }
 }
 
-async function deleteGesture(gesture) {
-  const msg = gesture.is_public
-    ? 'Delete this gesture? It is public, so this removes it from everyone.'
-    : 'Delete this gesture?';
-  if (!confirm(msg)) return;
+document.getElementById('gesture-delete-close')?.addEventListener('click', closeDeleteGestureModal);
+document.getElementById('gesture-delete-cancel')?.addEventListener('click', closeDeleteGestureModal);
+gestureDeleteConfirm?.addEventListener('click', async () => {
+  const gesture = pendingGestureDelete;
+  if (!gesture) return;
+  gestureDeleteConfirm.disabled = true;
   try {
-    await apiPost('/api/gestures.php', { session_id: cfg.sessionId, join_token: cfg.myJoinToken, action: 'delete', gesture_id: gesture.id });
-    await loadGestures();
-  } catch (err) {
-    alert(err.message || err);
+    await deleteGesture(gesture);
+    closeDeleteGestureModal();
+  } finally {
+    gestureDeleteConfirm.disabled = false;
   }
-}
+});
 
 function toggleGestureAudio(gesture, btn) {
   if (!gesture.audio_path) return;

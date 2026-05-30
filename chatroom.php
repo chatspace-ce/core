@@ -392,6 +392,19 @@ $linkIconCatalog = link_icon_catalog($pdo);
     </div>
   </div>
 </div>
+<div class="modal" id="gesture-delete-modal">
+  <div class="modal-box warning-box">
+    <div class="modal-head">
+      <strong>Delete Gesture</strong>
+      <button class="window-close" id="gesture-delete-close" type="button" aria-label="Close">×</button>
+    </div>
+    <div id="gesture-delete-message">Are you sure you want to delete this gesture?</div>
+    <div class="delete-message-actions">
+      <button class="btn" id="gesture-delete-cancel" type="button">Cancel</button>
+      <button class="btn btn-danger" id="gesture-delete-confirm" type="button">Delete Gesture</button>
+    </div>
+  </div>
+</div>
 <div class="modal" id="clear-room-history-modal">
   <div class="modal-box warning-box">
     <div class="modal-head">
