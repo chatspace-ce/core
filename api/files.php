@@ -1,6 +1,6 @@
 <?php
 require_once __DIR__ . '/../includes/base.php';
-require_once __DIR__ . '/../includes/message_broker.php';
+require_once __DIR__ . '/../includes/message_centre.php';
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') json_out(['error' => 'POST required'], 405);
 

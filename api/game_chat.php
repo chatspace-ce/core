@@ -1,6 +1,6 @@
 <?php
 require_once __DIR__ . '/../includes/base.php';
-require_once __DIR__ . '/../includes/message_broker.php';
+require_once __DIR__ . '/../includes/message_centre.php';
 
 $user = require_user();
 $pdo = db();
