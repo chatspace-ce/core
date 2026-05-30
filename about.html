@@ -201,7 +201,9 @@ h1 {
 .feature-section,
 .promise-section,
 .systems-section,
-.install-section {
+.install-section,
+.standards-section,
+.source-section {
   max-width: 1180px;
   margin: 0 auto;
   padding: 68px clamp(18px, 4vw, 36px);
@@ -600,6 +602,121 @@ h2 {
   top: calc(-.6em - 5px);
 }
 
+.standards-section {
+  padding-top: 34px;
+  padding-bottom: 28px;
+}
+
+.standards-section .system-panel {
+  padding: clamp(22px, 3vw, 34px);
+}
+
+.standards-section h2 {
+  max-width: 640px;
+  font-size: 34px;
+  line-height: 1.08;
+}
+
+.source-section {
+  padding-top: 22px;
+  padding-bottom: 60px;
+}
+
+.source-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.source-card {
+  position: relative;
+  min-height: 260px;
+  padding: 30px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background:
+    linear-gradient(135deg, rgba(255,255,255,.05), rgba(0,0,0,.18)),
+    rgba(16,18,28,.92);
+  overflow: hidden;
+}
+
+.source-card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at 12% 0%, var(--source-accent), transparent 36%);
+  opacity: .18;
+  pointer-events: none;
+}
+
+.source-card > * {
+  position: relative;
+}
+
+.source-card.license-card { --source-accent: var(--purple); }
+.source-card.github-card { --source-accent: var(--aqua); }
+
+.source-icon {
+  display: inline-grid;
+  place-items: center;
+  width: 54px;
+  height: 54px;
+  margin-bottom: 22px;
+  border: 1px solid rgba(255,255,255,.14);
+  border-radius: 8px;
+  background: rgba(0,0,0,.28);
+  color: #fff;
+}
+
+.source-icon svg {
+  width: 34px;
+  height: 34px;
+  fill: currentColor;
+}
+
+.source-card h2 {
+  margin-bottom: 12px;
+  font-size: 32px;
+  line-height: 1.08;
+}
+
+.source-card p {
+  color: var(--muted);
+  font-size: 16px;
+  line-height: 1.65;
+}
+
+.source-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 24px;
+}
+
+.source-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  padding: 11px 16px;
+  border: 1px solid rgba(255,255,255,.14);
+  border-radius: 8px;
+  color: #fff;
+  background: linear-gradient(135deg, var(--purple), var(--blue));
+  font-weight: 900;
+  text-decoration: none;
+}
+
+.source-button.secondary {
+  background: rgba(255,255,255,.06);
+}
+
+.source-button svg {
+  width: 21px;
+  height: 21px;
+  fill: currentColor;
+}
+
 .site-footer {
   display: flex;
   align-items: center;
@@ -631,7 +748,8 @@ h2 {
 
   .feature-grid,
   .system-list,
-  .credits-grid {
+  .credits-grid,
+  .source-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
@@ -663,7 +781,8 @@ h2 {
 
   .feature-grid,
   .system-list,
-  .credits-grid {
+  .credits-grid,
+  .source-grid {
     grid-template-columns: 1fr;
   }
 
@@ -680,9 +799,9 @@ h2 {
     height: 100px;
   }
 
-  .site-footer {
-    flex-direction: column;
-    align-items: flex-start;
+  .standards-section h2,
+  .source-card h2 {
+    font-size: 28px;
   }
 }
 
@@ -697,6 +816,7 @@ h2 {
       <a href="#features">Features</a>
       <a href="#community">Community</a>
       <a href="#install">Install</a>
+      <a href="#source">Source</a>
     </nav>
   </header>
 
@@ -904,11 +1024,60 @@ h2 {
         </div>
       </div>
     </section>
+
+    <section class="source-section" id="source" aria-label="License and source">
+      <div class="source-grid">
+        <article class="source-card license-card reveal">
+          <div class="source-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" focusable="false">
+              <path d="M7 3h10a2 2 0 0 1 2 2v16l-7-3-7 3V5a2 2 0 0 1 2-2Zm0 2v12.96l5-2.14 5 2.14V5H7Zm2 3h6v2H9V8Zm0 4h6v2H9v-2Z"/>
+            </svg>
+          </div>
+          <div class="section-label">Source-Available License</div>
+          <h2>Elastic License 2.0.</h2>
+          <p>
+            ChatSpace Community Edition is free to download, self-host, modify, and share under the Elastic License 2.0.
+            It is source-available, not OSI-defined open source.
+          </p>
+          <p>
+            The license is meant to keep the Community Edition usable and portable while preventing resale,
+            paid repackaging, hosted managed offerings, or competing commercial products built from this release.
+          </p>
+          <div class="source-actions">
+            <a class="source-button secondary" href="LICENSE.md">Read LICENSE.md</a>
+          </div>
+        </article>
+        <article class="source-card github-card reveal reveal-delay-1">
+          <div class="source-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" focusable="false">
+              <path d="M12 .5C5.65.5.5 5.65.5 12c0 5.08 3.29 9.39 7.86 10.91.58.11.79-.25.79-.56v-2.15c-3.2.7-3.87-1.36-3.87-1.36-.52-1.33-1.28-1.68-1.28-1.68-1.05-.72.08-.71.08-.71 1.16.08 1.77 1.19 1.77 1.19 1.03 1.76 2.7 1.25 3.36.96.1-.75.4-1.25.73-1.54-2.55-.29-5.23-1.28-5.23-5.68 0-1.25.45-2.28 1.18-3.08-.12-.29-.51-1.46.11-3.04 0 0 .96-.31 3.15 1.17A10.91 10.91 0 0 1 12 6.04c.97 0 1.95.13 2.87.39 2.18-1.48 3.14-1.17 3.14-1.17.62 1.58.23 2.75.11 3.04.74.8 1.18 1.83 1.18 3.08 0 4.42-2.69 5.38-5.25 5.67.41.36.78 1.06.78 2.14v3.16c0 .31.21.68.8.56A11.5 11.5 0 0 0 23.5 12C23.5 5.65 18.35.5 12 .5Z"/>
+            </svg>
+          </div>
+          <div class="section-label">Project Repository</div>
+          <h2>Build with the core release.</h2>
+          <p>
+            The public repository carries the Community Edition source, install notes, authorship, license terms,
+            and current release materials.
+          </p>
+          <p>
+            Use it to inspect the code, track changes, download releases, or contribute improvements back to the
+            project without burying the source link in a tiny footer where no one can find it.
+          </p>
+          <div class="source-actions">
+            <a class="source-button" href="https://github.com/chatspace-ce/core" target="_blank" rel="noopener noreferrer">
+              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <path d="M12 .5C5.65.5.5 5.65.5 12c0 5.08 3.29 9.39 7.86 10.91.58.11.79-.25.79-.56v-2.15c-3.2.7-3.87-1.36-3.87-1.36-.52-1.33-1.28-1.68-1.28-1.68-1.05-.72.08-.71.08-.71 1.16.08 1.77 1.19 1.77 1.19 1.03 1.76 2.7 1.25 3.36.96.1-.75.4-1.25.73-1.54-2.55-.29-5.23-1.28-5.23-5.68 0-1.25.45-2.28 1.18-3.08-.12-.29-.51-1.46.11-3.04 0 0 .96-.31 3.15 1.17A10.91 10.91 0 0 1 12 6.04c.97 0 1.95.13 2.87.39 2.18-1.48 3.14-1.17 3.14-1.17.62 1.58.23 2.75.11 3.04.74.8 1.18 1.83 1.18 3.08 0 4.42-2.69 5.38-5.25 5.67.41.36.78 1.06.78 2.14v3.16c0 .31.21.68.8.56A11.5 11.5 0 0 0 23.5 12C23.5 5.65 18.35.5 12 .5Z"/>
+              </svg>
+              View on GitHub
+            </a>
+          </div>
+        </article>
+      </div>
+    </section>
   </main>
 
   <footer class="site-footer">
     <span>ChatSpace Community Edition v1.0-PRE-RELEASE</span>
-    <a href="https://github.com/chatspace-ce/core" target="_blank" rel="noopener noreferrer">View on GitHub</a>
   </footer>
   <script>
 'use strict';
