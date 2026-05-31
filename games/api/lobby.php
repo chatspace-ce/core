@@ -2,6 +2,19 @@
 require_once __DIR__ . '/../../includes/base.php';
 $pdo = db();
 
+function game_lobby_payload(array $row): array {
+    return [
+        'ok' => true,
+        'lobby_id' => $row['lobby_code'],
+        'lobby_code' => $row['lobby_code'],
+        'game_id' => (int)$row['game_id'],
+        'user1_id' => $row['user1_id'] ? (int)$row['user1_id'] : null,
+        'user2_id' => $row['user2_id'] ? (int)$row['user2_id'] : null,
+        'round_number' => max(1, (int)($row['round_number'] ?? 1)),
+        'status' => $row['status'],
+    ];
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'GET') {
     $action = $_GET['action'] ?? 'status';
     $lobby = (string)($_GET['lobby_id'] ?? $_GET['lobby'] ?? '');
@@ -9,14 +22,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
     $stmt->execute([$lobby]);
     $row = $stmt->fetch();
     if (!$row) json_out(['error' => 'not found'], 404);
-    json_out([
-        'lobby_id' => $row['lobby_code'],
-        'lobby_code' => $row['lobby_code'],
-        'game_id' => (int)$row['game_id'],
-        'user1_id' => $row['user1_id'] ? (int)$row['user1_id'] : null,
-        'user2_id' => $row['user2_id'] ? (int)$row['user2_id'] : null,
-        'status' => $row['status'],
-    ]);
+    json_out(game_lobby_payload($row));
 }
 
 $body = input_json();
@@ -42,15 +48,7 @@ if ($action === 'join') {
     $sessionStmt->execute([$lobby]);
     $sessionId = (int)($sessionStmt->fetchColumn() ?: 0);
     if ($sessionId) emit_event($pdo, $sessionId, 'game_update', ['lobby_code' => $lobby]);
-    json_out([
-        'ok' => true,
-        'lobby_id' => $row['lobby_code'],
-        'lobby_code' => $row['lobby_code'],
-        'game_id' => (int)$row['game_id'],
-        'user1_id' => $row['user1_id'] ? (int)$row['user1_id'] : null,
-        'user2_id' => $row['user2_id'] ? (int)$row['user2_id'] : null,
-        'status' => $row['status'],
-    ]);
+    json_out(game_lobby_payload($row));
 }
 
 if ($action === 'close') {

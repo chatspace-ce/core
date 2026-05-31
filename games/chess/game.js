@@ -23,6 +23,7 @@
     let youRequestedRematch = false;
     let oppRequestedRematch = false;
     let lastSeq = 0;
+    let currentRound = 1;
 
     // ——— UI refs ———
     const boardEl      = document.getElementById('board');
@@ -97,6 +98,7 @@
     }
     function applyLobbyStatus(lobby) {
       if (!lobby) return;
+      currentRound = Math.max(1, Number(lobby.round_number || currentRound || 1));
       if (Number(lobby.user2_id) === user) applyPlayerNumber(2);
       else applyPlayerNumber(1);
       opponentUserId = (playerN === 1) ? Number(lobby.user2_id || 0) : Number(lobby.user1_id || 0);
@@ -437,7 +439,8 @@
       boardEl.style.pointerEvents='none';
     };
 
-    function resetForRematch(){
+    function resetForRematch(lobby = null){
+      if (lobby) applyLobbyStatus(lobby);
       state = initialState();
       gameOver = false;
       youRequestedRematch = false;
@@ -449,9 +452,18 @@
     function maybeRestart(){
       if (youRequestedRematch && oppRequestedRematch){
         (async ()=>{
-          try { await apiPost(`${base}/api/restart.php`, { lobby_id: raw, user_id: user }); } catch {}
-          await sendControl('restart', {});
-          resetForRematch();
+          const restarted = await apiPost(`${base}/api/restart.php`, { lobby_id: raw, user_id: user, round_number: currentRound }).catch(() => null);
+          if (restarted?.ok) {
+            await sendControl('restart', {
+              round_number: restarted.round_number,
+              user1_id: restarted.user1_id,
+              user2_id: restarted.user2_id,
+            });
+            resetForRematch(restarted);
+          } else {
+            await sendControl('restart', {});
+            resetForRematch();
+          }
         })();
       }
     }
@@ -480,19 +492,19 @@
         }
       }
 
-      if (t === 'move'){
+      if (t === 'move' && senderId !== user){
         const mv = { from:p.payload.from, to:p.payload.to, promotion:p.payload.promotion||null, castle:p.payload.castle||null, enPassant: !!p.payload.enPassant, double: !!p.payload.double };
         applyMoveOn(state, mv);
         drawBoard();
         evaluateEnd();
       }
 
-      if (t === 'play-again-request'){
+      if (t === 'play-again-request' && senderId !== user){
         oppRequestedRematch = true; maybeRestart();
       }
 
       if (t === 'restart'){
-        resetForRematch();
+        resetForRematch(p.payload);
       }
 
       // PATCHED: only react if the OTHER player resigned

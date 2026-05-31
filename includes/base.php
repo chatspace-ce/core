@@ -347,6 +347,7 @@ function migrate(PDO $pdo): void {
             game_id INTEGER NOT NULL DEFAULT 0,
             user1_id INTEGER DEFAULT NULL,
             user2_id INTEGER DEFAULT NULL,
+            round_number INTEGER NOT NULL DEFAULT 1,
             status TEXT NOT NULL DEFAULT 'waiting',
             created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
             updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -604,6 +605,11 @@ function migrate(PDO $pdo): void {
                 $pdo->exec('ALTER TABLE ' . $previewTable . ' ADD COLUMN reply_to_json LONGTEXT DEFAULT NULL');
             }
         }
+        $mysqlGameLobbyCols = $pdo->query('SHOW COLUMNS FROM game_lobbies')->fetchAll();
+        $mysqlGameLobbyColNames = array_map(fn(array $col): string => (string)($col['Field'] ?? ''), $mysqlGameLobbyCols);
+        if (!in_array('round_number', $mysqlGameLobbyColNames, true)) {
+            $pdo->exec('ALTER TABLE game_lobbies ADD COLUMN round_number INTEGER NOT NULL DEFAULT 1');
+        }
         seed_app_settings($pdo);
         seed_link_icon_catalog($pdo);
         return;
@@ -778,6 +784,11 @@ function migrate(PDO $pdo): void {
     }
     if (!in_array('original_name', $gameChatColNames, true)) {
         $pdo->exec('ALTER TABLE game_chat_messages ADD COLUMN original_name TEXT DEFAULT NULL');
+    }
+    $gameLobbyCols = $pdo->query('PRAGMA table_info(game_lobbies)')->fetchAll();
+    $gameLobbyColNames = array_map(fn(array $col): string => (string)$col['name'], $gameLobbyCols);
+    if (!in_array('round_number', $gameLobbyColNames, true)) {
+        $pdo->exec('ALTER TABLE game_lobbies ADD COLUMN round_number INTEGER NOT NULL DEFAULT 1');
     }
     $stmt = $pdo->query('SELECT id FROM rooms WHERE public_id IS NULL OR public_id = ""');
     foreach ($stmt->fetchAll() as $row) {

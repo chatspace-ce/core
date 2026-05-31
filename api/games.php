@@ -30,7 +30,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
     )->execute([$sessionId]);
     $stmt = $pdo->prepare(
         'SELECT a.lobby_code, a.game_type, a.started_by_participant_id, p.display_name AS started_by_name,
-                gl.user1_id, gl.user2_id,
+                gl.user1_id, gl.user2_id, gl.round_number,
                 p1.display_name AS user1_name, p1.avatar_path AS user1_avatar, p1.webcam_path AS user1_webcam,
                 p2.display_name AS user2_name, p2.avatar_path AS user2_avatar, p2.webcam_path AS user2_webcam
          FROM game_sessions a
@@ -47,6 +47,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
         'game_type' => $r['game_type'],
         'started_by_id' => (int)$r['started_by_participant_id'],
         'started_by_name' => $r['started_by_name'] ?: 'Someone',
+        'round_number' => max(1, (int)($r['round_number'] ?? 1)),
         'players' => array_values(array_filter([
             $r['user1_id'] ? ['participant_id' => (int)$r['user1_id'], 'display_name' => $r['user1_name'] ?: 'Player 1', 'avatar_url' => $r['user1_webcam'] ?: resolve_avatar($r['user1_avatar'] ?? 'preset:Default'), 'seat' => 1] : null,
             $r['user2_id'] ? ['participant_id' => (int)$r['user2_id'], 'display_name' => $r['user2_name'] ?: 'Player 2', 'avatar_url' => $r['user2_webcam'] ?: resolve_avatar($r['user2_avatar'] ?? 'preset:Default'), 'seat' => 2] : null,

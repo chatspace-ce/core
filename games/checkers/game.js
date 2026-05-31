@@ -23,6 +23,7 @@
   let youRequestedRematch = false;
   let oppRequestedRematch = false;
   let gameOver = false;
+  let currentRound = 1;
 
   // ——— UI refs ———
   const topLabel     = document.getElementById('top-label');
@@ -225,6 +226,7 @@
   }
   function applyLobbyStatus(lobby) {
     if (!lobby) return;
+    currentRound = Math.max(1, Number(lobby.round_number || currentRound || 1));
     if (Number(lobby.user2_id) === user) applyPlayerNumber(2);
     else applyPlayerNumber(1);
     opponentUserId = (player === 1) ? Number(lobby.user2_id || 0) : Number(lobby.user1_id || 0);
@@ -328,9 +330,9 @@
     await sendControl('match-end', { youWon, reason });
   }
 
-  function resetForRematch(){
+  function resetForRematch(lobby = null){
+    if (lobby) applyLobbyStatus(lobby);
     board = initBoard();
-    lastSeq = 0;
     gameOver = false;
     youRequestedRematch = false;
     oppRequestedRematch = false;
@@ -344,9 +346,18 @@
   function maybeRestart(){
     if (youRequestedRematch && oppRequestedRematch){
       (async ()=>{
-        try { await apiPost(`${base}/api/restart.php`, { lobby_id: raw, user_id: user }); } catch {}
-        await sendControl('restart', {});
-        resetForRematch();
+        const restarted = await apiPost(`${base}/api/restart.php`, { lobby_id: raw, user_id: user, round_number: currentRound }).catch(() => null);
+        if (restarted?.ok) {
+          await sendControl('restart', {
+            round_number: restarted.round_number,
+            user1_id: restarted.user1_id,
+            user2_id: restarted.user2_id,
+          });
+          resetForRematch(restarted);
+        } else {
+          await sendControl('restart', {});
+          resetForRematch();
+        }
       })();
     }
   }
@@ -458,7 +469,7 @@
               break;
 
             case 'restart':
-              resetForRematch();
+              resetForRematch(p);
               break;
 
             case 'match-end':
