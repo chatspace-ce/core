@@ -439,6 +439,7 @@
               if (user_id !== user){
                 const {from, to} = p;
                 const opponentPiece = (player === 1) ? 2 : 1;
+                if (board[from?.r]?.[from?.c] !== opponentPiece) break;
                 board[to.r][to.c] = opponentPiece;
                 board[from.r][from.c] = 0;
                 if (Math.abs(to.r - from.r) === 2 && Math.abs(to.c - from.c) === 2){
@@ -479,6 +480,7 @@
             default:
               if (p.from && p.to && user_id !== user){
                 const opponentPiece = (player === 1) ? 2 : 1;
+                if (board[p.from?.r]?.[p.from?.c] !== opponentPiece) break;
                 board[p.to.r][p.to.c] = opponentPiece;
                 board[p.from.r][p.from.c] = 0;
                 if (Math.abs(p.to.r - p.from.r) === 2){

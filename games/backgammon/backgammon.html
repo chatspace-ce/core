@@ -224,7 +224,7 @@ body.embedded .waiting-cover{
 /* =================== Params / Base Path =================== */
 const params = new URLSearchParams(location.search);
 const code   = params.get('code') || params.get('lobby') || 'demo';
-const player = Math.max(1, Math.min(2, parseInt(params.get('player')||'1',10)));
+let player = Math.max(1, Math.min(2, parseInt(params.get('player')||'1',10) || 1));
 const user   = parseInt(params.get('user')||'1001',10);
 const gameId = parseInt(params.get('game')||'5',10);
 const csrf   = params.get('csrf') || '';
@@ -304,8 +304,16 @@ async function postMove(payload){
 }
 
 /* Lobby ops */
+function applyLobbySeat(status){
+  if(!status) return;
+  if(Number(status.user2_id) === Number(user)) player = P_BLACK;
+  else if(Number(status.user1_id) === Number(user)) player = P_WHITE;
+}
 async function joinLobby(){
-  try{ await apiPost(`/api/lobby.php`, { action:'join', lobby: code, user_id: user }); }
+  try{
+    const joined = await apiPost(`/api/lobby.php`, { action:'join', lobby: code, user_id: user });
+    applyLobbySeat(joined);
+  }
   catch(e){ console.warn('joinLobby error', e); }
 }
 async function lobbyStatus(){
@@ -749,6 +757,7 @@ let hostStartPosted = false; // prevents duplicate 'start'
 
 async function checkLobby(){
   const s = await lobbyStatus().catch(()=>null);
+  applyLobbySeat(s);
   const ready = !!(s && (s.player_count >= 2 || s.opponent_joined || (s.players && s.players.length >= 2) || (s.user1_id && s.user2_id)));
 
   if (!state.started) {

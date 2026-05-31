@@ -227,7 +227,7 @@ body.embedded .waiting-cover{
 /* ================= Params / Base Path ================= */
 const params = new URLSearchParams(location.search);
 const code   = params.get('code') || params.get('lobby') || 'demo';
-const player = parseInt(params.get('player')||'1',10);
+let player = Math.max(1, Math.min(2, parseInt(params.get('player')||'1',10) || 1));
 const user   = parseInt(params.get('user')||'1001',10);
 const gameId = parseInt(params.get('game')||'7',10);
 const csrf   = params.get('csrf') || '';
@@ -482,6 +482,21 @@ let oppActive=null; // {id,row,col,r}
 let oppStats={score:0,lines:0,level:1,next:4};
 let started=false, bothJoined=false, gameOver=false, winner=null;
 
+function updateSeatLabels(){
+  el('p1You').textContent = (player===1? '(You)':'');
+  el('p2You').textContent = (player===2? '(You)':'');
+}
+
+function applyLobbySeat(status){
+  if(!status) return;
+  const nextPlayer = Number(status.user2_id) === Number(user) ? 2 : 1;
+  player = nextPlayer;
+  mySide = player;
+  oppSide = (player===1?2:1);
+  if(myGame) myGame.side = mySide;
+  updateSeatLabels();
+}
+
 /* ================= Waiting/Join UX ================= */
 function setWaiting(mode){
   if(mode){
@@ -502,7 +517,7 @@ let lastSeq=0;
 function moveList(data){ return Array.isArray(data) ? data : (Array.isArray(data?.moves) ? data.moves : []); }
 async function seedMoves(){ try{ const mv=moveList(await apiGet(`/api/moves.php?lobby=${code}&lastSeq=0`)); if(mv.length){ lastSeq=mv[mv.length-1].sequence||0; const anyOther = mv.some(m=>Number(m.user_id)!==Number(user)); if(anyOther) ensureBothPresent(); } }catch{} }
 async function pollMoves(){ try{ const mv=moveList(await apiGet(`/api/moves.php?lobby=${code}&lastSeq=${lastSeq}`)); for(const m of mv){ lastSeq=m.sequence||lastSeq; const {payload,user_id}=m; if(!payload || Number(user_id)===Number(user)) continue; switch(payload.type){ case 'join': case 'ready': ensureBothPresent(); break; case 'leave': onOpponentLeft(); break; case 'topout': gameOver=true; winner=mySide; el('status').textContent='You win!'; break; } } }catch{} }
-async function pollLobbyStatus(){ try{ const s=await apiGet(`/api/lobby.php?action=status&lobby_id=${code}`); const count=(s&&(s.players??s.players_count??s.active_players))||((s?.user1_id?1:0)+(s?.user2_id?1:0)); if(count>=2) ensureBothPresent(); if(count<2&&bothJoined) onOpponentLeft(); if(s&&typeof s.status==='string'){ const st=s.status.toLowerCase(); if((st==='ongoing'||st==='active')&&!bothJoined) ensureBothPresent(); if((st==='over'||st==='closed'||st==='ended')&&bothJoined) onOpponentLeft(); } }catch{} }
+async function pollLobbyStatus(){ try{ const s=await apiGet(`/api/lobby.php?action=status&lobby_id=${code}`); applyLobbySeat(s); const count=(s&&(s.players??s.players_count??s.active_players))||((s?.user1_id?1:0)+(s?.user2_id?1:0)); if(count>=2) ensureBothPresent(); if(count<2&&bothJoined) onOpponentLeft(); if(s&&typeof s.status==='string'){ const st=s.status.toLowerCase(); if((st==='ongoing'||st==='active')&&!bothJoined) ensureBothPresent(); if((st==='over'||st==='closed'||st==='ended')&&bothJoined) onOpponentLeft(); } }catch{} }
 
 /* ================= Mirror opponent via state.php ================= */
 /* IMPORTANT FIX: draw opponent on the OPPOSITE board */
@@ -541,8 +556,6 @@ function beaconLeave(){ try{
   const payload={ lobby_id: code, user_id: user, payload:{type:'leave'}, _csrf: csrf };
   const b=new Blob([JSON.stringify(payload)],{type:'application/json'});
   navigator.sendBeacon?.(`${base}/games/api/moves.php`, b);
-  const b2=new Blob([JSON.stringify({ action:'close', lobby_id: code, user_id: user, _csrf: csrf })],{type:'application/json'});
-  navigator.sendBeacon?.(`${base}/games/api/lobby.php`, b2);
 }catch{}}
 window.addEventListener('pagehide', beaconLeave);
 window.addEventListener('beforeunload', beaconLeave);
@@ -586,10 +599,9 @@ requestAnimationFrame(loop);
 /* ================= Init ================= */
 (async ()=>{
   setWaiting('waiting');
-  el('p1You').textContent = (player===1? '(You)':'');
-  el('p2You').textContent = (player===2? '(You)':'');
+  updateSeatLabels();
 
-  try{ await apiPost(`/api/lobby.php`, { action:'join', lobby_id: code, user_id: user }); sendMove('join',{at:Date.now()}); }catch{}
+  try{ const joined = await apiPost(`/api/lobby.php`, { action:'join', lobby_id: code, user_id: user }); applyLobbySeat(joined); sendMove('join',{at:Date.now()}); }catch{}
 
   boardEl1=mountBoard('board1');
   boardEl2=mountBoard('board2');

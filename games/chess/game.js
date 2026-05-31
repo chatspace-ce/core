@@ -493,6 +493,8 @@
       }
 
       if (t === 'move' && senderId !== user){
+        const movingPiece = state?.board?.[p.payload.from?.r]?.[p.payload.from?.c];
+        if (!movingPiece || colOf(movingPiece) !== other(youColor)) return;
         const mv = { from:p.payload.from, to:p.payload.to, promotion:p.payload.promotion||null, castle:p.payload.castle||null, enPassant: !!p.payload.enPassant, double: !!p.payload.double };
         applyMoveOn(state, mv);
         drawBoard();
