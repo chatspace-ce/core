@@ -351,7 +351,7 @@ $rooms = $roomsStmt->fetchAll();
                   <h3>Chat & Presence</h3>
                   <div class="admin-settings-fields">
                     <label>Chat posts per second <input name="chat_posts_per_second" type="number" min="0.2" max="30" step="0.1"></label>
-                    <label>Room chat history posts <input name="room_chat_history_limit" type="number" min="1" max="1000" step="10"></label>
+                    <label>Room chat history posts <input name="room_chat_history_limit" type="number" min="1" max="1000" step="1"></label>
                     <label>Avatar movements per second <input name="avatar_movements_per_second" type="number" min="1" max="60" step="1"></label>
                     <label>Idle removal minutes <input name="participant_idle_timeout_minutes" type="number" min="0.5" max="120" step="0.5"></label>
                   </div>
