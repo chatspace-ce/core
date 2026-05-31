@@ -76,7 +76,7 @@ add_header X-Content-Type-Options "nosniff" always;
 add_header X-Frame-Options "SAMEORIGIN" always;
 add_header Referrer-Policy "strict-origin-when-cross-origin" always;
 add_header Permissions-Policy "camera=(self), microphone=(self), geolocation=(), payment=(), usb=()" always;
-add_header Content-Security-Policy "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'self'; form-action 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.giphy.com https://*.tenor.com https://tenor.googleapis.com; media-src 'self' data: blob: https://*.giphy.com https://*.tenor.com https://tenor.googleapis.com; font-src 'self'; connect-src 'self' https://*.giphy.com https://*.tenor.com https://tenor.googleapis.com; frame-src 'self'" always;
+add_header Content-Security-Policy "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'self'; form-action 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; media-src 'self' data: blob: https://*.giphy.com https://*.tenor.com https://tenor.googleapis.com https://media.tenor.com; font-src 'self'; connect-src 'self' https://api.giphy.com https://*.giphy.com https://tenor.googleapis.com https://*.tenor.com; frame-src 'self' https://www.youtube-nocookie.com https://www.youtube.com https://open.spotify.com https://w.soundcloud.com; child-src 'self' https://www.youtube-nocookie.com https://www.youtube.com https://open.spotify.com https://w.soundcloud.com" always;
 
 location ^~ /db/ { deny all; }
 location ^~ /includes/ { deny all; }
