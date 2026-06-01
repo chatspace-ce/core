@@ -180,11 +180,15 @@ body.embedded .waiting-cover{
             <div class="row" id="rowBotL"></div>
           </div>
 
-          <!-- Middle: bar + spacer (we keep single bar UI here) -->
+          <!-- Middle: both hit-piece bars -->
           <div class="middle">
             <div class="bar" id="barBlack" title="Black Bar (click to enter when you have pieces)">
               <div class="badge">BAR</div>
               <div class="count" id="barBlackCount">0</div>
+            </div>
+            <div class="bar" id="barWhite" title="White Bar (click to enter when you have pieces)">
+              <div class="badge">BAR</div>
+              <div class="count" id="barWhiteCount">0</div>
             </div>
           </div>
 
@@ -333,16 +337,16 @@ const FROM_BAR_BLACK = 24;
 
 function initialBoard(){
   const b = Array(24).fill(null);
-  // White (P1)
+  // Point indexes follow White's movement path from 0 to 23 around the board.
   b[0]  = {color:'white',checkers:2};
-  b[5]  = {color:'white',checkers:5};
-  b[7]  = {color:'white',checkers:3};
   b[11] = {color:'white',checkers:5};
-  // Black (P2)
+  b[16] = {color:'white',checkers:3};
+  b[18] = {color:'white',checkers:5};
+
   b[23] = {color:'black',checkers:2};
-  b[18] = {color:'black',checkers:5};
-  b[16] = {color:'black',checkers:3};
   b[12] = {color:'black',checkers:5};
+  b[7]  = {color:'black',checkers:3};
+  b[5]  = {color:'black',checkers:5};
   return b;
 }
 
@@ -371,12 +375,15 @@ function buildBoard(){
   const rowBotR = el('rowBotR');
   [rowTopL,rowBotL,rowTopR,rowBotR].forEach(r=>r.innerHTML='');
 
-  [0,1,2,3,4,5].forEach(i=> rowTopL.appendChild(tri(i,'down')));
-  [12,13,14,15,16,17].forEach(i=> rowBotL.appendChild(tri(i,'up')));
-  [11,10,9,8,7,6].forEach(i=> rowTopR.appendChild(tri(i,'down')));
-  [23,22,21,20,19,18].forEach(i=> rowBotR.appendChild(tri(i,'up')));
+  // Standard four-quadrant layout from White's perspective:
+  // top: 12-17 | 18-23, bottom: 11-6 | 5-0.
+  [12,13,14,15,16,17].forEach(i=> rowTopL.appendChild(tri(i,'down')));
+  [11,10,9,8,7,6].forEach(i=> rowBotL.appendChild(tri(i,'up')));
+  [18,19,20,21,22,23].forEach(i=> rowTopR.appendChild(tri(i,'down')));
+  [5,4,3,2,1,0].forEach(i=> rowBotR.appendChild(tri(i,'up')));
 
   el('barBlack').addEventListener('click', ()=> onBarClick(P_BLACK));
+  el('barWhite').addEventListener('click', ()=> onBarClick(P_WHITE));
   render();
 }
 function clearCheckers(){
@@ -411,6 +418,7 @@ function render(){
   });
 
   // Bar + trays
+  el('barWhiteCount').textContent = state.barWhite;
   el('barBlackCount').textContent = state.barBlack;
 
   const offWhite = el('offWhite'); offWhite.innerHTML='';
