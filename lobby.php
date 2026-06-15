@@ -378,12 +378,14 @@ $rooms = $roomsStmt->fetchAll();
                 </section>
                 <section class="admin-settings-group admin-settings-group-wide">
                   <h3>GIF Selector</h3>
-                  <div class="admin-settings-fields three">
+                  <div class="admin-settings-fields four">
                     <label>GIPHY API key <input name="gif_giphy_api_key" type="password" autocomplete="off" placeholder="Optional"></label>
                     <label>Tenor API key <input name="gif_tenor_api_key" type="password" autocomplete="off" placeholder="Optional"></label>
+                    <label>Klipy API key <input name="gif_klipy_api_key" type="password" autocomplete="off" placeholder="Optional"></label>
                     <label>Default GIF provider
                       <select name="gif_default_provider">
                         <option value="giphy">GIPHY</option>
+                        <option value="klipy">Klipy</option>
                         <option value="tenor">Tenor</option>
                       </select>
                     </label>

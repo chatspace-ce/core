@@ -295,10 +295,11 @@ json_out([
     'roomEffects' => $roomEffects,
     'activeRoomEffect' => $activeRoomEffect,
     'gifPicker' => [
-        'enabled' => app_setting($pdo, 'gif_giphy_api_key') !== '' || app_setting($pdo, 'gif_tenor_api_key') !== '',
-        'defaultProvider' => in_array(app_setting($pdo, 'gif_default_provider', 'giphy'), ['giphy', 'tenor'], true) ? app_setting($pdo, 'gif_default_provider', 'giphy') : 'giphy',
+        'enabled' => app_setting($pdo, 'gif_giphy_api_key') !== '' || app_setting($pdo, 'gif_klipy_api_key') !== '' || app_setting($pdo, 'gif_tenor_api_key') !== '',
+        'defaultProvider' => in_array(app_setting($pdo, 'gif_default_provider', 'giphy'), ['giphy', 'klipy', 'tenor'], true) ? app_setting($pdo, 'gif_default_provider', 'giphy') : 'giphy',
         'providers' => [
             'giphy' => app_setting($pdo, 'gif_giphy_api_key') !== '',
+            'klipy' => app_setting($pdo, 'gif_klipy_api_key') !== '',
             'tenor' => app_setting($pdo, 'gif_tenor_api_key') !== '',
         ],
     ],

@@ -13,10 +13,13 @@ $requestedProvider = (string)($_GET['provider'] ?? app_setting($pdo, 'gif_defaul
 $providers = [];
 $giphyKey = trim(app_setting($pdo, 'gif_giphy_api_key'));
 $tenorKey = trim(app_setting($pdo, 'gif_tenor_api_key'));
+$klipyKey = trim(app_setting($pdo, 'gif_klipy_api_key'));
 if ($requestedProvider === 'giphy' && $giphyKey !== '') $providers[] = 'giphy';
+if ($requestedProvider === 'klipy' && $klipyKey !== '') $providers[] = 'klipy';
 if ($requestedProvider === 'tenor' && $tenorKey !== '') $providers[] = 'tenor';
 if (!$providers) {
     if ($giphyKey !== '') $providers[] = 'giphy';
+    if ($klipyKey !== '') $providers[] = 'klipy';
     if ($tenorKey !== '') $providers[] = 'tenor';
 }
 if (!$providers) json_out(['error' => 'GIF search is not configured'], 400);
@@ -88,6 +91,28 @@ foreach ($providers as $provider) {
             if ($original === '') continue;
             $results[] = [
                 'provider' => 'tenor',
+                'title' => $item['content_description'] ?? 'GIF',
+                'url' => $original,
+                'preview' => $preview,
+            ];
+        }
+        break;
+    }
+    if ($provider === 'klipy') {
+        $url = 'https://api.klipy.com/v2/search?' . http_build_query([
+            'key' => $klipyKey,
+            'q' => $query,
+            'limit' => 24,
+            'media_filter' => 'gif,tinygif',
+            'contentfilter' => 'medium',
+        ]);
+        $data = gif_fetch_json($url);
+        foreach (($data['results'] ?? []) as $item) {
+            $original = $item['media_formats']['gif']['url'] ?? '';
+            $preview = $item['media_formats']['tinygif']['url'] ?? $original;
+            if ($original === '') continue;
+            $results[] = [
+                'provider' => 'klipy',
                 'title' => $item['content_description'] ?? 'GIF',
                 'url' => $original,
                 'preview' => $preview,

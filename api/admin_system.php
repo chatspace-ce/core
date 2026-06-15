@@ -134,10 +134,12 @@ if ($action === 'save_settings') {
     }
     $giphyKey = trim((string)($body['gif_giphy_api_key'] ?? ''));
     $tenorKey = trim((string)($body['gif_tenor_api_key'] ?? ''));
+    $klipyKey = trim((string)($body['gif_klipy_api_key'] ?? ''));
     $provider = (string)($body['gif_default_provider'] ?? 'giphy');
-    if (!in_array($provider, ['giphy', 'tenor'], true)) $provider = 'giphy';
+    if (!in_array($provider, ['giphy', 'klipy', 'tenor'], true)) $provider = 'giphy';
     set_app_setting($pdo, 'gif_giphy_api_key', $giphyKey);
     set_app_setting($pdo, 'gif_tenor_api_key', $tenorKey);
+    set_app_setting($pdo, 'gif_klipy_api_key', $klipyKey);
     set_app_setting($pdo, 'gif_default_provider', $provider);
     set_app_setting($pdo, 'age_gate_enabled', !empty($body['age_gate_enabled']) ? '1' : '0');
     log_tool($pdo, (int)$me['id'], 'admin_settings_update', null, null, 'Updated community settings');

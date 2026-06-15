@@ -870,6 +870,7 @@ function seed_app_settings(PDO $pdo): void {
         'auth_lockout_minutes' => '15',
         'gif_giphy_api_key' => '',
         'gif_tenor_api_key' => '',
+        'gif_klipy_api_key' => '',
         'gif_default_provider' => 'giphy',
         'age_gate_enabled' => '0',
         'age_gate_min_age' => '13',

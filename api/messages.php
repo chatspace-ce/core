@@ -230,7 +230,7 @@ if ($messageType === 'gif') {
     $parts = parse_url($content);
     if (($parts['scheme'] ?? '') !== 'https' || empty($parts['host'])) json_out(['error' => 'GIF URL required'], 400);
     $host = strtolower((string)$parts['host']);
-    if (!str_contains($host, 'giphy.com') && !str_contains($host, 'tenor.com') && !str_contains($host, 'tenor.googleapis.com')) {
+    if (!str_contains($host, 'giphy.com') && !str_contains($host, 'tenor.com') && !str_contains($host, 'tenor.googleapis.com') && !str_contains($host, 'klipy.com')) {
         json_out(['error' => 'Unsupported GIF provider'], 400);
     }
 } elseif ($messageType === 'gesture') {

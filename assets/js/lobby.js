@@ -995,6 +995,7 @@ adminSettings?.addEventListener('submit', async e => {
       auth_lockout_minutes: form.elements.auth_lockout_minutes.value,
       gif_giphy_api_key: form.elements.gif_giphy_api_key.value,
       gif_tenor_api_key: form.elements.gif_tenor_api_key.value,
+      gif_klipy_api_key: form.elements.gif_klipy_api_key.value,
       gif_default_provider: form.elements.gif_default_provider.value,
       age_gate_enabled: form.elements.age_gate_enabled.checked ? 1 : 0,
       age_gate_min_age: form.elements.age_gate_min_age.value,

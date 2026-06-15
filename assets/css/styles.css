@@ -3075,6 +3075,9 @@ textarea:focus { border-color: rgba(124,106,247,.8); box-shadow: 0 0 0 3px rgba(
 .admin-settings-fields.three {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
+.admin-settings-fields.four {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
 .admin-settings-registration {
   align-items: end;
 }
@@ -3159,6 +3162,7 @@ textarea:focus { border-color: rgba(124,106,247,.8); box-shadow: 0 0 0 3px rgba(
   .admin-settings-grid,
   .admin-settings-fields,
   .admin-settings-fields.three,
+  .admin-settings-fields.four,
   .auth-protection-fields,
   .admin-moderation-grid,
   .admin-summary-grid {
