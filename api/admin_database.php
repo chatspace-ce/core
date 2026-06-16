@@ -35,7 +35,7 @@ function export_core_bundle(PDO $pdo, int $actorId, array $options = []): void {
     $includeGestures = array_key_exists('gestures', $options) ? (bool)$options['gestures'] : false;
     $includeRooms = array_key_exists('rooms', $options) ? (bool)$options['rooms'] : true;
     $includeSettings = array_key_exists('settings', $options) ? (bool)$options['settings'] : true;
-    $users = $pdo->query('SELECT id, email, password_hash, display_name, role, avatar_path, created_at FROM users ORDER BY id ASC')->fetchAll();
+    $users = $pdo->query('SELECT id, email, password_hash, display_name, role, avatar_path, aura_effect, created_at FROM users ORDER BY id ASC')->fetchAll();
     $rooms = $pdo->query(
         'SELECT r.id, r.public_id, r.owner_id, u.email AS owner_email, r.name, r.background_path, r.background_mime, r.background_thumb_path, r.created_at
            FROM rooms r
@@ -93,6 +93,7 @@ function export_core_bundle(PDO $pdo, int $actorId, array $options = []): void {
                 'display_name' => $row['display_name'],
                 'role' => $row['role'] ?: 'user',
                 'avatar_path' => $row['avatar_path'] ?: 'preset:Default',
+                'aura_effect' => $row['aura_effect'] ?: null,
                 'created_at' => $row['created_at'],
         ], $users);
     }

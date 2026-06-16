@@ -75,8 +75,13 @@ const versionBannerText = document.getElementById('version-banner-text');
 const versionRefreshBtn = document.getElementById('version-refresh');
 const linkIconModal = document.getElementById('link-icon-modal');
 const linkIconGrid = document.getElementById('link-icon-grid');
+const auraModal = document.getElementById('aura-modal');
+const auraOptionsEl = document.getElementById('aura-options');
+const auraPreviewAvatar = document.getElementById('aura-preview-avatar');
+const auraPreviewLayer = document.querySelector('#aura-modal .aura-preview-layer');
 const avatarFileInput = document.getElementById('avatar-file-input');
 const ctxToggleWebcam = document.getElementById('ctx-toggle-webcam');
+const ctxAuras = document.getElementById('ctx-auras');
 const sessionLockEl = document.getElementById('session-lock');
 const sessionLockForm = document.getElementById('session-lock-form');
 const sessionLockPassword = document.getElementById('session-lock-password');
@@ -164,6 +169,10 @@ let messagesPinnedToBottom = true;
 const loadedRoomEffectModules = new Map();
 let activeRoomEffectController = null;
 let activeRoomEffect = null;
+const loadedAuraModules = new Map();
+let auraLoadChain = Promise.resolve();
+let auraCatalog = [];
+let selectedAuraKey = null;
 let activeMediaTab = 'gifs';
 let gesturePage = 1;
 let gestureHasMore = false;
@@ -889,16 +898,23 @@ function renderParticipant(p, options = {}) {
 
   let img = merged.avatarEl;
   let label = merged.labelEl;
+  let auraEl = merged.auraEl;
   if (!img) {
     img = document.createElement('img');
     img.className = 'avatar';
     img.draggable = false;
     img.dataset.participantId = p.id;
+    auraEl = document.createElement('div');
+    auraEl.className = 'avatar-aura-layer';
+    auraEl.dataset.participantId = p.id;
+    cleanupAuraLayer(auraEl);
     label = document.createElement('div');
     label.className = 'avatar-name';
     roomStage.appendChild(img);
+    roomStage.appendChild(auraEl);
     roomStage.appendChild(label);
     merged.avatarEl = img;
+    merged.auraEl = auraEl;
     merged.labelEl = label;
     if (p.id === cfg.myParticipantId) makeDraggable(img);
     addAvatarContextListeners(img);
@@ -909,6 +925,7 @@ function renderParticipant(p, options = {}) {
   img.classList.toggle('webcam', Boolean(merged.webcam_path || merged.webcam_enabled));
   label.textContent = displayNameFor(merged);
   positionAvatar(merged);
+  applyParticipantAura(merged);
   const pendingVideo = pendingRemoteVideoStreams.get(Number(merged.id));
   if (pendingVideo) attachParticipantVideo(merged.id, pendingVideo, Number(merged.id) === Number(cfg.myParticipantId));
   if (merged.webcamVideoEl && merged.webcam_enabled) merged.avatarEl?.classList.add('avatar-hidden-behind-webcam');
@@ -918,12 +935,15 @@ function renderParticipant(p, options = {}) {
 }
 
 function removeStagePresence(person) {
+  cleanupAuraLayer(person.auraEl);
   person.avatarEl?.remove();
+  person.auraEl?.remove();
   person.labelEl?.remove();
   person.typingEl?.remove();
   person.speechEl?.remove();
   person.webcamVideoEl?.remove();
   person.avatarEl = null;
+  person.auraEl = null;
   person.labelEl = null;
   person.typingEl = null;
   person.speechEl = null;
@@ -1000,6 +1020,12 @@ function positionAvatar(p) {
   const y = Math.max(0, Math.min(h - ah, p.position_y * h));
   img.style.left = `${x}px`;
   img.style.top = `${y}px`;
+  if (p.auraEl) {
+    p.auraEl.style.left = `${x}px`;
+    p.auraEl.style.top = `${y}px`;
+    p.auraEl.style.width = `${aw}px`;
+    p.auraEl.style.height = `${ah}px`;
+  }
   if (p.webcamVideoEl) {
     p.webcamVideoEl.style.left = `${x}px`;
     p.webcamVideoEl.style.top = `${y}px`;
@@ -1869,6 +1895,110 @@ function renderReactions(msg) {
   }).join('')}</div>`;
 }
 
+function auraByKey(key) {
+  return auraCatalog.find(aura => aura.key === key) || null;
+}
+
+async function loadAuraModule(aura) {
+  if (!aura?.script) throw new Error('Aura script missing.');
+  const src = appUrl(aura.script);
+  if (loadedAuraModules.has(src)) return loadedAuraModules.get(src);
+  const load = auraLoadChain.catch(() => {}).then(() => new Promise((resolve, reject) => {
+    const previousModule = window.module;
+    const previousExports = window.exports;
+    const moduleShim = { exports: {} };
+    const restore = () => {
+      if (previousModule === undefined) delete window.module;
+      else window.module = previousModule;
+      if (previousExports === undefined) delete window.exports;
+      else window.exports = previousExports;
+    };
+    const script = document.createElement('script');
+    window.module = moduleShim;
+    window.exports = moduleShim.exports;
+    script.src = cacheBust(src);
+    script.async = false;
+    script.dataset.auraSrc = src;
+    script.addEventListener('load', () => {
+      const exported = moduleShim.exports;
+      restore();
+      script.remove();
+      if (!exported?.render) {
+        reject(new Error(`${aura.label || aura.key} did not expose an aura renderer.`));
+        return;
+      }
+      loadedAuraModules.set(src, exported);
+      resolve(exported);
+    }, { once: true });
+    script.addEventListener('error', () => {
+      restore();
+      script.remove();
+      reject(new Error(`Could not load ${aura.label || aura.key}.`));
+    }, { once: true });
+    document.head.appendChild(script);
+  }));
+  auraLoadChain = load.catch(() => {});
+  return load;
+}
+
+function cleanupAuraLayer(layer) {
+  if (!layer) return null;
+  const cleanup = layer._auraCleanup;
+  layer._auraCleanup = null;
+  if (cleanup) {
+    try { cleanup(); } catch {}
+  }
+  layer.replaceChildren();
+  layer.dataset.auraKey = '';
+  layer._auraMounted = false;
+  layer._auraLoadingKey = '';
+  const effect = document.createElement('div');
+  effect.className = 'avatar-aura-effect';
+  layer.appendChild(effect);
+  return effect;
+}
+
+function cleanupAuraRuntime(runtime) {
+  if (typeof runtime === 'number') {
+    clearInterval(runtime);
+    clearTimeout(runtime);
+    return;
+  }
+  if (typeof runtime === 'function') {
+    runtime();
+    return;
+  }
+  runtime?.destroy?.();
+  runtime?.cleanup?.();
+}
+
+async function applyAuraToLayer(layer, key) {
+  if (!layer) return;
+  const auraKey = key || '';
+  if (layer.dataset.auraKey === auraKey && (auraKey === '' || layer._auraMounted || layer._auraLoadingKey === auraKey)) return;
+  const effectLayer = cleanupAuraLayer(layer);
+  layer.dataset.auraKey = auraKey;
+  if (!auraKey) return;
+  layer._auraLoadingKey = auraKey;
+  const aura = auraByKey(auraKey) || { key: auraKey, label: auraKey, script: `/assets/auras/${encodeURIComponent(auraKey)}.js` };
+  try {
+    const module = await loadAuraModule(aura);
+    if (layer.dataset.auraKey !== auraKey || !effectLayer?.isConnected) return;
+    const runtime = module.render(effectLayer);
+    layer._auraCleanup = () => cleanupAuraRuntime(runtime);
+    layer._auraMounted = true;
+    layer._auraLoadingKey = '';
+  } catch (err) {
+    if (layer.dataset.auraKey === auraKey) cleanupAuraLayer(layer);
+    console.warn(err);
+  }
+}
+
+function applyParticipantAura(person) {
+  if (!person?.auraEl) return;
+  applyAuraToLayer(person.auraEl, person.aura_effect || '').catch(console.warn);
+}
+
 function roomEffectByKey(key) {
   return (cfg.roomEffects || []).find(effect => effect.key === key) || null;
 }
@@ -1995,6 +2125,70 @@ function renderRoomEffectsModal() {
   } else {
     current.innerHTML = '<span class="minor">No room effect is active.</span>';
     if (stop) stop.hidden = true;
+  }
+}
+
+async function loadAuraCatalog() {
+  if (auraCatalog.length) return auraCatalog;
+  const qs = new URLSearchParams({ session_id: cfg.sessionId, join_token: cfg.myJoinToken });
+  const data = await fetch(appUrl('/api/auras.php?' + qs)).then(r => r.json());
+  if (data.error) throw new Error(data.error);
+  auraCatalog = data.auras || [];
+  return auraCatalog;
+}
+
+function renderAuraOptions() {
+  if (!auraOptionsEl) return;
+  const items = [{ key: '', label: 'None' }, ...auraCatalog];
+  auraOptionsEl.innerHTML = items.map(aura => `
+    <button class="aura-option${(selectedAuraKey || '') === aura.key ? ' selected' : ''}" type="button" data-aura-key="${esc(aura.key)}">
+      <span class="aura-option-thumb">${aura.key ? '<span class="aura-mini-spark">✦</span>' : '<span class="aura-none">None</span>'}</span>
+      <span>${esc(aura.label)}</span>
+    </button>
+  `).join('');
+}
+
+async function previewAura(key) {
+  selectedAuraKey = key || '';
+  renderAuraOptions();
+  const me = participants.get(cfg.myParticipantId);
+  if (auraPreviewAvatar && me) auraPreviewAvatar.src = avatarUrl(me);
+  await applyAuraToLayer(auraPreviewLayer, selectedAuraKey);
+}
+
+async function openAuraModal() {
+  closeContextMenu();
+  const me = participants.get(cfg.myParticipantId);
+  if (!me) return;
+  try {
+    await loadAuraCatalog();
+    selectedAuraKey = me.aura_effect || '';
+    renderAuraOptions();
+    if (auraPreviewAvatar) auraPreviewAvatar.src = avatarUrl(me);
+    auraModal?.classList.add('open');
+    await applyAuraToLayer(auraPreviewLayer, selectedAuraKey);
+  } catch (err) {
+    showWarning(err.message || 'Could not load auras.');
+  }
+}
+
+function closeAuraModal() {
+  auraModal?.classList.remove('open');
+  cleanupAuraLayer(auraPreviewLayer);
+}
+
+async function setCurrentAura() {
+  const auraKey = selectedAuraKey || '';
+  try {
+    await apiPost('/api/auras.php', { session_id: cfg.sessionId, join_token: cfg.myJoinToken, aura_key: auraKey });
+    participants.forEach(person => {
+      if (Number(person.user_id) !== Number(cfg.myUserId)) return;
+      person.aura_effect = auraKey || null;
+      applyParticipantAura(person);
+    });
+    closeAuraModal();
+  } catch (err) {
+    showWarning(err.message || 'Could not set aura.');
   }
 }
 
@@ -2442,6 +2636,13 @@ async function poll() {
           if (!person.webcam_enabled) detachParticipantVideo(person.id);
           renderParticipant(person);
         }
+      }
+      if (ev.type === 'aura') {
+        participants.forEach(person => {
+          if (Number(person.user_id) !== Number(p.user_id) && Number(person.id) !== Number(p.participant_id)) return;
+          person.aura_effect = p.aura_effect || null;
+          applyParticipantAura(person);
+        });
       }
       if (ev.type === 'user_role_update') applyUserRoleUpdate(p);
       if (ev.type === 'typing') showTyping(p.participant_id, p.active);
@@ -3035,6 +3236,7 @@ function openAvatarContextMenu(x, y, participant) {
   const isBlocked = isUserBlocked(participant.user_id);
   const showHostTools = Boolean(cfg.canUseHostTools && !isOwn);
   document.getElementById('ctx-change-avatar').style.display = isOwn ? 'block' : 'none';
+  if (ctxAuras) ctxAuras.style.display = isOwn ? 'block' : 'none';
   ctxToggleWebcam.style.display = isOwn ? 'block' : 'none';
   document.getElementById('ctx-dm').style.display = !isOwn && !isBlocked ? 'block' : 'none';
   document.getElementById('ctx-tools-wrap').style.display = showHostTools ? 'block' : 'none';
@@ -4008,6 +4210,22 @@ document.getElementById('ctx-change-avatar').addEventListener('click', () => {
   closeContextMenu();
   avatarFileInput.click();
 });
+
+ctxAuras?.addEventListener('click', () => {
+  openAuraModal();
+});
+
+auraOptionsEl?.addEventListener('click', e => {
+  const button = e.target.closest('.aura-option');
+  if (!button) return;
+  previewAura(button.dataset.auraKey || '').catch(err => showWarning(err.message || 'Could not preview aura.'));
+});
+
+document.getElementById('aura-set')?.addEventListener('click', () => {
+  setCurrentAura();
+});
+document.getElementById('aura-close')?.addEventListener('click', closeAuraModal);
+document.getElementById('aura-cancel')?.addEventListener('click', closeAuraModal);
 
 document.getElementById('ctx-unlink').addEventListener('click', () => {
   closeContextMenu();

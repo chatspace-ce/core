@@ -43,6 +43,7 @@ emit_event($pdo, (int)$session['id'], 'participant_join', [
     'is_owner' => (int)$room['owner_id'] === (int)$user['id'],
     'avatar_path' => $participant['avatar_path'],
     'avatar_url' => resolve_avatar($participant['avatar_path']),
+    'aura_effect' => $participant['aura_effect'] ?? null,
     'position_x' => (float)$participant['position_x'],
     'position_y' => (float)$participant['position_y'],
     'webcam_path' => $participant['webcam_path'],
@@ -290,6 +291,25 @@ $linkIconCatalog = link_icon_catalog($pdo);
     </div>
   </form>
 </div>
+<div class="modal" id="aura-modal">
+  <div class="modal-box aura-box">
+    <div class="modal-head">
+      <strong>Auras</strong>
+      <button class="window-close" id="aura-close" type="button" aria-label="Close">×</button>
+    </div>
+    <div class="aura-preview-stage">
+      <div class="aura-preview-wrap">
+        <div class="avatar-aura-layer aura-preview-layer"><div class="avatar-aura-effect"></div></div>
+        <img id="aura-preview-avatar" alt="Aura preview">
+      </div>
+    </div>
+    <div class="aura-options" id="aura-options"></div>
+    <div class="aura-actions">
+      <button class="btn btn-primary" id="aura-set" type="button">Set</button>
+      <button class="btn" id="aura-cancel" type="button">Cancel</button>
+    </div>
+  </div>
+</div>
 <div class="modal" id="host-warn-modal">
   <form class="modal-box host-action-box" id="host-warn-form">
     <div class="modal-head">
@@ -420,6 +440,7 @@ $linkIconCatalog = link_icon_catalog($pdo);
 </div>
 <div id="ctx-menu">
   <button id="ctx-change-avatar" type="button">Change Avatar</button>
+  <button id="ctx-auras" type="button">Auras</button>
   <button id="ctx-toggle-webcam" type="button">Enable Webcam</button>
   <button id="ctx-dm" type="button">Send DM</button>
   <button id="ctx-block" class="danger" type="button">Block</button>

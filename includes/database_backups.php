@@ -61,15 +61,17 @@ function backup_import_core_bundle(PDO $pdo, array $bundle, int $actorId = 0): a
             if (!filter_var($email, FILTER_VALIDATE_EMAIL) || $displayName === '' || $hash === '') continue;
             $role = in_array(($user['role'] ?? 'user'), ['user', 'guide', 'developer', 'admin'], true) ? (string)$user['role'] : 'user';
             $avatarPath = (string)($user['avatar_path'] ?? 'preset:Default');
+            $requestedAura = trim((string)($user['aura_effect'] ?? ''));
+            $auraEffect = $requestedAura !== '' ? normalize_aura_key($requestedAura) : null;
             $stmt = $pdo->prepare('SELECT id FROM users WHERE email = ? LIMIT 1');
             $stmt->execute([$email]);
             $id = (int)($stmt->fetchColumn() ?: 0);
             if ($id) {
-                $pdo->prepare('UPDATE users SET password_hash = ?, display_name = ?, role = ?, avatar_path = ? WHERE id = ?')
-                    ->execute([$hash, $displayName, $role, $avatarPath, $id]);
+                $pdo->prepare('UPDATE users SET password_hash = ?, display_name = ?, role = ?, avatar_path = ?, aura_effect = ? WHERE id = ?')
+                    ->execute([$hash, $displayName, $role, $avatarPath, $auraEffect, $id]);
             } else {
-                $pdo->prepare('INSERT INTO users (email, password_hash, display_name, role, avatar_path) VALUES (?,?,?,?,?)')
-                    ->execute([$email, $hash, $displayName, $role, $avatarPath]);
+                $pdo->prepare('INSERT INTO users (email, password_hash, display_name, role, avatar_path, aura_effect) VALUES (?,?,?,?,?,?)')
+                    ->execute([$email, $hash, $displayName, $role, $avatarPath, $auraEffect]);
                 $id = (int)$pdo->lastInsertId();
             }
             $userMap[(int)($user['source_id'] ?? 0)] = $id;

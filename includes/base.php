@@ -201,6 +201,7 @@ function migrate(PDO $pdo): void {
             display_name TEXT NOT NULL,
             role TEXT NOT NULL DEFAULT 'user',
             avatar_path TEXT DEFAULT 'preset:Default',
+            aura_effect TEXT DEFAULT NULL,
             current_room_id INTEGER DEFAULT NULL,
             last_seen_at TEXT DEFAULT NULL,
             created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -242,6 +243,7 @@ function migrate(PDO $pdo): void {
             user_id INTEGER NOT NULL,
             display_name TEXT NOT NULL,
             avatar_path TEXT DEFAULT 'preset:Default',
+            aura_effect TEXT DEFAULT NULL,
             join_token TEXT NOT NULL UNIQUE,
             position_x REAL NOT NULL DEFAULT 0.15,
             position_y REAL NOT NULL DEFAULT 0.25,
@@ -583,10 +585,16 @@ function migrate(PDO $pdo): void {
         if (!in_array('recovery_code_suffix', $mysqlUserColNames, true)) {
             $pdo->exec('ALTER TABLE users ADD COLUMN recovery_code_suffix VARCHAR(16) DEFAULT NULL');
         }
+        if (!in_array('aura_effect', $mysqlUserColNames, true)) {
+            $pdo->exec('ALTER TABLE users ADD COLUMN aura_effect VARCHAR(128) DEFAULT NULL');
+        }
         $mysqlParticipantCols = $pdo->query('SHOW COLUMNS FROM participants')->fetchAll();
         $mysqlParticipantColNames = array_map(fn(array $col): string => (string)($col['Field'] ?? ''), $mysqlParticipantCols);
         if (!in_array('webcam_enabled', $mysqlParticipantColNames, true)) {
             $pdo->exec('ALTER TABLE participants ADD COLUMN webcam_enabled INTEGER NOT NULL DEFAULT 0');
+        }
+        if (!in_array('aura_effect', $mysqlParticipantColNames, true)) {
+            $pdo->exec('ALTER TABLE participants ADD COLUMN aura_effect VARCHAR(128) DEFAULT NULL');
         }
         $mysqlVoiceCols = $pdo->query('SHOW COLUMNS FROM voice_sessions')->fetchAll();
         $mysqlVoiceColNames = array_map(fn(array $col): string => (string)($col['Field'] ?? ''), $mysqlVoiceCols);
@@ -626,6 +634,9 @@ function migrate(PDO $pdo): void {
     if (!in_array('recovery_code_suffix', $userColNames, true)) {
         $pdo->exec('ALTER TABLE users ADD COLUMN recovery_code_suffix TEXT DEFAULT NULL');
     }
+    if (!in_array('aura_effect', $userColNames, true)) {
+        $pdo->exec('ALTER TABLE users ADD COLUMN aura_effect TEXT DEFAULT NULL');
+    }
     $settingsCols = $pdo->query('PRAGMA table_info(app_settings)')->fetchAll();
     $settingsColNames = array_map(fn(array $col): string => (string)$col['name'], $settingsCols);
     if (in_array('key', $settingsColNames, true) && !in_array('setting_key', $settingsColNames, true)) {
@@ -664,6 +675,9 @@ function migrate(PDO $pdo): void {
     }
     if (!in_array('webcam_enabled', $participantColNames, true)) {
         $pdo->exec('ALTER TABLE participants ADD COLUMN webcam_enabled INTEGER NOT NULL DEFAULT 0');
+    }
+    if (!in_array('aura_effect', $participantColNames, true)) {
+        $pdo->exec('ALTER TABLE participants ADD COLUMN aura_effect TEXT DEFAULT NULL');
     }
     if (!$hasLinkedTo) {
         $pdo->exec('ALTER TABLE participants ADD COLUMN linked_to_participant_id INTEGER DEFAULT NULL');
@@ -1621,6 +1635,37 @@ function resolve_avatar(?string $path): string {
     return $path;
 }
 
+function aura_catalog(): array {
+    $dir = __DIR__ . '/../assets/auras';
+    if (!is_dir($dir)) return [];
+    $items = [];
+    foreach (glob($dir . '/*.js') ?: [] as $file) {
+        $key = pathinfo($file, PATHINFO_FILENAME);
+        if (!preg_match('/^[A-Za-z0-9][A-Za-z0-9 _&.\'-]{0,80}$/', $key)) continue;
+        $label = $key;
+        $contents = @file_get_contents($file);
+        if (is_string($contents) && preg_match('/\bname\s*:\s*["\']([^"\']{1,80})["\']/', $contents, $match)) {
+            $label = trim($match[1]) ?: $label;
+        }
+        $items[] = [
+            'key' => $key,
+            'label' => $label,
+            'script' => '/assets/auras/' . rawurlencode($key) . '.js',
+        ];
+    }
+    usort($items, fn(array $a, array $b): int => strcasecmp($a['label'], $b['label']));
+    return $items;
+}
+
+function normalize_aura_key(?string $key): ?string {
+    $key = trim((string)$key);
+    if ($key === '' || strtolower($key) === 'none') return null;
+    foreach (aura_catalog() as $aura) {
+        if (hash_equals((string)$aura['key'], $key)) return (string)$aura['key'];
+    }
+    return null;
+}
+
 function active_session_for_room(PDO $pdo, int $roomId): array {
     $stmt = $pdo->prepare('SELECT * FROM room_sessions WHERE room_id = ? LIMIT 1');
     $stmt->execute([$roomId]);
@@ -1661,9 +1706,9 @@ function participant_for_user(PDO $pdo, int $sessionId, array $user): array {
     $x = random_int(12, 68) / 100;
     $y = random_int(18, 58) / 100;
     $pdo->prepare(
-        'INSERT INTO participants (session_id, user_id, display_name, avatar_path, join_token, position_x, position_y, last_seen_at)
-         VALUES (?,?,?,?,?,?,?,CURRENT_TIMESTAMP)'
-    )->execute([$sessionId, (int)$user['id'], $user['display_name'], $user['avatar_path'] ?: 'preset:Default', $token, $x, $y]);
+        'INSERT INTO participants (session_id, user_id, display_name, avatar_path, aura_effect, join_token, position_x, position_y, last_seen_at)
+         VALUES (?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP)'
+    )->execute([$sessionId, (int)$user['id'], $user['display_name'], $user['avatar_path'] ?: 'preset:Default', $user['aura_effect'] ?? null, $token, $x, $y]);
     $stmt->execute([$sessionId, (int)$user['id']]);
     return $stmt->fetch();
 }

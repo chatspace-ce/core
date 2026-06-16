@@ -2138,6 +2138,21 @@ textarea:focus { border-color: rgba(124,106,247,.8); box-shadow: 0 0 0 3px rgba(
   object-fit: cover;
   z-index: 2;
 }
+.avatar-aura-layer {
+  position: absolute;
+  width: 150px;
+  height: 150px;
+  pointer-events: none;
+  overflow: visible;
+  z-index: 3;
+  isolation: isolate;
+}
+.avatar-aura-effect {
+  position: absolute;
+  inset: 0;
+  overflow: visible;
+  pointer-events: none;
+}
 .avatar:active { cursor: grabbing; }
 .avatar-webcam-video {
   background: #05060a;
@@ -2500,6 +2515,98 @@ textarea:focus { border-color: rgba(124,106,247,.8); box-shadow: 0 0 0 3px rgba(
 .room-effects-actions .btn {
   width: auto;
   min-width: 138px;
+}
+.aura-box {
+  width: min(680px, 100%);
+}
+.aura-preview-stage {
+  display: grid;
+  place-items: center;
+  min-height: 230px;
+  margin: 6px 0 16px;
+  border: 1px solid rgba(124,106,247,.32);
+  border-radius: var(--radius-sm);
+  background:
+    radial-gradient(circle at 50% 42%, rgba(124,106,247,.18), transparent 38%),
+    linear-gradient(135deg, rgba(18,20,31,.94), rgba(6,8,12,.96));
+  overflow: hidden;
+}
+.aura-preview-wrap {
+  position: relative;
+  width: 150px;
+  height: 150px;
+}
+.aura-preview-wrap img {
+  position: absolute;
+  inset: 0;
+  width: 150px;
+  height: 150px;
+  object-fit: cover;
+  box-shadow: 0 10px 28px rgba(0,0,0,.46);
+  z-index: 2;
+}
+.aura-preview-layer {
+  left: 0;
+  top: 0;
+}
+.aura-options {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(138px, 1fr));
+  gap: 8px;
+  max-height: 260px;
+  overflow: auto;
+  padding-right: 3px;
+}
+.aura-option {
+  min-height: 76px;
+  display: grid;
+  grid-template-columns: 40px 1fr;
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid rgba(255,255,255,.11);
+  border-radius: 8px;
+  background: linear-gradient(135deg, rgba(255,255,255,.055), rgba(255,255,255,.025));
+  color: var(--text);
+  text-align: left;
+  font-weight: 800;
+  cursor: pointer;
+}
+.aura-option:hover,
+.aura-option.selected {
+  border-color: rgba(124,106,247,.78);
+  background: linear-gradient(135deg, rgba(124,106,247,.32), rgba(23,26,39,.86));
+}
+.aura-option-thumb {
+  width: 38px;
+  height: 38px;
+  display: inline-grid;
+  place-items: center;
+  border: 1px solid rgba(255,255,255,.13);
+  border-radius: 8px;
+  background: rgba(0,0,0,.24);
+  color: #bda8ff;
+}
+.aura-mini-spark {
+  font-size: 22px;
+  line-height: 1;
+  text-shadow: 0 0 14px rgba(124,106,247,.9);
+}
+.aura-none {
+  color: var(--text-muted);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0;
+}
+.aura-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 14px;
+}
+.aura-actions .btn {
+  width: auto;
+  min-width: 96px;
 }
 .room-edit-preview {
   display: grid;
