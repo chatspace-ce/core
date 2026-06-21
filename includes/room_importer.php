@@ -21,23 +21,53 @@ function room_import_safe_url(string $url): string {
     return $url;
 }
 
-function room_import_fetch_url(string $url, int $maxBytes, string $accept, int $redirects = 3): array {
+function room_import_fetch_url(string $url, int $maxBytes, string $accept, int $redirects = 3, string $referer = '', bool $allowHostFallback = true): array {
     $url = room_import_safe_url($url);
-    $context = stream_context_create([
+    $headers = room_import_fetch_headers($accept, $referer);
+    if (function_exists('curl_init')) {
+        try {
+            $result = room_import_fetch_url_curl($url, $maxBytes, $headers);
+            if (($result['status'] ?? 0) >= 300 && ($result['status'] ?? 0) < 400 && !empty($result['location']) && $redirects > 0) {
+                return room_import_fetch_url(absolutize_preview_url((string)$result['location'], $url), $maxBytes, $accept, $redirects - 1, $referer ?: $url, $allowHostFallback);
+            }
+            if (($result['status'] ?? 0) >= 400) throw new RuntimeException('The remote server returned HTTP ' . (int)$result['status'] . '.');
+            return ['body' => $result['body'], 'url' => $result['url'], 'content_type' => $result['content_type']];
+        } catch (Throwable $e) {
+            // Fall through to streams; some hosts behave differently across transports.
+        }
+    }
+    $contextOptions = [
         'http' => [
             'method' => 'GET',
-            'timeout' => 12,
+            'timeout' => 14,
             'follow_location' => 0,
             'ignore_errors' => true,
-            'header' => "User-Agent: ChatSpaceCE-RoomImporter/1.0\r\nAccept: {$accept}\r\n",
+            'header' => implode("\r\n", $headers) . "\r\n",
         ],
         'ssl' => [
             'verify_peer' => true,
             'verify_peer_name' => true,
         ],
-    ]);
-    $handle = @fopen($url, 'rb', false, $context);
-    if (!$handle) throw new RuntimeException('Could not fetch that URL.');
+    ];
+    $handle = false;
+    $lastError = null;
+    for ($attempt = 0; $attempt < 3; $attempt++) {
+        $context = stream_context_create($contextOptions);
+        $handle = @fopen($url, 'rb', false, $context);
+        if ($handle) break;
+        $lastError = error_get_last();
+        usleep(180000 * ($attempt + 1));
+    }
+    if (!$handle) {
+        if ($allowHostFallback) {
+            $fallback = room_import_www_fallback_url($url);
+            if ($fallback !== null) {
+                return room_import_fetch_url($fallback, $maxBytes, $accept, $redirects, $referer, false);
+            }
+        }
+        $detail = is_array($lastError) && !empty($lastError['message']) ? ' ' . $lastError['message'] : '';
+        throw new RuntimeException('Could not fetch that URL.' . $detail);
+    }
     $body = stream_get_contents($handle, $maxBytes + 1);
     $meta = stream_get_meta_data($handle);
     fclose($handle);
@@ -55,11 +85,79 @@ function room_import_fetch_url(string $url, int $maxBytes, string $accept, int $
         if (stripos((string)$header, 'Content-Type:') === 0) $contentType = trim(substr((string)$header, 13));
     }
     if ($status >= 300 && $status < 400 && $location !== '' && $redirects > 0) {
-        return room_import_fetch_url(absolutize_preview_url($location, $url), $maxBytes, $accept, $redirects - 1);
+        return room_import_fetch_url(absolutize_preview_url($location, $url), $maxBytes, $accept, $redirects - 1, $referer ?: $url);
     }
     if ($status >= 400) throw new RuntimeException('The remote server returned HTTP ' . $status . '.');
 
     return ['body' => $body, 'url' => (string)($meta['uri'] ?? $url), 'content_type' => $contentType];
+}
+
+function room_import_fetch_headers(string $accept, string $referer = ''): array {
+    $headers = [
+        'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36',
+        'Accept: ' . $accept,
+        'Accept-Language: en-US,en;q=0.9',
+        'Cache-Control: no-cache',
+    ];
+    if ($referer !== '') $headers[] = 'Referer: ' . $referer;
+    return $headers;
+}
+
+function room_import_fetch_url_curl(string $url, int $maxBytes, array $headers): array {
+    $body = '';
+    $responseHeaders = [];
+    $ch = curl_init($url);
+    if (!$ch) throw new RuntimeException('Could not initialize importer request.');
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => false,
+        CURLOPT_FOLLOWLOCATION => false,
+        CURLOPT_HEADER => false,
+        CURLOPT_TIMEOUT => 16,
+        CURLOPT_CONNECTTIMEOUT => 8,
+        CURLOPT_HTTPHEADER => $headers,
+        CURLOPT_ENCODING => '',
+        CURLOPT_SSL_VERIFYPEER => true,
+        CURLOPT_SSL_VERIFYHOST => 2,
+        CURLOPT_HEADERFUNCTION => function ($ch, string $header) use (&$responseHeaders): int {
+            $responseHeaders[] = trim($header);
+            return strlen($header);
+        },
+        CURLOPT_WRITEFUNCTION => function ($ch, string $chunk) use (&$body, $maxBytes): int {
+            if (strlen($body) + strlen($chunk) > $maxBytes) return 0;
+            $body .= $chunk;
+            return strlen($chunk);
+        },
+    ]);
+    if (defined('CURLOPT_PROTOCOLS')) curl_setopt($ch, CURLOPT_PROTOCOLS, CURLPROTO_HTTP | CURLPROTO_HTTPS);
+    if (defined('CURLOPT_REDIR_PROTOCOLS')) curl_setopt($ch, CURLOPT_REDIR_PROTOCOLS, CURLPROTO_HTTP | CURLPROTO_HTTPS);
+    $ok = curl_exec($ch);
+    $errno = curl_errno($ch);
+    $error = curl_error($ch);
+    $status = (int)curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
+    $effective = (string)curl_getinfo($ch, CURLINFO_EFFECTIVE_URL);
+    $contentType = (string)curl_getinfo($ch, CURLINFO_CONTENT_TYPE);
+    curl_close($ch);
+    if (!$ok || $errno) throw new RuntimeException($error ?: 'Could not fetch that URL.');
+    if ($body === '') throw new RuntimeException('Remote URL returned no content.');
+    $location = '';
+    foreach ($responseHeaders as $header) {
+        if (stripos($header, 'Location:') === 0) $location = trim(substr($header, 9));
+        if ($contentType === '' && stripos($header, 'Content-Type:') === 0) $contentType = trim(substr($header, 13));
+    }
+    return ['body' => $body, 'url' => $effective ?: $url, 'content_type' => $contentType, 'status' => $status, 'location' => $location];
+}
+
+function room_import_www_fallback_url(string $url): ?string {
+    $parts = parse_url($url);
+    if (!$parts || empty($parts['scheme']) || empty($parts['host'])) return null;
+    $host = (string)$parts['host'];
+    $fallbackHost = str_starts_with(strtolower($host), 'www.') ? substr($host, 4) : 'www.' . $host;
+    if ($fallbackHost === $host || !preview_host_is_safe($fallbackHost)) return null;
+    $port = isset($parts['port']) ? ':' . (int)$parts['port'] : '';
+    $path = (string)($parts['path'] ?? '/');
+    $query = isset($parts['query']) ? '?' . $parts['query'] : '';
+    $fragment = isset($parts['fragment']) ? '#' . $parts['fragment'] : '';
+    return (string)$parts['scheme'] . '://' . $fallbackHost . $port . $path . $query . $fragment;
 }
 
 function room_import_style_value(string $style, string $property): string {
@@ -102,6 +200,7 @@ function room_import_candidate_media_url(string $value, string $baseUrl): string
     $value = html_entity_decode(trim($value), ENT_QUOTES | ENT_HTML5, 'UTF-8');
     if ($value === '' || str_starts_with(strtolower($value), 'javascript:')) return '';
     $absolute = absolutize_preview_url($value, $baseUrl);
+    $absolute = preg_replace_callback('~[^:/?#&=%]+~u', fn(array $m): string => str_replace('%2F', '/', rawurlencode($m[0])), $absolute) ?? $absolute;
     if (!preg_match('#^https?://#i', $absolute)) return '';
     $parts = parse_url($absolute);
     $baseParts = parse_url($baseUrl);
@@ -114,10 +213,34 @@ function room_import_candidate_media_url(string $value, string $baseUrl): string
 
 function room_import_media_label(string $url): string {
     $path = (string)(parse_url($url, PHP_URL_PATH) ?: '');
-    $base = basename($path);
+    $base = rawurldecode(basename($path));
     $base = preg_replace('~\.[a-z0-9]{2,5}$~i', '', $base) ?: 'Audio';
     $base = trim(str_replace(['_', '-'], ' ', $base));
     return $base !== '' ? ucwords($base) : 'Audio';
+}
+
+function room_import_has_audio_extension(string $url): bool {
+    return (bool)preg_match('~\.(?:mp3|m4a|aac|ogg|oga|opus|wav|mid|midi|m3u|m3u8|pls|asx|wax|wma)(?:[?#].*)?$~i', $url);
+}
+
+function room_import_has_image_extension(string $url): bool {
+    return (bool)preg_match('~\.(?:jpe?g|png|webp|gif|bmp)(?:[?#].*)?$~i', $url);
+}
+
+function room_import_audio_hint(DOMElement $node, string $attr = ''): bool {
+    $tag = strtolower($node->tagName);
+    if (in_array($tag, ['audio', 'source', 'embed', 'object', 'bgsound'], true)) return true;
+    if ($tag === 'param') {
+        $name = strtolower((string)$node->getAttribute('name'));
+        return in_array($name, ['filename', 'url', 'src', 'movie', 'autostart', 'uimode'], true);
+    }
+    $type = strtolower((string)$node->getAttribute('type'));
+    $classid = strtolower((string)$node->getAttribute('classid'));
+    return str_contains($type, 'audio')
+        || str_contains($type, 'mplayer')
+        || str_contains($type, 'mediaplayer')
+        || str_contains($classid, '6bf52a52')
+        || in_array(strtolower($attr), ['dynsrc', 'lowsrc'], true);
 }
 
 function room_import_parse(string $html, string $sourceUrl): array {
@@ -157,9 +280,13 @@ function room_import_parse(string $html, string $sourceUrl): array {
         $sections[] = ['type' => 'text', 'text' => $text, 'style' => $textStyle];
     };
 
-    $rememberAudio = function (string $url) use (&$audio, &$seenAudio): void {
+    $rememberAudio = function (string $url, bool $force = false) use (&$audio, &$seenAudio): void {
         if ($url === '' || isset($seenAudio[$url]) || count($audio) >= 12) return;
-        if (!preg_match('~\.(?:mp3|m4a|aac|ogg|oga|opus|wav|m3u|m3u8|pls|asx|wma)(?:[?#].*)?$~i', $url)) return;
+        if (!room_import_has_audio_extension($url)) {
+            if (!$force || room_import_has_image_extension($url)) return;
+            $path = (string)(parse_url($url, PHP_URL_PATH) ?: '');
+            if (preg_match('~\.(?:html?|php|asp|aspx|cgi|css|js|txt|xml)(?:[?#].*)?$~i', $path)) return;
+        }
         $seenAudio[$url] = true;
         $audio[] = ['label' => room_import_media_label($url), 'url' => $url];
     };
@@ -181,15 +308,45 @@ function room_import_parse(string $html, string $sourceUrl): array {
         $tag = strtolower($node->tagName);
         if (in_array($tag, ['script', 'style', 'noscript', 'iframe'], true)) return;
 
-        foreach (['src', 'href', 'data', 'url', 'filename', 'FileName'] as $attr) {
-            if ($node->hasAttribute($attr)) $rememberAudio(room_import_candidate_media_url((string)$node->getAttribute($attr), $sourceUrl));
+        foreach (['src', 'href', 'data', 'url', 'filename', 'FileName', 'dynsrc', 'lowsrc'] as $attr) {
+            if ($node->hasAttribute($attr)) {
+                $rememberAudio(
+                    room_import_candidate_media_url((string)$node->getAttribute($attr), $sourceUrl),
+                    room_import_audio_hint($node, $attr)
+                );
+            }
         }
         if ($tag === 'param') {
-            $rememberAudio(room_import_candidate_media_url((string)$node->getAttribute('value'), $sourceUrl));
+            $rememberAudio(room_import_candidate_media_url((string)$node->getAttribute('value'), $sourceUrl), room_import_audio_hint($node, 'value'));
         }
-        if ($tag === 'img') {
+        if ($tag !== 'body') {
+            $elementBackground = '';
+            if ($node->hasAttribute('background')) {
+                $elementBackground = room_import_candidate_media_url((string)$node->getAttribute('background'), $sourceUrl);
+            }
+            if ($elementBackground === '') {
+                $elementBackground = room_import_candidate_media_url(room_import_background_image((string)$node->getAttribute('style')), $sourceUrl);
+            }
+            if ($elementBackground !== '') {
+                $flushText();
+                $sections[] = [
+                    'type' => 'image',
+                    'src' => $elementBackground,
+                    'alt' => '',
+                    'width' => null,
+                    'height' => null,
+                    'role' => 'background-piece',
+                ];
+            }
+        }
+        if ($tag === 'img' || ($tag === 'input' && strtolower((string)$node->getAttribute('type')) === 'image')) {
             $flushText();
-            $src = room_import_candidate_media_url((string)$node->getAttribute('src'), $sourceUrl);
+            $src = '';
+            foreach (['src', 'data-src', 'data-original', 'lowsrc', 'dynsrc'] as $imgAttr) {
+                if (!$node->hasAttribute($imgAttr)) continue;
+                $src = room_import_candidate_media_url((string)$node->getAttribute($imgAttr), $sourceUrl);
+                if ($src !== '') break;
+            }
             if ($src !== '') {
                 $sections[] = [
                     'type' => 'image',
@@ -223,6 +380,9 @@ function room_import_parse(string $html, string $sourceUrl): array {
     if (preg_match_all('~https?://[^\s"\'<>]+\.(?:mp3|m4a|aac|ogg|oga|opus|wav|m3u|m3u8|pls|asx|wma)(?:[^\s"\'<>]*)~i', $html, $matches)) {
         foreach ($matches[0] as $url) $rememberAudio(room_import_candidate_media_url($url, $sourceUrl));
     }
+    if (preg_match_all('~["\']([^"\']+\.(?:mp3|m4a|aac|ogg|oga|opus|wav|mid|midi|m3u|m3u8|pls|asx|wax|wma)(?:[?#][^"\']*)?)["\']~i', $html, $matches)) {
+        foreach ($matches[1] as $url) $rememberAudio(room_import_candidate_media_url($url, $sourceUrl));
+    }
 
     return [
         'source_url' => $sourceUrl,
@@ -234,10 +394,10 @@ function room_import_parse(string $html, string $sourceUrl): array {
     ];
 }
 
-function room_import_download_asset(string $url, string $kind): ?string {
+function room_import_download_asset(string $url, string $kind, string $referer = ''): ?string {
     $max = $kind === 'audio' ? 24 * 1024 * 1024 : 12 * 1024 * 1024;
     try {
-        $fetched = room_import_fetch_url($url, $max, $kind === 'audio' ? 'audio/*,*/*;q=0.6' : 'image/*,*/*;q=0.5', 3);
+        $fetched = room_import_fetch_url($url, $max, $kind === 'audio' ? 'audio/*,*/*;q=0.6' : 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8', 3, $referer);
     } catch (Throwable $e) {
         return null;
     }
@@ -263,14 +423,15 @@ function room_import_localize(array $preview): array {
         'background_color' => $preview['background_color'] ?? '#000000',
         'sections' => [],
     ];
+    $sourceUrl = (string)($preview['source_url'] ?? '');
     $backgroundPath = '';
     if (!empty($preview['background_image'])) {
-        $backgroundPath = room_import_download_asset((string)$preview['background_image'], 'image') ?: '';
+        $backgroundPath = room_import_download_asset((string)$preview['background_image'], 'image', $sourceUrl) ?: '';
     }
     foreach (($preview['sections'] ?? []) as $section) {
         if (!is_array($section)) continue;
         if (($section['type'] ?? '') === 'image') {
-            $path = room_import_download_asset((string)($section['src'] ?? ''), 'image');
+            $path = room_import_download_asset((string)($section['src'] ?? ''), 'image', $sourceUrl);
             if (!$path) continue;
             $layout['sections'][] = [
                 'type' => 'image',
@@ -294,7 +455,7 @@ function room_import_localize(array $preview): array {
         $url = (string)($track['url'] ?? '');
         if ($url === '') continue;
         $local = preg_match('~\.(?:mp3|m4a|aac|ogg|oga|opus|wav)(?:[?#].*)?$~i', $url)
-            ? room_import_download_asset($url, 'audio')
+            ? room_import_download_asset($url, 'audio', $sourceUrl)
             : null;
         $music[] = [
             'label' => (string)($track['label'] ?? room_import_media_label($url)),
