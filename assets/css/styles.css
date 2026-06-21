@@ -901,6 +901,31 @@ textarea:focus { border-color: rgba(124,106,247,.8); box-shadow: 0 0 0 3px rgba(
   height: 34px;
   filter: grayscale(.25) brightness(.82);
 }
+.vp-music-player audio[hidden],
+.vp-music-launch[hidden] {
+  display: none;
+}
+.vp-music-launch {
+  min-height: 36px;
+}
+.vp-music-modal-box {
+  width: min(760px, 94vw);
+}
+.vp-music-frame-wrap {
+  display: grid;
+  place-items: center;
+  min-height: 320px;
+  border: 1px solid rgba(255,255,255,.12);
+  border-radius: 8px;
+  overflow: hidden;
+  background: #05060a;
+}
+.vp-music-frame-wrap iframe {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  min-height: 320px;
+  border: 0;
+}
 .game-stage-layer {
   position: absolute;
   inset: 0;

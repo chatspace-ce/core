@@ -207,8 +207,15 @@ function room_import_candidate_media_url(string $value, string $baseUrl): string
     $assetHost = strtolower((string)($parts['host'] ?? ''));
     $baseHost = strtolower((string)($baseParts['host'] ?? ''));
     if (!$parts || $assetHost === '') return '';
-    if ($assetHost !== $baseHost && !preview_host_is_safe($assetHost)) return '';
+    if ($assetHost !== $baseHost && !room_import_allowed_external_link_host($assetHost) && !preview_host_is_safe($assetHost)) return '';
     return $absolute;
+}
+
+function room_import_allowed_external_link_host(string $host): bool {
+    foreach (['youtube.com', 'youtu.be', 'youtube-nocookie.com', 'spotify.com', 'soundcloud.com'] as $domain) {
+        if (host_matches_domain($host, $domain)) return true;
+    }
+    return false;
 }
 
 function room_import_media_label(string $url): string {
@@ -243,6 +250,54 @@ function room_import_audio_hint(DOMElement $node, string $attr = ''): bool {
         || in_array(strtolower($attr), ['dynsrc', 'lowsrc'], true);
 }
 
+function room_import_is_youtube_url(string $url): bool {
+    $parts = parse_url($url);
+    if (!$parts || empty($parts['host'])) return false;
+    $host = strtolower((string)$parts['host']);
+    return host_matches_domain($host, 'youtube.com') || host_matches_domain($host, 'youtu.be') || host_matches_domain($host, 'youtube-nocookie.com');
+}
+
+function room_import_youtube_embed(string $url): string {
+    $parts = parse_url($url);
+    return $parts ? (youtube_embed_url($parts) ?: '') : '';
+}
+
+function room_import_clean_manifest_value(string $value): string {
+    $value = trim(html_entity_decode($value, ENT_QUOTES | ENT_HTML5, 'UTF-8'));
+    $value = trim($value, " \t\r\n\"'");
+    if (preg_match('~\[[^\]]+\]\((https?://[^)]+)\)~i', $value, $m)) {
+        return trim($m[1]);
+    }
+    return trim($value);
+}
+
+function room_import_css_asset_manifest(string $html, string $sourceUrl): array {
+    $manifest = ['images' => [], 'background_image' => '', 'music' => []];
+    if (!preg_match_all('~--([A-Za-z0-9_-]+)\s*:\s*(?:"([^"]*)"|\'([^\']*)\'|([^;]+))\s*;~', $html, $matches, PREG_SET_ORDER)) {
+        return $manifest;
+    }
+    foreach ($matches as $match) {
+        $key = strtolower((string)$match[1]);
+        $rawValue = (string)($match[2] !== '' ? $match[2] : ($match[3] !== '' ? $match[3] : $match[4]));
+        $value = room_import_clean_manifest_value($rawValue);
+        if ($value === '') continue;
+        if (in_array($key, ['main-image', 'header-image', 'splash-image'], true)) {
+            $url = room_import_candidate_media_url($value, $sourceUrl);
+            if ($url !== '') $manifest['images'][] = ['src' => $url, 'role' => 'header'];
+        } elseif (str_starts_with($key, 'avatar-image')) {
+            $url = room_import_candidate_media_url($value, $sourceUrl);
+            if ($url !== '') $manifest['images'][] = ['src' => $url, 'role' => 'avatar-piece'];
+        } elseif (in_array($key, ['background-image', 'page-background', 'room-background'], true)) {
+            $url = room_import_candidate_media_url($value, $sourceUrl);
+            if ($url !== '') $manifest['background_image'] = $url;
+        } elseif (in_array($key, ['youtube-link', 'music-link', 'song-url', 'audio-link', 'stream-link'], true)) {
+            $url = room_import_candidate_media_url($value, $sourceUrl);
+            if ($url !== '') $manifest['music'][] = ['label' => room_import_is_youtube_url($url) ? 'YouTube Music' : room_import_media_label($url), 'url' => $url];
+        }
+    }
+    return $manifest;
+}
+
 function room_import_parse(string $html, string $sourceUrl): array {
     $dom = new DOMDocument();
     $previous = libxml_use_internal_errors(true);
@@ -256,7 +311,11 @@ function room_import_parse(string $html, string $sourceUrl): array {
     $body = $dom->getElementsByTagName('body')->item(0);
     $bodyStyle = $body instanceof DOMElement ? (string)$body->getAttribute('style') : '';
     $bodyBg = $body instanceof DOMElement ? (string)$body->getAttribute('background') : '';
+    $cssManifest = room_import_css_asset_manifest($html, $sourceUrl);
     $backgroundImage = $bodyBg !== '' ? room_import_candidate_media_url($bodyBg, $sourceUrl) : room_import_candidate_media_url(room_import_background_image($bodyStyle), $sourceUrl);
+    if ($backgroundImage === '' && !empty($cssManifest['background_image'])) {
+        $backgroundImage = (string)$cssManifest['background_image'];
+    }
     $backgroundColor = '#000000';
     if ($body instanceof DOMElement) {
         $bgColor = room_import_css_color((string)$body->getAttribute('bgcolor') ?: room_import_style_value($bodyStyle, 'background-color'));
@@ -266,6 +325,7 @@ function room_import_parse(string $html, string $sourceUrl): array {
     $sections = [];
     $audio = [];
     $seenAudio = [];
+    $seenImages = [];
     $textBuffer = '';
     $textStyle = [];
     $textBudget = 1800;
@@ -282,16 +342,37 @@ function room_import_parse(string $html, string $sourceUrl): array {
 
     $rememberAudio = function (string $url, bool $force = false) use (&$audio, &$seenAudio): void {
         if ($url === '' || isset($seenAudio[$url]) || count($audio) >= 12) return;
-        if (!room_import_has_audio_extension($url)) {
+        if (!room_import_is_youtube_url($url) && !room_import_has_audio_extension($url)) {
             if (!$force || room_import_has_image_extension($url)) return;
             $path = (string)(parse_url($url, PHP_URL_PATH) ?: '');
             if (preg_match('~\.(?:html?|php|asp|aspx|cgi|css|js|txt|xml)(?:[?#].*)?$~i', $path)) return;
         }
         $seenAudio[$url] = true;
-        $audio[] = ['label' => room_import_media_label($url), 'url' => $url];
+        $audio[] = ['label' => room_import_is_youtube_url($url) ? 'YouTube Music' : room_import_media_label($url), 'url' => $url];
     };
 
-    $walk = function (DOMNode $node, array $style = []) use (&$walk, &$sections, &$textBuffer, &$textStyle, $sourceUrl, $flushText, $rememberAudio): void {
+    $rememberImage = function (string $url, string $role = '') use (&$sections, &$seenImages): void {
+        if ($url === '' || isset($seenImages[$url]) || count($sections) >= 24) return;
+        $seenImages[$url] = true;
+        $section = [
+            'type' => 'image',
+            'src' => $url,
+            'alt' => '',
+            'width' => null,
+            'height' => null,
+        ];
+        if ($role !== '') $section['role'] = $role;
+        $sections[] = $section;
+    };
+
+    foreach (($cssManifest['images'] ?? []) as $image) {
+        if (is_array($image)) $rememberImage((string)($image['src'] ?? ''), (string)($image['role'] ?? ''));
+    }
+    foreach (($cssManifest['music'] ?? []) as $track) {
+        if (is_array($track)) $rememberAudio((string)($track['url'] ?? ''), true);
+    }
+
+    $walk = function (DOMNode $node, array $style = []) use (&$walk, &$sections, &$textBuffer, &$textStyle, $sourceUrl, $flushText, $rememberAudio, $rememberImage): void {
         if (count($sections) >= 24) return;
         if ($node instanceof DOMText) {
             $text = trim($node->wholeText);
@@ -329,14 +410,7 @@ function room_import_parse(string $html, string $sourceUrl): array {
             }
             if ($elementBackground !== '') {
                 $flushText();
-                $sections[] = [
-                    'type' => 'image',
-                    'src' => $elementBackground,
-                    'alt' => '',
-                    'width' => null,
-                    'height' => null,
-                    'role' => 'background-piece',
-                ];
+                $rememberImage($elementBackground, 'background-piece');
             }
         }
         if ($tag === 'img' || ($tag === 'input' && strtolower((string)$node->getAttribute('type')) === 'image')) {
@@ -348,13 +422,7 @@ function room_import_parse(string $html, string $sourceUrl): array {
                 if ($src !== '') break;
             }
             if ($src !== '') {
-                $sections[] = [
-                    'type' => 'image',
-                    'src' => $src,
-                    'alt' => trim((string)$node->getAttribute('alt')),
-                    'width' => (int)$node->getAttribute('width') ?: null,
-                    'height' => (int)$node->getAttribute('height') ?: null,
-                ];
+                $rememberImage($src);
             }
             return;
         }
@@ -382,6 +450,9 @@ function room_import_parse(string $html, string $sourceUrl): array {
     }
     if (preg_match_all('~["\']([^"\']+\.(?:mp3|m4a|aac|ogg|oga|opus|wav|mid|midi|m3u|m3u8|pls|asx|wax|wma)(?:[?#][^"\']*)?)["\']~i', $html, $matches)) {
         foreach ($matches[1] as $url) $rememberAudio(room_import_candidate_media_url($url, $sourceUrl));
+    }
+    if (preg_match_all('~https?://(?:www\.)?(?:youtube\.com/watch\?v=|youtu\.be/)[A-Za-z0-9_\-=&?%./]+~i', $html, $matches)) {
+        foreach ($matches[0] as $url) $rememberAudio(room_import_candidate_media_url($url, $sourceUrl), true);
     }
 
     return [
@@ -454,13 +525,17 @@ function room_import_localize(array $preview): array {
         if (!is_array($track)) continue;
         $url = (string)($track['url'] ?? '');
         if ($url === '') continue;
+        $isYouTube = room_import_is_youtube_url($url);
         $local = preg_match('~\.(?:mp3|m4a|aac|ogg|oga|opus|wav)(?:[?#].*)?$~i', $url)
             ? room_import_download_asset($url, 'audio', $sourceUrl)
             : null;
         $music[] = [
-            'label' => (string)($track['label'] ?? room_import_media_label($url)),
+            'label' => (string)($track['label'] ?? ($isYouTube ? 'YouTube Music' : room_import_media_label($url))),
             'url' => $local ?: $url,
             'local' => (bool)$local,
+            'type' => $isYouTube ? 'youtube' : 'audio',
+            'provider' => $isYouTube ? 'YouTube' : '',
+            'embed_url' => $isYouTube ? room_import_youtube_embed($url) : '',
         ];
     }
     return ['layout' => $layout, 'music' => $music, 'background_path' => $backgroundPath];

@@ -31,6 +31,11 @@ const vpRoomLayout = document.getElementById('vp-room-layout');
 const vpMusicPlayer = document.getElementById('vp-music-player');
 const vpMusicSelect = document.getElementById('vp-music-select');
 const vpMusicAudio = document.getElementById('vp-music-audio');
+const vpMusicLaunch = document.getElementById('vp-music-launch');
+const vpMusicModal = document.getElementById('vp-music-modal');
+const vpMusicModalTitle = document.getElementById('vp-music-modal-title');
+const vpMusicModalClose = document.getElementById('vp-music-modal-close');
+const vpMusicFrameWrap = document.getElementById('vp-music-frame-wrap');
 const messagesEl = document.getElementById('messages');
 const userListEl = document.getElementById('user-list');
 const friendListEl = document.getElementById('friend-results');
@@ -431,19 +436,55 @@ function renderImportedMusicPlayer(playlist) {
     vpMusicPlayer.hidden = true;
     vpMusicAudio.removeAttribute('src');
     vpMusicSelect.innerHTML = '';
+    if (vpMusicLaunch) vpMusicLaunch.hidden = true;
     return;
   }
   vpMusicSelect.innerHTML = tracks.map((track, idx) => `<option value="${idx}">${esc(track.label || `Audio ${idx + 1}`)}</option>`).join('');
   vpMusicSelect.hidden = tracks.length < 2;
+  let activeTrack = tracks[0];
   const setTrack = idx => {
     const track = tracks[Number(idx) || 0] || tracks[0];
+    activeTrack = track;
+    const isLaunchTrack = track.type === 'youtube' || Boolean(track.embed_url);
+    vpMusicAudio.hidden = isLaunchTrack;
+    if (vpMusicLaunch) {
+      vpMusicLaunch.hidden = !isLaunchTrack;
+      vpMusicLaunch.textContent = track.provider === 'YouTube' || track.type === 'youtube' ? 'Launch YouTube Music' : 'Launch Music';
+    }
+    if (isLaunchTrack) {
+      vpMusicAudio.pause();
+      vpMusicAudio.removeAttribute('src');
+      vpMusicAudio.load();
+      return;
+    }
+    vpMusicAudio.hidden = false;
     vpMusicAudio.src = mediaUrl(track.url);
     vpMusicAudio.load();
   };
   vpMusicSelect.onchange = () => setTrack(vpMusicSelect.value);
+  if (vpMusicLaunch) vpMusicLaunch.onclick = () => openImportedMusicModal(activeTrack);
   setTrack(0);
   vpMusicPlayer.hidden = false;
 }
+
+function openImportedMusicModal(track) {
+  if (!track || !vpMusicModal || !vpMusicFrameWrap) return;
+  const embedUrl = track.embed_url || '';
+  if (vpMusicModalTitle) vpMusicModalTitle.textContent = track.label || 'Room Music';
+  if (embedUrl && isHttpUrl(embedUrl)) {
+    vpMusicFrameWrap.innerHTML = `<iframe src="${esc(embedUrl)}" title="${esc(track.label || 'Room Music')}" allow="autoplay; encrypted-media; fullscreen; picture-in-picture" referrerpolicy="strict-origin-when-cross-origin"></iframe>`;
+  } else {
+    vpMusicFrameWrap.innerHTML = `<a class="btn btn-primary" href="${esc(track.url)}" target="_blank" rel="noopener noreferrer">Open Music</a>`;
+  }
+  vpMusicModal.classList.add('open');
+}
+
+function closeImportedMusicModal() {
+  vpMusicModal?.classList.remove('open');
+  if (vpMusicFrameWrap) vpMusicFrameWrap.innerHTML = '';
+}
+
+vpMusicModalClose?.addEventListener('click', closeImportedMusicModal);
 
 function linkifiedTextHtml(text) {
   const raw = String(text || '');

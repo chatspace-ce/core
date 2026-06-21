@@ -153,6 +153,7 @@ $linkIconCatalog = link_icon_catalog($pdo);
         <div class="side-title">Room Audio</div>
         <select id="vp-music-select" hidden></select>
         <audio id="vp-music-audio" controls preload="none"></audio>
+        <button class="btn btn-primary vp-music-launch" id="vp-music-launch" type="button" hidden>Launch Music</button>
       </div>
     </section>
     <section class="side-section games-side-section">
@@ -185,6 +186,15 @@ $linkIconCatalog = link_icon_catalog($pdo);
       </section>
     </div>
   </aside>
+</div>
+<div class="modal" id="vp-music-modal">
+  <div class="modal-box vp-music-modal-box">
+    <div class="modal-head">
+      <strong id="vp-music-modal-title">Room Music</strong>
+      <button class="window-close" id="vp-music-modal-close" type="button" aria-label="Close">×</button>
+    </div>
+    <div class="vp-music-frame-wrap" id="vp-music-frame-wrap"></div>
+  </div>
 </div>
 <div class="modal" id="voice-device-modal">
   <form class="modal-box voice-device-box" id="voice-device-form">
