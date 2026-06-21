@@ -323,4 +323,7 @@ json_out([
     'avatarPresets' => avatar_presets(),
     'backgroundPath' => $room['background_path'],
     'backgroundMime' => $room['background_mime'],
+    'importUrl' => $room['import_url'] ?? null,
+    'importLayout' => !empty($room['import_layout_json']) ? json_decode((string)$room['import_layout_json'], true) : null,
+    'musicPlaylist' => !empty($room['music_playlist_json']) ? json_decode((string)$room['music_playlist_json'], true) : [],
 ]);

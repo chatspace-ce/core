@@ -15,9 +15,15 @@ const backgroundInput = document.getElementById('room-background-input');
 const backgroundName = document.getElementById('room-background-name');
 const createRoomForm = document.getElementById('create-room-form');
 const createRoomProgress = document.getElementById('room-upload-progress');
+const createTabButtons = [...document.querySelectorAll('[data-create-tab]')];
+const roomImportUrl = document.getElementById('room-import-url');
+const roomImportPreviewBtn = document.getElementById('room-import-preview');
+const roomImportStatus = document.getElementById('room-import-status');
+const roomImportPreviewCard = document.getElementById('room-import-preview-card');
 const roomGrid = document.getElementById('room-grid');
 const lobbyRoomIds = new Set([...document.querySelectorAll('.room-card[data-room-id]')].map(card => card.dataset.roomId));
 let lobbyPollTimer = null;
+let currentImportPreview = null;
 
 if (backgroundInput && backgroundName) {
   backgroundInput.addEventListener('change', () => {
@@ -25,6 +31,16 @@ if (backgroundInput && backgroundName) {
     backgroundName.textContent = file ? file.name : 'No file selected';
   });
 }
+
+function setRoomCreateTab(tab) {
+  createTabButtons.forEach(btn => btn.classList.toggle('active', btn.dataset.createTab === tab));
+  document.getElementById('room-create-manual')?.classList.toggle('active', tab === 'manual');
+  document.getElementById('room-create-import')?.classList.toggle('active', tab === 'import');
+}
+
+createTabButtons.forEach(btn => {
+  btn.addEventListener('click', () => setRoomCreateTab(btn.dataset.createTab || 'manual'));
+});
 
 const lobbyMenu = document.getElementById('lobby-menu');
 const lobbyMenuBtn = document.getElementById('lobby-menu-btn');
@@ -235,6 +251,99 @@ async function lobbyApiPost(url, body) {
   if (!resp.ok || data.error) throw new Error(data.error || 'Request failed');
   return data;
 }
+
+function importSectionThumb(section) {
+  if (!section || section.type !== 'image' || !section.src) return '';
+  return `<img src="${esc(section.src)}" alt="${esc(section.alt || 'Imported room image')}">`;
+}
+
+function setImportStatus(message, busy = false) {
+  if (!roomImportStatus) return;
+  roomImportStatus.innerHTML = message
+    ? `<span class="${busy ? 'spinner-inline' : ''}"></span><span>${esc(message)}</span>`
+    : '';
+}
+
+function renderRoomImportPreview(preview) {
+  if (!roomImportPreviewCard) return;
+  currentImportPreview = preview;
+  const images = (preview.sections || []).filter(section => section.type === 'image').slice(0, 3);
+  const text = (preview.sections || []).find(section => section.type === 'text')?.text || '';
+  const defaultName = preview.title || (new URL(preview.source_url || roomImportUrl?.value || window.location.href)).hostname.replace(/^www\./, '') || 'Imported Room';
+  roomImportPreviewCard.hidden = false;
+  roomImportPreviewCard.innerHTML = `
+    <div class="room-import-preview-head">
+      <strong>${esc(defaultName)}</strong>
+      <span>${esc((preview.music || []).length)} audio source${(preview.music || []).length === 1 ? '' : 's'}</span>
+    </div>
+    <div class="room-import-preview-images">${images.map(importSectionThumb).join('') || '<div class="room-import-preview-empty">No images found</div>'}</div>
+    ${text ? `<p>${esc(text.length > 180 ? `${text.slice(0, 180)}...` : text)}</p>` : ''}
+    <label>Room name<input id="room-import-name" value="${esc(defaultName)}"></label>
+    <div class="room-import-actions">
+      <button class="btn btn-primary" id="room-import-accept" type="button">Accept Import</button>
+      <button class="btn" id="room-import-cancel" type="button">Cancel</button>
+    </div>`;
+  document.getElementById('room-import-cancel')?.addEventListener('click', () => {
+    currentImportPreview = null;
+    roomImportPreviewCard.hidden = true;
+    roomImportPreviewCard.innerHTML = '';
+    setImportStatus('');
+  });
+  document.getElementById('room-import-accept')?.addEventListener('click', acceptRoomImport);
+}
+
+async function previewRoomImport() {
+  const url = roomImportUrl?.value.trim() || '';
+  if (!url) {
+    setImportStatus('Enter a URL first.');
+    return;
+  }
+  if (roomImportPreviewBtn) roomImportPreviewBtn.disabled = true;
+  if (roomImportPreviewCard) roomImportPreviewCard.hidden = true;
+  setImportStatus('Collecting room assets...', true);
+  try {
+    const data = await lobbyApiPost('/api/room_import.php', { action: 'preview', url });
+    renderRoomImportPreview(data.preview || {});
+    setImportStatus('Preview ready.');
+  } catch (err) {
+    currentImportPreview = null;
+    setImportStatus(err.message || 'Import preview failed.');
+  } finally {
+    if (roomImportPreviewBtn) roomImportPreviewBtn.disabled = false;
+  }
+}
+
+async function acceptRoomImport() {
+  const url = roomImportUrl?.value.trim() || currentImportPreview?.source_url || '';
+  const name = document.getElementById('room-import-name')?.value.trim() || currentImportPreview?.title || '';
+  const acceptBtn = document.getElementById('room-import-accept');
+  if (acceptBtn) acceptBtn.disabled = true;
+  setImportStatus('Copying assets into ChatSpace...', true);
+  try {
+    const data = await lobbyApiPost('/api/room_import.php', { action: 'create', url, name });
+    if (data.room) insertRoomCard(data.room, true);
+    roomImportUrl.value = '';
+    currentImportPreview = null;
+    if (roomImportPreviewCard) {
+      roomImportPreviewCard.hidden = true;
+      roomImportPreviewCard.innerHTML = '';
+    }
+    setImportStatus('Imported room created.');
+    window.setTimeout(() => setImportStatus(''), 1800);
+  } catch (err) {
+    setImportStatus(err.message || 'Import failed.');
+  } finally {
+    if (acceptBtn) acceptBtn.disabled = false;
+  }
+}
+
+roomImportPreviewBtn?.addEventListener('click', previewRoomImport);
+roomImportUrl?.addEventListener('keydown', e => {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    previewRoomImport();
+  }
+});
 
 function setUploadProgress(progressEl, pct, message) {
   if (!progressEl) return;

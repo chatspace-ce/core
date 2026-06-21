@@ -76,6 +76,7 @@ $linkIconCatalog = link_icon_catalog($pdo);
         <video class="smart-bg-video" autoplay muted playsinline preload="auto"><source src="<?= e(media_url($room['background_path'])) ?>" type="<?= e($room['background_mime']) ?>"></video>
         <?php endif; ?>
       </div>
+      <div class="vp-room-layout" id="vp-room-layout" hidden></div>
       <div class="game-stage-layer" id="game-stage" hidden>
         <div class="game-stage-head">
           <div>
@@ -148,6 +149,11 @@ $linkIconCatalog = link_icon_catalog($pdo);
         <button class="room-action-btn" id="room-action-btn" type="button" aria-label="Room actions"<?= can_use_host_tools($user, $room) ? '' : ' hidden' ?>>•••</button>
       </div>
       <div class="minor">Created by <?= e($room['owner_name']) ?></div>
+      <div class="vp-music-player" id="vp-music-player" hidden>
+        <div class="side-title">Room Audio</div>
+        <select id="vp-music-select" hidden></select>
+        <audio id="vp-music-audio" controls preload="none"></audio>
+      </div>
     </section>
     <section class="side-section games-side-section">
       <div class="side-title">Games</div>

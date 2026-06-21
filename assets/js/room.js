@@ -27,6 +27,10 @@ const messages = new Map();
 const roomLayout = document.querySelector('.room-layout');
 const mainEl = document.querySelector('.main');
 const roomStage = document.getElementById('room-stage');
+const vpRoomLayout = document.getElementById('vp-room-layout');
+const vpMusicPlayer = document.getElementById('vp-music-player');
+const vpMusicSelect = document.getElementById('vp-music-select');
+const vpMusicAudio = document.getElementById('vp-music-audio');
 const messagesEl = document.getElementById('messages');
 const userListEl = document.getElementById('user-list');
 const friendListEl = document.getElementById('friend-results');
@@ -376,6 +380,69 @@ function esc(s) {
 
 function isHttpUrl(value) {
   return /^https?:\/\//i.test(String(value || ''));
+}
+
+function safeCssColor(value, fallback = '') {
+  const color = String(value || '').trim();
+  if (/^#[0-9a-f]{3,8}$/i.test(color)) return color;
+  if (/^(?:rgb|rgba|hsl|hsla)\([0-9.%\s,+-]+\)$/i.test(color)) return color;
+  if (/^[a-z]{3,24}$/i.test(color)) return color;
+  return fallback;
+}
+
+function safeCssSize(value) {
+  const size = String(value || '').trim();
+  return /^[0-9.]+(?:px|pt|em|rem|%)$/i.test(size) ? size : '';
+}
+
+function renderImportedRoomLayout(layout) {
+  if (!vpRoomLayout) return;
+  if (!layout || !Array.isArray(layout.sections) || !layout.sections.length) {
+    vpRoomLayout.hidden = true;
+    vpRoomLayout.innerHTML = '';
+    roomStage?.style.removeProperty('--vp-import-bg');
+    return;
+  }
+  const bg = safeCssColor(layout.background_color, '#000000');
+  if (bg) roomStage?.style.setProperty('--vp-import-bg', bg);
+  const html = layout.sections.map(section => {
+    if (section?.type === 'image' && section.path) {
+      return `<figure class="vp-import-section vp-import-image ${section.role === 'header' ? 'vp-import-header' : ''}"><img src="${esc(mediaUrl(section.path))}" alt="${esc(section.alt || '')}"></figure>`;
+    }
+    if (section?.type === 'text' && section.text) {
+      const style = section.style || {};
+      const inline = [
+        safeCssColor(style.color) ? `color:${safeCssColor(style.color)}` : '',
+        safeCssSize(style.font_size) ? `font-size:${safeCssSize(style.font_size)}` : '',
+        ['left', 'center', 'right'].includes(style.text_align) ? `text-align:${style.text_align}` : '',
+      ].filter(Boolean).join(';');
+      return `<div class="vp-import-section vp-import-text"${inline ? ` style="${esc(inline)}"` : ''}>${esc(section.text).replace(/\n/g, '<br>')}</div>`;
+    }
+    return '';
+  }).join('');
+  vpRoomLayout.innerHTML = html;
+  vpRoomLayout.hidden = false;
+}
+
+function renderImportedMusicPlayer(playlist) {
+  if (!vpMusicPlayer || !vpMusicAudio || !vpMusicSelect) return;
+  const tracks = Array.isArray(playlist) ? playlist.filter(track => track && track.url) : [];
+  if (!tracks.length) {
+    vpMusicPlayer.hidden = true;
+    vpMusicAudio.removeAttribute('src');
+    vpMusicSelect.innerHTML = '';
+    return;
+  }
+  vpMusicSelect.innerHTML = tracks.map((track, idx) => `<option value="${idx}">${esc(track.label || `Audio ${idx + 1}`)}</option>`).join('');
+  vpMusicSelect.hidden = tracks.length < 2;
+  const setTrack = idx => {
+    const track = tracks[Number(idx) || 0] || tracks[0];
+    vpMusicAudio.src = mediaUrl(track.url);
+    vpMusicAudio.load();
+  };
+  vpMusicSelect.onchange = () => setTrack(vpMusicSelect.value);
+  setTrack(0);
+  vpMusicPlayer.hidden = false;
 }
 
 function linkifiedTextHtml(text) {
@@ -2425,6 +2492,14 @@ function applyRoomUpdate(update) {
     cfg.backgroundThumbPath = update.background_thumb_path || null;
     applyRoomBackground(update.background_path, update.background_mime);
     setRoomEditPreview(update.background_path, update.background_mime, update.background_thumb_path || '');
+  }
+  if ('import_layout' in update) {
+    cfg.importLayout = update.import_layout || null;
+    renderImportedRoomLayout(cfg.importLayout);
+  }
+  if ('music_playlist' in update) {
+    cfg.musicPlaylist = update.music_playlist || [];
+    renderImportedMusicPlayer(cfg.musicPlaylist);
   }
 }
 
@@ -5528,6 +5603,8 @@ async function bootRoom() {
   const roomId = document.body.dataset.roomId;
   cfg = await fetch(appUrl(`/api/room_config.php?id=${encodeURIComponent(roomId)}`)).then(r => r.json());
   if (cfg.error) throw new Error(cfg.error);
+  renderImportedRoomLayout(cfg.importLayout);
+  renderImportedMusicPlayer(cfg.musicPlaylist);
   lastEventId = cfg.lastEventId || 0;
   lastCommunityEventId = cfg.lastCommunityEventId || 0;
   restoreSessionLock();

@@ -1,5 +1,5 @@
 <?php
-require_once __DIR__ . '/../includes/base.php';
+require_once __DIR__ . '/../includes/room_importer.php';
 
 $user = current_user();
 if (!$user) {
@@ -44,6 +44,9 @@ function lobby_room_payload(array $room, array $user): array {
     $tileBg = $backgroundPath;
     if ($backgroundPath !== '' && str_starts_with($backgroundMime, 'video/')) {
         $tileBg = $thumbPath;
+    }
+    if ($tileBg === '') {
+        $tileBg = room_import_tile_image_from_layout($room['import_layout_json'] ?? null);
     }
     return [
         'id' => (int)$room['id'],

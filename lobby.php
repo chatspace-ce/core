@@ -1,5 +1,5 @@
 <?php
-require_once __DIR__ . '/includes/base.php';
+require_once __DIR__ . '/includes/room_importer.php';
 $user = require_user();
 $pdo = db();
 $branding = install_branding($pdo);
@@ -101,19 +101,31 @@ $rooms = $roomsStmt->fetchAll();
         <div class="create-room-tile-inner">
           <h2>Create Room</h2>
           <?php if ($lobbyError): ?><div class="form-error"><?= e($lobbyError) ?></div><?php endif; ?>
-          <label>Room name<input name="name" required placeholder="Moonlit Study, Neon Lounge, Table 7..."></label>
-          <label>Background image or video
-            <span class="file-picker">
-              <input id="room-background-input" type="file" name="background" accept="image/*,video/mp4,video/webm">
-              <span class="file-picker-btn">Choose Background</span>
-              <span class="file-picker-name" id="room-background-name">No file selected</span>
-            </span>
-            <span class="upload-progress" id="room-upload-progress" aria-live="polite">
-              <span class="upload-progress-track"><span class="upload-progress-bar"></span></span>
-              <span class="upload-progress-meta"><span class="upload-progress-msg">Waiting...</span><span class="upload-progress-pct">0%</span></span>
-            </span>
-          </label>
-          <button class="btn btn-primary" type="submit">Create Room</button>
+          <div class="room-create-tabs" role="tablist" aria-label="Room creation options">
+            <button class="room-create-tab active" type="button" data-create-tab="manual">Create</button>
+            <button class="room-create-tab" type="button" data-create-tab="import">Import URL</button>
+          </div>
+          <div class="room-create-panel active" id="room-create-manual">
+            <label>Room name<input name="name" required placeholder="Moonlit Study, Neon Lounge, Table 7..."></label>
+            <label>Background image or video
+              <span class="file-picker">
+                <input id="room-background-input" type="file" name="background" accept="image/*,video/mp4,video/webm">
+                <span class="file-picker-btn">Choose Background</span>
+                <span class="file-picker-name" id="room-background-name">No file selected</span>
+              </span>
+              <span class="upload-progress" id="room-upload-progress" aria-live="polite">
+                <span class="upload-progress-track"><span class="upload-progress-bar"></span></span>
+                <span class="upload-progress-meta"><span class="upload-progress-msg">Waiting...</span><span class="upload-progress-pct">0%</span></span>
+              </span>
+            </label>
+            <button class="btn btn-primary" type="submit">Create Room</button>
+          </div>
+          <div class="room-create-panel" id="room-create-import">
+            <label>VP-style room URL<input id="room-import-url" type="url" placeholder="https://example.com/user/room.html"></label>
+            <button class="btn btn-primary" id="room-import-preview" type="button">Preview Import</button>
+            <div class="room-import-status" id="room-import-status" aria-live="polite"></div>
+            <div class="room-import-preview" id="room-import-preview-card" hidden></div>
+          </div>
         </div>
       </form>
       <?php foreach ($rooms as $room): ?>
@@ -122,6 +134,9 @@ $rooms = $roomsStmt->fetchAll();
           $tileBg = $room['background_path'];
           if ($room['background_path'] && str_starts_with((string)$room['background_mime'], 'video/')) {
               $tileBg = $room['background_thumb_path'] ?: null;
+          }
+          if (!$tileBg) {
+              $tileBg = room_import_tile_image_from_layout($room['import_layout_json'] ?? null);
           }
         ?>
         <div class="room-card-media" <?php if ($tileBg): ?>style="background-image:url('<?= e(media_url($tileBg)) ?>')"<?php endif; ?>>

@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__ . '/../includes/base.php';
 require_once __DIR__ . '/../includes/database_backups.php';
+require_once __DIR__ . '/../includes/room_importer.php';
 
 $me = require_staff();
 
@@ -37,7 +38,7 @@ function export_core_bundle(PDO $pdo, int $actorId, array $options = []): void {
     $includeSettings = array_key_exists('settings', $options) ? (bool)$options['settings'] : true;
     $users = $pdo->query('SELECT id, email, password_hash, display_name, role, avatar_path, aura_effect, created_at FROM users ORDER BY id ASC')->fetchAll();
     $rooms = $pdo->query(
-        'SELECT r.id, r.public_id, r.owner_id, u.email AS owner_email, r.name, r.background_path, r.background_mime, r.background_thumb_path, r.created_at
+        'SELECT r.id, r.public_id, r.owner_id, u.email AS owner_email, r.name, r.background_path, r.background_mime, r.background_thumb_path, r.import_url, r.import_layout_json, r.music_playlist_json, r.created_at
            FROM rooms r
            JOIN users u ON u.id = r.owner_id
           ORDER BY r.id ASC'
@@ -59,6 +60,9 @@ function export_core_bundle(PDO $pdo, int $actorId, array $options = []): void {
         foreach ($rooms as $room) {
             add_portable_file($files, $room['background_path'] ?? null);
             add_portable_file($files, $room['background_thumb_path'] ?? null);
+            foreach (room_import_file_paths($room['import_layout_json'] ?? null, $room['music_playlist_json'] ?? null) as $path) {
+                add_portable_file($files, $path);
+            }
         }
     }
     if ($includeGestures) {
@@ -126,6 +130,9 @@ function export_core_bundle(PDO $pdo, int $actorId, array $options = []): void {
                 'background_path' => $row['background_path'],
                 'background_mime' => $row['background_mime'],
                 'background_thumb_path' => $row['background_thumb_path'],
+                'import_url' => $row['import_url'] ?? null,
+                'import_layout_json' => $row['import_layout_json'] ?? null,
+                'music_playlist_json' => $row['music_playlist_json'] ?? null,
                 'created_at' => $row['created_at'],
         ], $rooms);
     }

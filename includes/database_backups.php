@@ -1,6 +1,8 @@
 <?php
 declare(strict_types=1);
 
+require_once __DIR__ . '/room_importer.php';
+
 function backup_portable_file_allowed(string $path): bool {
     return $path !== ''
         && str_starts_with($path, '/assets/')
@@ -136,12 +138,15 @@ function backup_import_core_bundle(PDO $pdo, array $bundle, int $actorId = 0): a
                 $room['background_path'] ?? null,
                 $room['background_mime'] ?? null,
                 $room['background_thumb_path'] ?? null,
+                $room['import_url'] ?? null,
+                $room['import_layout_json'] ?? null,
+                $room['music_playlist_json'] ?? null,
             ];
             if ($roomId) {
-                $pdo->prepare('UPDATE rooms SET owner_id = ?, name = ?, background_path = ?, background_mime = ?, background_thumb_path = ? WHERE id = ?')
+                $pdo->prepare('UPDATE rooms SET owner_id = ?, name = ?, background_path = ?, background_mime = ?, background_thumb_path = ?, import_url = ?, import_layout_json = ?, music_playlist_json = ? WHERE id = ?')
                     ->execute([...$values, $roomId]);
             } else {
-                $pdo->prepare('INSERT INTO rooms (public_id, owner_id, name, background_path, background_mime, background_thumb_path) VALUES (?,?,?,?,?,?)')
+                $pdo->prepare('INSERT INTO rooms (public_id, owner_id, name, background_path, background_mime, background_thumb_path, import_url, import_layout_json, music_playlist_json) VALUES (?,?,?,?,?,?,?,?,?)')
                     ->execute([$publicId, ...$values]);
                 $roomId = (int)$pdo->lastInsertId();
             }

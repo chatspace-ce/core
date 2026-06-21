@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/../includes/room_admin.php';
+require_once __DIR__ . '/../includes/room_importer.php';
 
 $user = require_user();
 $pdo = db();
@@ -97,6 +98,7 @@ if ($action === 'delete') {
         $room['background_path'] ?? null,
         $room['background_thumb_path'] ?? null,
     ]);
+    $roomFiles = array_merge($roomFiles, room_import_file_paths($room['import_layout_json'] ?? null, $room['music_playlist_json'] ?? null));
 
     $pdo->beginTransaction();
     try {
@@ -128,7 +130,7 @@ if ($action === 'delete') {
 
     foreach ($roomFiles as $path) {
         $relative = ltrim((string)$path, '/');
-        if (!str_starts_with($relative, 'assets/uploads/backgrounds/')) continue;
+        if (!str_starts_with($relative, 'assets/uploads/backgrounds/') && !str_starts_with($relative, 'assets/uploads/imported-rooms/')) continue;
         $full = dirname(__DIR__) . '/' . $relative;
         if (is_file($full)) @unlink($full);
     }

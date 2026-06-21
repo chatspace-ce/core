@@ -215,6 +215,9 @@ function migrate(PDO $pdo): void {
             background_path TEXT DEFAULT NULL,
             background_mime TEXT DEFAULT NULL,
             background_thumb_path TEXT DEFAULT NULL,
+            import_url TEXT DEFAULT NULL,
+            import_layout_json TEXT DEFAULT NULL,
+            music_playlist_json TEXT DEFAULT NULL,
             created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY(owner_id) REFERENCES users(id) ON DELETE CASCADE
         );
@@ -559,6 +562,17 @@ function migrate(PDO $pdo): void {
             // Existing installs already have this column.
         }
         foreach ([
+            'import_url VARCHAR(1024) DEFAULT NULL',
+            'import_layout_json LONGTEXT DEFAULT NULL',
+            'music_playlist_json LONGTEXT DEFAULT NULL',
+        ] as $definition) {
+            try {
+                $pdo->exec('ALTER TABLE rooms ADD COLUMN ' . $definition);
+            } catch (Throwable $e) {
+                // Existing installs already have this column.
+            }
+        }
+        foreach ([
             'user_id INTEGER DEFAULT NULL',
             'display_name VARCHAR(191) DEFAULT NULL',
             'avatar_path VARCHAR(512) DEFAULT NULL',
@@ -657,6 +671,15 @@ function migrate(PDO $pdo): void {
     $roomColNames = array_map(fn(array $col): string => (string)$col['name'], $cols);
     if (!in_array('background_thumb_path', $roomColNames, true)) {
         $pdo->exec('ALTER TABLE rooms ADD COLUMN background_thumb_path TEXT DEFAULT NULL');
+    }
+    if (!in_array('import_url', $roomColNames, true)) {
+        $pdo->exec('ALTER TABLE rooms ADD COLUMN import_url TEXT DEFAULT NULL');
+    }
+    if (!in_array('import_layout_json', $roomColNames, true)) {
+        $pdo->exec('ALTER TABLE rooms ADD COLUMN import_layout_json TEXT DEFAULT NULL');
+    }
+    if (!in_array('music_playlist_json', $roomColNames, true)) {
+        $pdo->exec('ALTER TABLE rooms ADD COLUMN music_playlist_json TEXT DEFAULT NULL');
     }
     $sessionCols = $pdo->query('PRAGMA table_info(room_sessions)')->fetchAll();
     $hasSessionPublicId = false;
