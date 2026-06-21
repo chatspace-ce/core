@@ -400,6 +400,16 @@ function safeCssSize(value) {
   return /^[0-9.]+(?:px|pt|em|rem|%)$/i.test(size) ? size : '';
 }
 
+function importedImageHtml(section) {
+  const roleClass = section.role ? ` vp-import-${String(section.role).replace(/[^a-z0-9_-]+/gi, '-')}` : '';
+  const headerClass = section.role === 'header' ? ' vp-import-header' : '';
+  return `<figure class="vp-import-section vp-import-image${headerClass}${roleClass}"><img src="${esc(mediaUrl(section.path))}" alt="${esc(section.alt || '')}"></figure>`;
+}
+
+function importedAvatarSection(section) {
+  return section?.type === 'image' && section.path && ['avatar-left', 'avatar-right', 'avatar-piece'].includes(section.role);
+}
+
 function renderImportedRoomLayout(layout) {
   if (!vpRoomLayout) return;
   if (!layout || !Array.isArray(layout.sections) || !layout.sections.length) {
@@ -410,9 +420,22 @@ function renderImportedRoomLayout(layout) {
   }
   const bg = safeCssColor(layout.background_color, '#000000');
   if (bg) roomStage?.style.setProperty('--vp-import-bg', bg);
-  const html = layout.sections.map(section => {
+  const chunks = [];
+  let avatarRow = [];
+  const flushAvatarRow = () => {
+    if (!avatarRow.length) return;
+    chunks.push(`<div class="vp-import-section vp-import-avatar-row">${avatarRow.map(importedImageHtml).join('')}</div>`);
+    avatarRow = [];
+  };
+  layout.sections.forEach(section => {
+    if (importedAvatarSection(section)) {
+      avatarRow.push(section);
+      return;
+    }
+    flushAvatarRow();
     if (section?.type === 'image' && section.path) {
-      return `<figure class="vp-import-section vp-import-image ${section.role === 'header' ? 'vp-import-header' : ''}"><img src="${esc(mediaUrl(section.path))}" alt="${esc(section.alt || '')}"></figure>`;
+      chunks.push(importedImageHtml(section));
+      return;
     }
     if (section?.type === 'text' && section.text) {
       const style = section.style || {};
@@ -421,11 +444,11 @@ function renderImportedRoomLayout(layout) {
         safeCssSize(style.font_size) ? `font-size:${safeCssSize(style.font_size)}` : '',
         ['left', 'center', 'right'].includes(style.text_align) ? `text-align:${style.text_align}` : '',
       ].filter(Boolean).join(';');
-      return `<div class="vp-import-section vp-import-text"${inline ? ` style="${esc(inline)}"` : ''}>${esc(section.text).replace(/\n/g, '<br>')}</div>`;
+      chunks.push(`<div class="vp-import-section vp-import-text"${inline ? ` style="${esc(inline)}"` : ''}>${esc(section.text).replace(/\n/g, '<br>')}</div>`);
     }
-    return '';
-  }).join('');
-  vpRoomLayout.innerHTML = html;
+  });
+  flushAvatarRow();
+  vpRoomLayout.innerHTML = chunks.join('');
   vpRoomLayout.hidden = false;
 }
 

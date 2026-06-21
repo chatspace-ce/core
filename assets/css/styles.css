@@ -877,6 +877,20 @@ textarea:focus { border-color: rgba(124,106,247,.8); box-shadow: 0 0 0 3px rgba(
 .vp-import-header img {
   max-height: 42vh;
 }
+.vp-import-avatar-row {
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  gap: 14px;
+  max-width: min(720px, 88%);
+}
+.vp-import-avatar-row .vp-import-image {
+  flex: 0 1 48%;
+  max-width: 260px;
+}
+.vp-import-avatar-row .vp-import-image img {
+  max-height: 28vh;
+}
 .vp-import-text {
   max-width: min(820px, 86%);
   color: rgba(255,255,255,.86);

@@ -286,7 +286,8 @@ function room_import_css_asset_manifest(string $html, string $sourceUrl): array 
             if ($url !== '') $manifest['images'][] = ['src' => $url, 'role' => 'header'];
         } elseif (str_starts_with($key, 'avatar-image')) {
             $url = room_import_candidate_media_url($value, $sourceUrl);
-            if ($url !== '') $manifest['images'][] = ['src' => $url, 'role' => 'avatar-piece'];
+            $role = $key === 'avatar-image-1' ? 'avatar-left' : ($key === 'avatar-image-2' ? 'avatar-right' : 'avatar-piece');
+            if ($url !== '') $manifest['images'][] = ['src' => $url, 'role' => $role];
         } elseif (in_array($key, ['background-image', 'page-background', 'room-background'], true)) {
             $url = room_import_candidate_media_url($value, $sourceUrl);
             if ($url !== '') $manifest['background_image'] = $url;
