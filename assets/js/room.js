@@ -421,10 +421,13 @@ function renderImportedRoomLayout(layout) {
     vpRoomLayout.hidden = true;
     vpRoomLayout.innerHTML = '';
     roomStage?.style.removeProperty('--vp-import-bg');
+    roomStage?.style.removeProperty('--vp-import-bg-image');
+    vpRoomLayout.classList.remove('has-import-background');
     return;
   }
   const bg = safeCssColor(layout.background_color, '#000000');
   if (bg) roomStage?.style.setProperty('--vp-import-bg', bg);
+  syncImportedBackgroundLayer();
   const chunks = [];
   let avatarRow = [];
   const flushAvatarRow = () => {
@@ -455,6 +458,18 @@ function renderImportedRoomLayout(layout) {
   flushAvatarRow();
   vpRoomLayout.innerHTML = chunks.join('');
   vpRoomLayout.hidden = false;
+  syncImportedBackgroundLayer();
+}
+
+function syncImportedBackgroundLayer() {
+  if (!vpRoomLayout || vpRoomLayout.hidden) return;
+  if (cfg?.backgroundTile && cfg?.backgroundPath) {
+    roomStage?.style.setProperty('--vp-import-bg-image', `url("${mediaUrl(cfg.backgroundPath)}")`);
+    vpRoomLayout.classList.add('has-import-background');
+  } else {
+    roomStage?.style.removeProperty('--vp-import-bg-image');
+    vpRoomLayout.classList.remove('has-import-background');
+  }
 }
 
 function renderImportedMusicPlayer(playlist) {
@@ -2700,10 +2715,11 @@ function setRoomEditPreview(path, mime, thumbPath = '') {
   if (preview) preview.innerHTML = roomPreviewMarkup(path, mime, thumbPath);
 }
 
-function applyRoomBackground(path, mime) {
+function applyRoomBackground(path, mime, tile = false) {
   const current = roomStage.querySelector('.room-bg');
   const next = document.createElement('div');
   next.className = 'room-bg room-bg-next';
+  next.classList.toggle('room-bg-tiled', Boolean(tile));
   if (path && !String(mime || '').startsWith('video/')) next.style.backgroundImage = `url("${mediaUrl(path)}")`;
   next.innerHTML = backgroundMarkup(path, mime);
   roomStage.appendChild(next);
@@ -2726,7 +2742,9 @@ function applyRoomUpdate(update) {
     cfg.backgroundPath = update.background_path;
     cfg.backgroundMime = update.background_mime;
     cfg.backgroundThumbPath = update.background_thumb_path || null;
-    applyRoomBackground(update.background_path, update.background_mime);
+    cfg.backgroundTile = Boolean(update.background_tile);
+    applyRoomBackground(update.background_path, update.background_mime, cfg.backgroundTile);
+    syncImportedBackgroundLayer();
     setRoomEditPreview(update.background_path, update.background_mime, update.background_thumb_path || '');
   }
   if ('import_layout' in update) {

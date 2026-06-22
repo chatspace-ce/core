@@ -324,6 +324,7 @@ json_out([
     'avatarPresets' => avatar_presets(),
     'backgroundPath' => $room['background_path'],
     'backgroundMime' => $room['background_mime'],
+    'backgroundTile' => !empty($room['import_url']) && !empty($room['background_path']) && !str_starts_with((string)$room['background_mime'], 'video/'),
     'importUrl' => $room['import_url'] ?? null,
     'importLayout' => !empty($room['import_layout_json']) ? json_decode((string)$room['import_layout_json'], true) : null,
     'musicPlaylist' => !empty($room['music_playlist_json']) ? json_decode((string)$room['music_playlist_json'], true) : [],

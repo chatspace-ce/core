@@ -58,12 +58,14 @@ if ($action === 'update') {
     $bgPath = $room['background_path'];
     $bgMime = $room['background_mime'];
     $bgThumbPath = $room['background_thumb_path'] ?? null;
+    $backgroundChanged = false;
     if (!empty($_FILES['background']['tmp_name']) && is_uploaded_file($_FILES['background']['tmp_name'])) {
         try {
             $saved = save_room_background_upload($_FILES['background'], $_FILES['background_thumb'] ?? null);
             $bgPath = $saved['path'];
             $bgMime = $saved['mime'];
             $bgThumbPath = $saved['thumb_path'];
+            $backgroundChanged = true;
         } catch (RuntimeException $e) {
             json_out(['error' => $e->getMessage()], 400);
         }
@@ -77,6 +79,7 @@ if ($action === 'update') {
         'background_path' => $bgPath,
         'background_mime' => $bgMime,
         'background_thumb_path' => $bgThumbPath,
+        'background_tile' => !$backgroundChanged && !empty($room['import_url']) && !empty($bgPath) && !str_starts_with((string)$bgMime, 'video/'),
     ];
     if ((int)$ctx['session_id'] > 0) emit_event($pdo, (int)$ctx['session_id'], 'room_update', $payload);
     json_out($payload);

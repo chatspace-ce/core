@@ -72,7 +72,8 @@ $linkIconCatalog = link_icon_catalog($pdo);
   </div>
   <main class="main">
     <section class="room-stage" id="room-stage">
-      <div class="room-bg" <?php if ($room['background_path'] && !str_starts_with((string)$room['background_mime'], 'video/')): ?>style="background-image:url('<?= e(media_url($room['background_path'])) ?>')"<?php endif; ?>>
+      <?php $roomBgTiled = !empty($room['import_url']) && !empty($room['background_path']) && !str_starts_with((string)$room['background_mime'], 'video/'); ?>
+      <div class="room-bg<?= $roomBgTiled ? ' room-bg-tiled' : '' ?>" <?php if ($room['background_path'] && !str_starts_with((string)$room['background_mime'], 'video/')): ?>style="background-image:url('<?= e(media_url($room['background_path'])) ?>')"<?php endif; ?>>
         <?php if ($room['background_path'] && str_starts_with((string)$room['background_mime'], 'video/')): ?>
         <video class="smart-bg-video" autoplay muted playsinline preload="auto"><source src="<?= e(media_url($room['background_path'])) ?>" type="<?= e($room['background_mime']) ?>"></video>
         <?php endif; ?>
