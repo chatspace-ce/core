@@ -272,7 +272,7 @@ function room_import_clean_manifest_value(string $value): string {
 }
 
 function room_import_css_asset_manifest(string $html, string $sourceUrl): array {
-    $manifest = ['images' => [], 'background_image' => '', 'music' => []];
+    $manifest = ['images' => [], 'background_image' => '', 'text_color' => '', 'music' => []];
     if (!preg_match_all('~--([A-Za-z0-9_-]+)\s*:\s*(?:"([^"]*)"|\'([^\']*)\'|([^;]+))\s*;~', $html, $matches, PREG_SET_ORDER)) {
         return $manifest;
     }
@@ -291,6 +291,9 @@ function room_import_css_asset_manifest(string $html, string $sourceUrl): array 
         } elseif (in_array($key, ['background-image', 'page-background', 'room-background'], true)) {
             $url = room_import_candidate_media_url($value, $sourceUrl);
             if ($url !== '') $manifest['background_image'] = $url;
+        } elseif (in_array($key, ['website-font-color', 'primary-font-color', 'font-color', 'text-color'], true)) {
+            $color = room_import_css_color($value);
+            if ($color !== '') $manifest['text_color'] = $color;
         } elseif (in_array($key, ['youtube-link', 'music-link', 'song-url', 'audio-link', 'stream-link'], true)) {
             $url = room_import_candidate_media_url($value, $sourceUrl);
             if ($url !== '') $manifest['music'][] = ['label' => room_import_is_youtube_url($url) ? 'YouTube Music' : room_import_media_label($url), 'url' => $url];
@@ -321,6 +324,10 @@ function room_import_parse(string $html, string $sourceUrl): array {
     if ($body instanceof DOMElement) {
         $bgColor = room_import_css_color((string)$body->getAttribute('bgcolor') ?: room_import_style_value($bodyStyle, 'background-color'));
         if ($bgColor !== '') $backgroundColor = $bgColor;
+    }
+    $textColor = room_import_css_color((string)($cssManifest['text_color'] ?? ''));
+    if ($textColor === '' && $body instanceof DOMElement) {
+        $textColor = room_import_css_color((string)$body->getAttribute('text') ?: room_import_style_value($bodyStyle, 'color'));
     }
 
     $sections = [];
@@ -434,7 +441,11 @@ function room_import_parse(string $html, string $sourceUrl): array {
         if ($isBlock) $flushText();
     };
 
-    if ($body) $walk($body, room_import_style_from_node($body));
+    if ($body) {
+        $rootStyle = room_import_style_from_node($body);
+        if ($textColor !== '') $rootStyle['color'] = $textColor;
+        $walk($body, $rootStyle);
+    }
     $flushText();
 
     $roleSet = false;
@@ -460,6 +471,7 @@ function room_import_parse(string $html, string $sourceUrl): array {
         'source_url' => $sourceUrl,
         'title' => $title,
         'background_color' => $backgroundColor,
+        'text_color' => $textColor,
         'background_image' => $backgroundImage,
         'sections' => array_slice($sections, 0, 24),
         'music' => $audio,
@@ -493,6 +505,7 @@ function room_import_localize(array $preview): array {
     $layout = [
         'source_url' => $preview['source_url'] ?? '',
         'background_color' => $preview['background_color'] ?? '#000000',
+        'text_color' => $preview['text_color'] ?? '',
         'sections' => [],
     ];
     $sourceUrl = (string)($preview['source_url'] ?? '');

@@ -422,11 +422,15 @@ function renderImportedRoomLayout(layout) {
     vpRoomLayout.innerHTML = '';
     roomStage?.style.removeProperty('--vp-import-bg');
     roomStage?.style.removeProperty('--vp-import-bg-image');
+    roomStage?.style.removeProperty('--vp-import-text');
     vpRoomLayout.classList.remove('has-import-background');
     return;
   }
   const bg = safeCssColor(layout.background_color, '#000000');
   if (bg) roomStage?.style.setProperty('--vp-import-bg', bg);
+  const textColor = safeCssColor(layout.text_color);
+  if (textColor) roomStage?.style.setProperty('--vp-import-text', textColor);
+  else roomStage?.style.removeProperty('--vp-import-text');
   syncImportedBackgroundLayer();
   const chunks = [];
   let avatarRow = [];

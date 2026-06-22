@@ -890,6 +890,7 @@ textarea:focus { border-color: rgba(124,106,247,.8); box-shadow: 0 0 0 3px rgba(
 }
 .vp-import-header img {
   max-height: 42vh;
+  filter: none;
 }
 .vp-import-avatar-row {
   display: flex;
@@ -907,7 +908,7 @@ textarea:focus { border-color: rgba(124,106,247,.8); box-shadow: 0 0 0 3px rgba(
 }
 .vp-import-text {
   max-width: min(820px, 86%);
-  color: rgba(255,255,255,.86);
+  color: var(--vp-import-text, rgba(255,255,255,.86));
   font-size: 15px;
   line-height: 1.45;
   text-align: center;
