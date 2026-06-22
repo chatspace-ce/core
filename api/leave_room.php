@@ -8,7 +8,7 @@ $sessionId = resolve_session_id($pdo, $body['session_id'] ?? '');
 $joinToken = (string)($body['join_token'] ?? '');
 $p = auth_participant($pdo, $sessionId, $joinToken);
 
-$pdo->prepare('UPDATE participants SET last_seen_at = NULL, webcam_path = NULL, webcam_enabled = 0, linked_to_participant_id = NULL WHERE id = ? OR linked_to_participant_id = ?')
+$pdo->prepare("UPDATE participants SET last_seen_at = NULL, webcam_path = NULL, webcam_enabled = 0, linked_to_participant_id = NULL, link_mode = 'normal' WHERE id = ? OR linked_to_participant_id = ?")
     ->execute([(int)$p['id'], (int)$p['id']]);
 $pdo->prepare('DELETE FROM voice_sessions WHERE participant_id = ?')->execute([(int)$p['id']]);
 $pdo->prepare('UPDATE users SET current_room_id = NULL, last_seen_at = CURRENT_TIMESTAMP WHERE id = ?')->execute([(int)$p['user_id']]);

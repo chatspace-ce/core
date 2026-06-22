@@ -49,6 +49,7 @@ emit_event($pdo, (int)$session['id'], 'participant_join', [
     'webcam_path' => $participant['webcam_path'],
     'webcam_enabled' => !empty($participant['webcam_enabled']),
     'linked_to' => $participant['linked_to_participant_id'] ? (int)$participant['linked_to_participant_id'] : null,
+    'link_mode' => in_array(($participant['link_mode'] ?? 'normal'), ['normal', 'lap'], true) ? $participant['link_mode'] : 'normal',
     'joined_at' => gmdate('Y-m-d H:i:s'),
 ]);
 $lastEventId = (int)$pdo->query('SELECT COALESCE(MAX(id), 0) FROM events WHERE session_id = ' . (int)$session['id'])->fetchColumn();
@@ -403,6 +404,17 @@ $linkIconCatalog = link_icon_catalog($pdo);
       <?php foreach ($linkIconCatalog as $icon): ?>
       <button type="button" data-link-icon="<?= e($icon['icon_name']) ?>"><img src="<?= e(app_url($icon['file_path'])) ?>" alt=""><span><?= e($icon['label']) ?></span></button>
       <?php endforeach; ?>
+    </div>
+  </div>
+</div>
+<div class="modal" id="link-choice-modal">
+  <div class="modal-box link-choice-box">
+    <h2>Interact</h2>
+    <p>What would you like to do?</p>
+    <div class="link-choice-actions">
+      <button class="btn link-choice-link" id="link-choice-link" type="button">🔗 Link Avatars</button>
+      <button class="btn link-choice-lap" id="link-choice-lap" type="button">🧸 Sit in Lap</button>
+      <button class="btn link-choice-cancel" id="link-choice-cancel" type="button">Cancel</button>
     </div>
   </div>
 </div>

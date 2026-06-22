@@ -48,6 +48,8 @@ if ($action === 'position_pair') {
 
 if ($action === 'link') {
     $targetId = (int)($body['target_participant_id'] ?? 0);
+    $linkMode = (string)($body['link_mode'] ?? 'normal');
+    if (!in_array($linkMode, ['normal', 'lap'], true)) $linkMode = 'normal';
     if (!$targetId || $targetId === (int)$p['id']) json_out(['error' => 'Target participant required'], 400);
 
     $stmt = $pdo->prepare('SELECT id, user_id FROM participants WHERE id = ? AND session_id = ? LIMIT 1');
@@ -63,11 +65,11 @@ if ($action === 'link') {
     $stmt->execute([(int)$p['user_id'], (int)$targetParticipant['user_id'], (int)$targetParticipant['user_id'], (int)$p['user_id']]);
     if ($stmt->fetch()) json_out(['error' => 'You cannot link with this user.'], 403);
 
-    $pdo->prepare('UPDATE participants SET linked_to_participant_id = NULL WHERE id = ? OR linked_to_participant_id = ?')
+    $pdo->prepare("UPDATE participants SET linked_to_participant_id = NULL, link_mode = 'normal' WHERE id = ? OR linked_to_participant_id = ?")
         ->execute([(int)$p['id'], (int)$p['id']]);
-    $pdo->prepare('UPDATE participants SET linked_to_participant_id = NULL WHERE id = ? OR linked_to_participant_id = ?')
+    $pdo->prepare("UPDATE participants SET linked_to_participant_id = NULL, link_mode = 'normal' WHERE id = ? OR linked_to_participant_id = ?")
         ->execute([$targetId, $targetId]);
-    $pdo->prepare('UPDATE participants SET linked_to_participant_id = ? WHERE id = ?')->execute([$targetId, (int)$p['id']]);
+    $pdo->prepare('UPDATE participants SET linked_to_participant_id = ?, link_mode = ? WHERE id = ?')->execute([$targetId, $linkMode, (int)$p['id']]);
 
     if (isset($body['initiator_x'], $body['initiator_y'], $body['target_x'], $body['target_y'])) {
         $pdo->prepare('UPDATE participants SET position_x = ?, position_y = ? WHERE id = ? AND session_id = ?')
@@ -89,6 +91,7 @@ if ($action === 'link') {
     $payload = [
         'participant_id' => (int)$p['id'],
         'linked_to' => $targetId,
+        'link_mode' => $linkMode,
     ];
     if (isset($body['initiator_x'], $body['initiator_y'], $body['target_x'], $body['target_y'])) {
         $payload['initiator_position'] = [
@@ -109,16 +112,18 @@ if ($action === 'unlink') {
     $stmt->execute([$sessionId, (int)$p['id']]);
     $reverse = $stmt->fetchAll();
 
-    $pdo->prepare('UPDATE participants SET linked_to_participant_id = NULL WHERE id = ? OR linked_to_participant_id = ?')
+    $pdo->prepare("UPDATE participants SET linked_to_participant_id = NULL, link_mode = 'normal' WHERE id = ? OR linked_to_participant_id = ?")
         ->execute([(int)$p['id'], (int)$p['id']]);
     emit_event($pdo, $sessionId, 'link', [
         'participant_id' => (int)$p['id'],
         'linked_to' => null,
+        'link_mode' => 'normal',
     ]);
     foreach ($reverse as $row) {
         emit_event($pdo, $sessionId, 'link', [
             'participant_id' => (int)$row['id'],
             'linked_to' => null,
+            'link_mode' => 'normal',
         ]);
     }
     json_out(['ok' => true]);
@@ -136,7 +141,7 @@ if ($action === 'block_user' || $action === 'unblock_user') {
     if ($action === 'block_user') {
         $pdo->prepare(db_uses_mysql_syntax($pdo) ? 'INSERT IGNORE INTO user_blocks (blocker_user_id, blocked_user_id) VALUES (?,?)' : 'INSERT OR IGNORE INTO user_blocks (blocker_user_id, blocked_user_id) VALUES (?,?)')
             ->execute([(int)$p['user_id'], $targetUserId]);
-        $pdo->prepare('UPDATE participants SET linked_to_participant_id = NULL WHERE (user_id = ? OR user_id = ?) AND session_id = ?')
+        $pdo->prepare("UPDATE participants SET linked_to_participant_id = NULL, link_mode = 'normal' WHERE (user_id = ? OR user_id = ?) AND session_id = ?")
             ->execute([(int)$p['user_id'], $targetUserId, $sessionId]);
         emit_event($pdo, $sessionId, 'block', ['blocker_user_id' => (int)$p['user_id'], 'blocked_user_id' => $targetUserId]);
         log_tool($pdo, (int)$p['user_id'], 'block_user', $targetUserId, null, 'User block');

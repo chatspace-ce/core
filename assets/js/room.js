@@ -84,6 +84,7 @@ const versionBannerText = document.getElementById('version-banner-text');
 const versionRefreshBtn = document.getElementById('version-refresh');
 const linkIconModal = document.getElementById('link-icon-modal');
 const linkIconGrid = document.getElementById('link-icon-grid');
+const linkChoiceModal = document.getElementById('link-choice-modal');
 const auraModal = document.getElementById('aura-modal');
 const auraOptionsEl = document.getElementById('aura-options');
 const auraPreviewAvatar = document.getElementById('aura-preview-avatar');
@@ -151,6 +152,7 @@ const APP_VERSION_CACHE_KEY = 'chatspace_seen_version';
 const SESSION_LOCK_PREFIX = 'chatspace_session_locked_';
 let memorySeenVersion = '';
 let pendingLinkIconTargetId = null;
+let pendingLinkChoice = null;
 const animatedDmMessageIds = new Set();
 let activeAvatarEffects = 0;
 let roomExitInProgress = false;
@@ -811,6 +813,32 @@ function linkPairGap(key) {
   return linkIconNameForStage(key) ? 12 : 2;
 }
 
+function normalizeLinkMode(mode) {
+  return mode === 'lap' ? 'lap' : 'normal';
+}
+
+function isLapLinkInitiator(person) {
+  return normalizeLinkMode(person?.link_mode) === 'lap' && Boolean(person?.linked_to);
+}
+
+function isLapLinkTarget(person) {
+  if (!person) return false;
+  for (const other of participants.values()) {
+    if (Number(other.linked_to) === Number(person.id) && normalizeLinkMode(other.link_mode) === 'lap') return true;
+  }
+  return false;
+}
+
+function linkModeForPair(a, b) {
+  if (Number(a?.linked_to) === Number(b?.id)) return normalizeLinkMode(a.link_mode);
+  if (Number(b?.linked_to) === Number(a?.id)) return normalizeLinkMode(b.link_mode);
+  return 'normal';
+}
+
+function avatarStageSize(person) {
+  return isLapLinkInitiator(person) ? Math.round(AVATAR_STAGE_SIZE * .5) : AVATAR_STAGE_SIZE;
+}
+
 function channelMapFor(chatKey = activeChat) {
   if (chatKey === 'room') return channelMessages.room;
   if (chatKey === 'community') return channelMessages.community;
@@ -1054,6 +1082,8 @@ function renderParticipant(p, options = {}) {
   setAvatarImageSource(img, avatarUrl(merged), hadImage && wasWebcam !== nowWebcam);
   refreshLinkClasses();
   img.classList.toggle('webcam', Boolean(merged.webcam_path || merged.webcam_enabled));
+  img.classList.toggle('lap-avatar', isLapLinkInitiator(merged));
+  img.classList.toggle('lap-primary-avatar', isLapLinkTarget(merged));
   label.textContent = displayNameFor(merged);
   positionAvatar(merged);
   applyParticipantAura(merged);
@@ -1100,11 +1130,15 @@ function removeParticipant(participantId, options = {}) {
       person.online = false;
       person.webcam_path = null;
       person.linked_to = null;
+      person.link_mode = 'normal';
     } else {
       participants.delete(id);
     }
     participants.forEach(p => {
-      if (p.linked_to === id) p.linked_to = null;
+      if (p.linked_to === id) {
+        p.linked_to = null;
+        p.link_mode = 'normal';
+      }
     });
     refreshLinkClasses();
     renderPeople();
@@ -1145,10 +1179,12 @@ function positionAvatar(p) {
   if (!img || !label) return;
   const w = roomStage.clientWidth;
   const h = roomStage.clientHeight;
-  const aw = AVATAR_STAGE_SIZE;
-  const ah = AVATAR_STAGE_SIZE;
+  const aw = avatarStageSize(p);
+  const ah = avatarStageSize(p);
   const x = Math.max(0, Math.min(w - aw, p.position_x * w));
   const y = Math.max(0, Math.min(h - ah, p.position_y * h));
+  img.style.width = `${aw}px`;
+  img.style.height = `${ah}px`;
   img.style.left = `${x}px`;
   img.style.top = `${y}px`;
   if (p.auraEl) {
@@ -1158,6 +1194,8 @@ function positionAvatar(p) {
     p.auraEl.style.height = `${ah}px`;
   }
   if (p.webcamVideoEl) {
+    p.webcamVideoEl.style.width = `${aw}px`;
+    p.webcamVideoEl.style.height = `${ah}px`;
     p.webcamVideoEl.style.left = `${x}px`;
     p.webcamVideoEl.style.top = `${y}px`;
   }
@@ -1248,6 +1286,7 @@ function updateStageLinkIcons() {
   const active = new Set();
   linkedPairs().forEach(([key, a, b]) => {
     if (!a.avatarEl || !b.avatarEl) return;
+    if (linkModeForPair(a, b) === 'lap') return;
     const iconName = linkIconNameForStage(key);
     if (!iconName) return;
     active.add(key);
@@ -1407,7 +1446,11 @@ function adjustLinkedPairForIcon(linkKey, animate = true, persist = false) {
 
 function snapLinkedPair(initiator, target, animate = true) {
   if (!initiator?.avatarEl || !target?.avatarEl) return;
-  const avatarPx = initiator.avatarEl.offsetWidth || 150;
+  if (normalizeLinkMode(initiator.link_mode) === 'lap') {
+    snapLappedPair(initiator, target, animate);
+    return;
+  }
+  const avatarPx = AVATAR_STAGE_SIZE;
   const gap = linkPairGap(linkKeyFor(initiator.id, target.id));
   const rW = roomStage.clientWidth;
   const rH = roomStage.clientHeight;
@@ -1430,6 +1473,93 @@ function snapLinkedPair(initiator, target, animate = true) {
   }
 }
 
+function snapLappedPair(initiator, target, animate = true) {
+  if (!initiator?.avatarEl || !target?.avatarEl) return;
+  const rW = roomStage.clientWidth;
+  const rH = roomStage.clientHeight;
+  const primarySize = AVATAR_STAGE_SIZE;
+  const lapSize = avatarStageSize(initiator);
+  const targetX = Math.max(0, Math.min(target.position_x * rW, rW - primarySize));
+  const targetY = Math.max(0, Math.min(target.position_y * rH, rH - primarySize));
+  const lapX = Math.max(0, Math.min(targetX + primarySize * .5, rW - lapSize));
+  const lapY = Math.max(0, Math.min(targetY + primarySize * (65 / 150), rH - lapSize));
+  initiator.position_x = lapX / rW;
+  initiator.position_y = lapY / rH;
+  positionAvatar(target);
+  positionAvatar(initiator);
+  if (animate) {
+    initiator.avatarEl.style.transition = 'left .35s ease, top .35s ease, width .25s ease, height .25s ease';
+    target.avatarEl.style.transition = 'left .35s ease, top .35s ease';
+    setTimeout(() => {
+      initiator.avatarEl.style.transition = '';
+      target.avatarEl.style.transition = '';
+    }, 380);
+  }
+}
+
+function closeLinkChoiceModal() {
+  linkChoiceModal?.classList.remove('open');
+  pendingLinkChoice = null;
+}
+
+function openLinkChoiceModal(initiator, target) {
+  if (!linkChoiceModal || !initiator || !target) return;
+  pendingLinkChoice = { initiatorId: Number(initiator.id), targetId: Number(target.id) };
+  linkChoiceModal.classList.add('open');
+}
+
+async function completePendingLinkChoice(mode) {
+  if (!pendingLinkChoice) return;
+  const initiator = participants.get(pendingLinkChoice.initiatorId);
+  const target = participants.get(pendingLinkChoice.targetId);
+  closeLinkChoiceModal();
+  if (!initiator || !target) return;
+  if (mode === 'cancel') {
+    await apiPost('/api/users.php', {
+      action: 'position',
+      session_id: cfg.sessionId,
+      join_token: cfg.myJoinToken,
+      x: initiator.position_x,
+      y: initiator.position_y,
+    }).catch(console.warn);
+    return;
+  }
+  const linkMode = normalizeLinkMode(mode);
+  initiator.linked_to = target.id;
+  initiator.link_mode = linkMode;
+  target.linked_to = null;
+  target.link_mode = 'normal';
+  if (linkMode === 'normal') snapLinkedPair(initiator, target, true);
+  else snapLappedPair(initiator, target, true);
+  renderParticipant(target);
+  renderParticipant(initiator);
+  renderPeople();
+  renderLinkTabs();
+  try {
+    await apiPost('/api/users.php', {
+      action: 'link',
+      session_id: cfg.sessionId,
+      join_token: cfg.myJoinToken,
+      target_participant_id: target.id,
+      link_mode: linkMode,
+      initiator_x: initiator.position_x,
+      initiator_y: initiator.position_y,
+      target_x: target.position_x,
+      target_y: target.position_y,
+    });
+  } catch (err) {
+    initiator.linked_to = null;
+    initiator.link_mode = 'normal';
+    target.linked_to = null;
+    target.link_mode = 'normal';
+    renderParticipant(initiator);
+    renderParticipant(target);
+    renderPeople();
+    renderLinkTabs();
+    showWarning(err.message || 'You cannot link with this user.');
+  }
+}
+
 function makeDraggable(img) {
   let dragging = false;
   let linkBrokenThisDrag = false;
@@ -1443,6 +1573,7 @@ function makeDraggable(img) {
     if (!linkBrokenThisDrag && p?.linked_to) {
       linkBrokenThisDrag = true;
       p.linked_to = null;
+      p.link_mode = 'normal';
       apiPost('/api/users.php', { action: 'unlink', session_id: cfg.sessionId, join_token: cfg.myJoinToken }).catch(console.warn);
       renderParticipant(p);
       renderLinkTabs();
@@ -1488,41 +1619,8 @@ function makeDraggable(img) {
         if (dist < 120 && !isUserBlocked(other.user_id)) target = other;
       });
       if (target) {
-        const avatarPx = img.offsetWidth || 150;
-        const gap = 12;
-        const rW = roomStage.clientWidth;
-        const rH = roomStage.clientHeight;
-        const initX = Math.max(avatarPx + gap, Math.min(p.position_x * rW, rW - avatarPx));
-        const targetX = initX - avatarPx - gap;
-        const snapY = Math.max(0, Math.min(p.position_y * rH, rH - avatarPx));
-        p.position_x = initX / rW;
-        p.position_y = snapY / rH;
-        target.position_x = targetX / rW;
-        target.position_y = snapY / rH;
-        p.linked_to = target.id;
-        apiPost('/api/users.php', {
-          action: 'link',
-          session_id: cfg.sessionId,
-          join_token: cfg.myJoinToken,
-          target_participant_id: target.id,
-          initiator_x: p.position_x,
-          initiator_y: p.position_y,
-          target_x: target.position_x,
-          target_y: target.position_y,
-        }).catch(err => {
-          p.linked_to = null;
-          target.linked_to = null;
-          renderParticipant(p);
-          renderParticipant(target);
-          renderPeople();
-          renderLinkTabs();
-          showWarning(err.message || 'You cannot link with this user.');
-        });
-        snapLinkedPair(p, target, true);
-        renderParticipant(p);
-        renderParticipant(target);
-        renderPeople();
-        renderLinkTabs();
+        openLinkChoiceModal(p, target);
+        return;
       }
     }
     const linkedFollowers = [...participants.values()].filter(other => other.linked_to === p.id);
@@ -2791,6 +2889,7 @@ async function poll() {
           person.online = false;
           person.webcam_path = null;
           person.linked_to = null;
+          person.link_mode = 'normal';
           removeParticipant(person.id);
           if (person.id !== cfg.myParticipantId) addSystemMessage(`${person.display_name} left the room.`);
         }
@@ -2799,6 +2898,7 @@ async function poll() {
         const person = participants.get(p.participant_id);
         if (person) {
           person.linked_to = p.linked_to;
+          person.link_mode = normalizeLinkMode(p.link_mode);
           if (p.initiator_position) {
             person.position_x = p.initiator_position.x;
             person.position_y = p.initiator_position.y;
@@ -2806,6 +2906,7 @@ async function poll() {
           if (p.linked_to) {
             const target = participants.get(p.linked_to);
             if (target) {
+              if (p.linked_to) target.link_mode = 'normal';
               if (p.target_position) {
                 target.position_x = p.target_position.x;
                 target.position_y = p.target_position.y;
@@ -2833,6 +2934,7 @@ async function poll() {
         participants.forEach(person => {
           if (Number(person.user_id) === Number(p.blocked_user_id) || person.linked_to && Number(participants.get(person.linked_to)?.user_id) === Number(p.blocked_user_id)) {
             person.linked_to = null;
+            person.link_mode = 'normal';
             renderParticipant(person);
           }
         });
@@ -3277,6 +3379,9 @@ document.getElementById('voice-note-stop').addEventListener('click', () => {
 document.getElementById('voice-note-cancel').addEventListener('click', cancelVoiceNote);
 
 document.getElementById('link-icon-close')?.addEventListener('click', closeLinkIconModal);
+document.getElementById('link-choice-link')?.addEventListener('click', () => completePendingLinkChoice('normal'));
+document.getElementById('link-choice-lap')?.addEventListener('click', () => completePendingLinkChoice('lap'));
+document.getElementById('link-choice-cancel')?.addEventListener('click', () => completePendingLinkChoice('cancel'));
 document.getElementById('warning-close')?.addEventListener('click', () => {
   document.getElementById('warning-modal')?.classList.remove('open');
 });
@@ -4287,9 +4392,16 @@ function unlinkCurrentPartner() {
   const me = participants.get(cfg.myParticipantId);
   if (!me) return;
   if (me.linked_to) me.linked_to = null;
-  if (target && target.linked_to === cfg.myParticipantId) target.linked_to = null;
+  me.link_mode = 'normal';
+  if (target && target.linked_to === cfg.myParticipantId) {
+    target.linked_to = null;
+    target.link_mode = 'normal';
+  }
   participants.forEach(p => {
-    if (p.linked_to === cfg.myParticipantId || p.id === cfg.myParticipantId) p.linked_to = null;
+    if (p.linked_to === cfg.myParticipantId || p.id === cfg.myParticipantId) {
+      p.linked_to = null;
+      p.link_mode = 'normal';
+    }
     renderParticipant(p);
   });
   if (activeChat.startsWith('link:')) switchChat('room');
@@ -4388,7 +4500,10 @@ async function setBlockState(participant, blocked) {
   if (blocked) {
     blockedUserIds.add(Number(participant.user_id));
     participants.forEach(p => {
-      if (p.id === participant.id || p.linked_to === participant.id || (p.id === cfg.myParticipantId && p.linked_to === participant.id)) p.linked_to = null;
+      if (p.id === participant.id || p.linked_to === participant.id || (p.id === cfg.myParticipantId && p.linked_to === participant.id)) {
+        p.linked_to = null;
+        p.link_mode = 'normal';
+      }
     });
   } else {
     blockedUserIds.delete(Number(participant.user_id));

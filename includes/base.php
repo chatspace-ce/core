@@ -253,6 +253,7 @@ function migrate(PDO $pdo): void {
             webcam_path TEXT DEFAULT NULL,
             webcam_enabled INTEGER NOT NULL DEFAULT 0,
             linked_to_participant_id INTEGER DEFAULT NULL,
+            link_mode TEXT NOT NULL DEFAULT 'normal',
             last_seen_at TEXT DEFAULT NULL,
             joined_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
             UNIQUE(session_id, user_id),
@@ -610,6 +611,9 @@ function migrate(PDO $pdo): void {
         if (!in_array('aura_effect', $mysqlParticipantColNames, true)) {
             $pdo->exec('ALTER TABLE participants ADD COLUMN aura_effect VARCHAR(128) DEFAULT NULL');
         }
+        if (!in_array('link_mode', $mysqlParticipantColNames, true)) {
+            $pdo->exec("ALTER TABLE participants ADD COLUMN link_mode VARCHAR(24) NOT NULL DEFAULT 'normal'");
+        }
         $mysqlVoiceCols = $pdo->query('SHOW COLUMNS FROM voice_sessions')->fetchAll();
         $mysqlVoiceColNames = array_map(fn(array $col): string => (string)($col['Field'] ?? ''), $mysqlVoiceCols);
         foreach (['muted', 'deafened', 'speaking'] as $voiceCol) {
@@ -704,6 +708,9 @@ function migrate(PDO $pdo): void {
     }
     if (!$hasLinkedTo) {
         $pdo->exec('ALTER TABLE participants ADD COLUMN linked_to_participant_id INTEGER DEFAULT NULL');
+    }
+    if (!in_array('link_mode', $participantColNames, true)) {
+        $pdo->exec("ALTER TABLE participants ADD COLUMN link_mode TEXT NOT NULL DEFAULT 'normal'");
     }
     $voiceCols = $pdo->query('PRAGMA table_info(voice_sessions)')->fetchAll();
     $voiceColNames = array_map(fn(array $col): string => (string)$col['name'], $voiceCols);
@@ -1565,7 +1572,7 @@ function cleanup_stale_participants(PDO $pdo, ?int $sessionId = null): void {
     $stale = $stmt->fetchAll();
     if (!$stale) return;
 
-    $clearParticipant = $pdo->prepare('UPDATE participants SET last_seen_at = NULL, webcam_path = NULL, webcam_enabled = 0, linked_to_participant_id = NULL WHERE id = ? OR linked_to_participant_id = ?');
+    $clearParticipant = $pdo->prepare("UPDATE participants SET last_seen_at = NULL, webcam_path = NULL, webcam_enabled = 0, linked_to_participant_id = NULL, link_mode = 'normal' WHERE id = ? OR linked_to_participant_id = ?");
     $clearUser = $pdo->prepare('UPDATE users SET current_room_id = NULL, last_seen_at = CURRENT_TIMESTAMP WHERE id = ?');
     $clearVoice = $pdo->prepare('DELETE FROM voice_sessions WHERE participant_id = ?');
     foreach ($stale as $row) {
